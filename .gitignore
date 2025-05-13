@@ -20,6 +20,7 @@ go.work
 *.swp
 *.swo
 .DS_Store
+.cursor/
 
 # Build output
 /bin/
@@ -41,13 +42,10 @@ go.work
 
 # Test data
 /test-data/
-It seems
+
 # Dependency directories
 vendor/
 
 # User-specific configurations
 .rustfmt.toml
 .tool-versions 
-
-.cursor/
-.cursor
