@@ -48,3 +48,5 @@ vendor/
 # User-specific configurations
 .rustfmt.toml
 .tool-versions 
+
+.cursor
