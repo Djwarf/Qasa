@@ -53,8 +53,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Use the shared secret to encrypt the message with AES-GCM
     let associated_data = b"QaSa-Chat-App-v1"; // Some additional authenticated data
-    let (encrypted_message, nonce) =
-        aes::encrypt(message.as_bytes(), &mary_shared_secret, Some(associated_data))?;
+    let (encrypted_message, nonce) = aes::encrypt(
+        message.as_bytes(),
+        &mary_shared_secret,
+        Some(associated_data),
+    )?;
 
     println!(
         "  Encrypted message size: {} bytes",
