@@ -8,9 +8,9 @@ use std::fmt;
 use crate::error::CryptoError;
 
 /// CRYSTALS-Dilithium key pair for digital signatures
-/// 
+///
 /// This implementation uses the CRYSTALS-Dilithium algorithm, a lattice-based
-/// digital signature scheme that is believed to be secure against 
+/// digital signature scheme that is believed to be secure against
 /// quantum computer attacks.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DilithiumKeyPair {
@@ -61,7 +61,7 @@ impl DilithiumVariant {
             DilithiumVariant::Dilithium5 => Algorithm::Dilithium5,
         }
     }
-    
+
     /// Get the security level of this variant
     pub fn security_level(&self) -> u8 {
         match self {
@@ -70,7 +70,7 @@ impl DilithiumVariant {
             DilithiumVariant::Dilithium5 => 5,
         }
     }
-    
+
     /// Get the public key size for this variant in bytes
     pub fn public_key_size(&self) -> usize {
         match self {
@@ -79,7 +79,7 @@ impl DilithiumVariant {
             DilithiumVariant::Dilithium5 => 2592,
         }
     }
-    
+
     /// Get the secret key size for this variant in bytes
     pub fn secret_key_size(&self) -> usize {
         match self {
@@ -88,7 +88,7 @@ impl DilithiumVariant {
             DilithiumVariant::Dilithium5 => 4864,
         }
     }
-    
+
     /// Get the signature size for this variant in bytes
     pub fn signature_size(&self) -> usize {
         match self {
@@ -112,17 +112,18 @@ impl DilithiumKeyPair {
     pub fn generate(variant: DilithiumVariant) -> Result<Self, CryptoError> {
         let alg = variant.oqs_algorithm();
         let sig = Sig::new(alg).map_err(|e| CryptoError::OqsError(e.to_string()))?;
-        
-        let (public_key, secret_key) = sig.keypair()
+
+        let (public_key, secret_key) = sig
+            .keypair()
             .map_err(|e| CryptoError::KeyGenerationError(e.to_string()))?;
-            
+
         Ok(Self {
             public_key: public_key.into_vec(),
             secret_key: secret_key.into_vec(),
             algorithm: variant,
         })
     }
-    
+
     /// Sign a message with this key pair's secret key
     ///
     /// # Arguments
@@ -135,17 +136,21 @@ impl DilithiumKeyPair {
     pub fn sign(&self, message: &[u8]) -> Result<Vec<u8>, CryptoError> {
         let alg = self.algorithm.oqs_algorithm();
         let sig = Sig::new(alg).map_err(|e| CryptoError::OqsError(e.to_string()))?;
-        
+
         // Create a secret key from bytes
-        let sk = sig.secret_key_from_bytes(&self.secret_key)
-            .ok_or_else(|| CryptoError::SignatureGenerationError("Failed to create secret key from bytes".to_string()))?;
-            
-        let signature = sig.sign(message, &sk)
+        let sk = sig.secret_key_from_bytes(&self.secret_key).ok_or_else(|| {
+            CryptoError::SignatureGenerationError(
+                "Failed to create secret key from bytes".to_string(),
+            )
+        })?;
+
+        let signature = sig
+            .sign(message, &sk)
             .map_err(|e| CryptoError::SignatureGenerationError(e.to_string()))?;
-            
+
         Ok(signature.into_vec())
     }
-    
+
     /// Verify a signature with this key pair's public key
     ///
     /// # Arguments
@@ -159,7 +164,7 @@ impl DilithiumKeyPair {
     pub fn verify(&self, message: &[u8], signature: &[u8]) -> Result<bool, CryptoError> {
         Self::verify_with_public_key(self.algorithm, &self.public_key, message, signature)
     }
-    
+
     /// Verify a signature with a public key
     ///
     /// # Arguments
@@ -180,22 +185,28 @@ impl DilithiumKeyPair {
     ) -> Result<bool, CryptoError> {
         let alg = variant.oqs_algorithm();
         let sig = Sig::new(alg).map_err(|e| CryptoError::OqsError(e.to_string()))?;
-        
+
         // Create a public key from bytes
-        let pk = sig.public_key_from_bytes(public_key)
-            .ok_or_else(|| CryptoError::SignatureVerificationError("Failed to create public key from bytes".to_string()))?;
-            
+        let pk = sig.public_key_from_bytes(public_key).ok_or_else(|| {
+            CryptoError::SignatureVerificationError(
+                "Failed to create public key from bytes".to_string(),
+            )
+        })?;
+
         // Create a signature from bytes
-        let sig_bytes = sig.signature_from_bytes(signature)
-            .ok_or_else(|| CryptoError::SignatureVerificationError("Failed to create signature from bytes".to_string()))?;
-            
+        let sig_bytes = sig.signature_from_bytes(signature).ok_or_else(|| {
+            CryptoError::SignatureVerificationError(
+                "Failed to create signature from bytes".to_string(),
+            )
+        })?;
+
         // Verify the signature
         match sig.verify(message, &sig_bytes, &pk) {
             Ok(_) => Ok(true),
             Err(_) => Ok(false),
         }
     }
-    
+
     /// Extract the public key from this key pair
     ///
     /// # Returns
@@ -209,4 +220,4 @@ impl DilithiumKeyPair {
     }
 }
 
-// Rest of the implementation would be here 
+// Rest of the implementation would be here

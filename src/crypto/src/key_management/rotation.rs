@@ -1,9 +1,9 @@
 // Key rotation implementation
 // This file contains code moved from src/key_management.rs for key rotation
 
+use crate::dilithium::DilithiumKeyPair;
 use crate::error::CryptoError;
 use crate::kyber::KyberKeyPair;
-use crate::dilithium::DilithiumKeyPair;
 
 /// Key rotation policy
 pub struct RotationPolicy {
@@ -38,4 +38,4 @@ pub fn rotate_dilithium_keypair(
     Err(CryptoError::NotImplemented)
 }
 
-// Additional key rotation functions would be defined here 
+// Additional key rotation functions would be defined here

@@ -7,7 +7,10 @@ use crate::error::CryptoError;
 use crate::kyber::{KyberKeyPair, KyberVariant};
 
 // Helper function to convert an FFI result to a C return code and message
-fn handle_result<T>(result: Result<T, CryptoError>, message_ptr: *mut *mut c_char) -> (c_int, Option<T>) {
+fn handle_result<T>(
+    result: Result<T, CryptoError>,
+    message_ptr: *mut *mut c_char,
+) -> (c_int, Option<T>) {
     match result {
         Ok(value) => {
             if !message_ptr.is_null() {
@@ -35,10 +38,10 @@ unsafe fn copy_to_buffer(src: &[u8], dst: *mut u8, dst_size: usize) -> c_int {
     if src.len() > dst_size {
         return -1; // Buffer too small
     }
-    
+
     let dst_slice = slice::from_raw_parts_mut(dst, src.len());
     dst_slice.copy_from_slice(src);
-    
+
     src.len() as c_int
 }
 
@@ -119,13 +122,13 @@ pub extern "C" fn qasa_kyber_keygen(
     // Generate key pair
     let result = KyberKeyPair::generate(kyber_variant);
     let (status, key_pair) = handle_result(result, error_msg);
-    
+
     if status != 0 {
         return status;
     }
-    
+
     let key_pair = key_pair.unwrap();
-    
+
     // Copy the public key
     unsafe {
         if !public_key.is_null() && !public_key_size.is_null() {
@@ -144,7 +147,7 @@ pub extern "C" fn qasa_kyber_keygen(
             }
             *public_key_size = written;
         }
-        
+
         // Copy the private key
         if !private_key.is_null() && !private_key_size.is_null() {
             let max_size = *private_key_size;
@@ -163,7 +166,7 @@ pub extern "C" fn qasa_kyber_keygen(
             *private_key_size = written;
         }
     }
-    
+
     0
 }
 
@@ -187,35 +190,37 @@ pub extern "C" fn qasa_kyber_encapsulate(
             return -1;
         }
     };
-    
+
     // Create a KyberKeyPair from the provided bytes
     let public_key_bytes = unsafe {
         if public_key.is_null() || public_key_size <= 0 {
             handle_result::<()>(
-                Err(CryptoError::InvalidParameterError("Invalid public key".to_string())),
+                Err(CryptoError::InvalidParameterError(
+                    "Invalid public key".to_string(),
+                )),
                 error_msg,
             );
             return -1;
         }
         slice::from_raw_parts(public_key, public_key_size as usize)
     };
-    
+
     let key_pair = KyberKeyPair {
         public_key: public_key_bytes.to_vec(),
         secret_key: Vec::new(), // Not needed for encapsulation
         algorithm: kyber_variant,
     };
-    
+
     // Encapsulate
     let result = key_pair.encapsulate();
     let (status, encap_result) = handle_result(result, error_msg);
-    
+
     if status != 0 {
         return status;
     }
-    
+
     let (ct, ss) = encap_result.unwrap();
-    
+
     // Copy the ciphertext
     unsafe {
         if !ciphertext.is_null() && !ciphertext_size.is_null() {
@@ -234,7 +239,7 @@ pub extern "C" fn qasa_kyber_encapsulate(
             }
             *ciphertext_size = written;
         }
-        
+
         // Copy the shared secret
         if !shared_secret.is_null() && !shared_secret_size.is_null() {
             let max_size = *shared_secret_size;
@@ -253,7 +258,7 @@ pub extern "C" fn qasa_kyber_encapsulate(
             *shared_secret_size = written;
         }
     }
-    
+
     0
 }
 
@@ -277,47 +282,51 @@ pub extern "C" fn qasa_kyber_decapsulate(
             return -1;
         }
     };
-    
+
     // Get the private key
     let private_key_bytes = unsafe {
         if private_key.is_null() || private_key_size <= 0 {
             handle_result::<()>(
-                Err(CryptoError::InvalidParameterError("Invalid private key".to_string())),
+                Err(CryptoError::InvalidParameterError(
+                    "Invalid private key".to_string(),
+                )),
                 error_msg,
             );
             return -1;
         }
         slice::from_raw_parts(private_key, private_key_size as usize)
     };
-    
+
     // Get the ciphertext
     let ciphertext_bytes = unsafe {
         if ciphertext.is_null() || ciphertext_size <= 0 {
             handle_result::<()>(
-                Err(CryptoError::InvalidParameterError("Invalid ciphertext".to_string())),
+                Err(CryptoError::InvalidParameterError(
+                    "Invalid ciphertext".to_string(),
+                )),
                 error_msg,
             );
             return -1;
         }
         slice::from_raw_parts(ciphertext, ciphertext_size as usize)
     };
-    
+
     let key_pair = KyberKeyPair {
         public_key: Vec::new(), // Not needed for decapsulation
         secret_key: private_key_bytes.to_vec(),
         algorithm: kyber_variant,
     };
-    
+
     // Decapsulate
     let result = key_pair.decapsulate(ciphertext_bytes);
     let (status, shared_secret_result) = handle_result(result, error_msg);
-    
+
     if status != 0 {
         return status;
     }
-    
+
     let ss = shared_secret_result.unwrap();
-    
+
     // Copy the shared secret
     unsafe {
         if !shared_secret.is_null() && !shared_secret_size.is_null() {
@@ -337,7 +346,7 @@ pub extern "C" fn qasa_kyber_decapsulate(
             *shared_secret_size = written;
         }
     }
-    
+
     0
 }
 
@@ -365,13 +374,13 @@ pub extern "C" fn qasa_dilithium_keygen(
     // Generate key pair
     let result = DilithiumKeyPair::generate(dilithium_variant);
     let (status, key_pair) = handle_result(result, error_msg);
-    
+
     if status != 0 {
         return status;
     }
-    
+
     let key_pair = key_pair.unwrap();
-    
+
     // Copy the public key
     unsafe {
         if !public_key.is_null() && !public_key_size.is_null() {
@@ -390,7 +399,7 @@ pub extern "C" fn qasa_dilithium_keygen(
             }
             *public_key_size = written;
         }
-        
+
         // Copy the private key
         if !private_key.is_null() && !private_key_size.is_null() {
             let max_size = *private_key_size;
@@ -409,7 +418,7 @@ pub extern "C" fn qasa_dilithium_keygen(
             *private_key_size = written;
         }
     }
-    
+
     0
 }
 
@@ -433,47 +442,51 @@ pub extern "C" fn qasa_dilithium_sign(
             return -1;
         }
     };
-    
+
     // Get the private key
     let private_key_bytes = unsafe {
         if private_key.is_null() || private_key_size <= 0 {
             handle_result::<()>(
-                Err(CryptoError::InvalidParameterError("Invalid private key".to_string())),
+                Err(CryptoError::InvalidParameterError(
+                    "Invalid private key".to_string(),
+                )),
                 error_msg,
             );
             return -1;
         }
         slice::from_raw_parts(private_key, private_key_size as usize)
     };
-    
+
     // Get the message
     let message_bytes = unsafe {
         if message.is_null() || message_size <= 0 {
             handle_result::<()>(
-                Err(CryptoError::InvalidParameterError("Invalid message".to_string())),
+                Err(CryptoError::InvalidParameterError(
+                    "Invalid message".to_string(),
+                )),
                 error_msg,
             );
             return -1;
         }
         slice::from_raw_parts(message, message_size as usize)
     };
-    
+
     let key_pair = DilithiumKeyPair {
         public_key: Vec::new(), // Not needed for signing
         secret_key: private_key_bytes.to_vec(),
         algorithm: dilithium_variant,
     };
-    
+
     // Sign
     let result = key_pair.sign(message_bytes);
     let (status, signature_result) = handle_result(result, error_msg);
-    
+
     if status != 0 {
         return status;
     }
-    
+
     let sig = signature_result.unwrap();
-    
+
     // Copy the signature
     unsafe {
         if !signature.is_null() && !signature_size.is_null() {
@@ -493,7 +506,7 @@ pub extern "C" fn qasa_dilithium_sign(
             *signature_size = written;
         }
     }
-    
+
     0
 }
 
@@ -517,43 +530,49 @@ pub extern "C" fn qasa_dilithium_verify(
             return -1;
         }
     };
-    
+
     // Get the public key
     let public_key_bytes = unsafe {
         if public_key.is_null() || public_key_size <= 0 {
             handle_result::<()>(
-                Err(CryptoError::InvalidParameterError("Invalid public key".to_string())),
+                Err(CryptoError::InvalidParameterError(
+                    "Invalid public key".to_string(),
+                )),
                 error_msg,
             );
             return -1;
         }
         slice::from_raw_parts(public_key, public_key_size as usize)
     };
-    
+
     // Get the message
     let message_bytes = unsafe {
         if message.is_null() || message_size <= 0 {
             handle_result::<()>(
-                Err(CryptoError::InvalidParameterError("Invalid message".to_string())),
+                Err(CryptoError::InvalidParameterError(
+                    "Invalid message".to_string(),
+                )),
                 error_msg,
             );
             return -1;
         }
         slice::from_raw_parts(message, message_size as usize)
     };
-    
+
     // Get the signature
     let signature_bytes = unsafe {
         if signature.is_null() || signature_size <= 0 {
             handle_result::<()>(
-                Err(CryptoError::InvalidParameterError("Invalid signature".to_string())),
+                Err(CryptoError::InvalidParameterError(
+                    "Invalid signature".to_string(),
+                )),
                 error_msg,
             );
             return -1;
         }
         slice::from_raw_parts(signature, signature_size as usize)
     };
-    
+
     // Verify the signature
     let result = DilithiumKeyPair::verify_with_public_key(
         dilithium_variant,
@@ -561,13 +580,13 @@ pub extern "C" fn qasa_dilithium_verify(
         message_bytes,
         signature_bytes,
     );
-    
+
     let (status, verify_result) = handle_result(result, error_msg);
-    
+
     if status != 0 {
         return status;
     }
-    
+
     if verify_result.unwrap() {
         1 // Valid signature
     } else {
@@ -596,45 +615,52 @@ pub extern "C" fn qasa_aes_gcm_encrypt(
     let key_bytes = unsafe {
         if key.is_null() || key_size <= 0 {
             handle_result::<()>(
-                Err(CryptoError::InvalidParameterError("Invalid key".to_string())),
+                Err(CryptoError::InvalidParameterError(
+                    "Invalid key".to_string(),
+                )),
                 error_msg,
             );
             return -1;
         }
         slice::from_raw_parts(key, key_size as usize)
     };
-    
+
     // Get the plaintext
     let plaintext_bytes = unsafe {
         if plaintext.is_null() || plaintext_size <= 0 {
             handle_result::<()>(
-                Err(CryptoError::InvalidParameterError("Invalid plaintext".to_string())),
+                Err(CryptoError::InvalidParameterError(
+                    "Invalid plaintext".to_string(),
+                )),
                 error_msg,
             );
             return -1;
         }
         slice::from_raw_parts(plaintext, plaintext_size as usize)
     };
-    
+
     // Get the associated data (can be empty)
     let aad_bytes = unsafe {
         if associated_data.is_null() {
             None
         } else {
-            Some(slice::from_raw_parts(associated_data, associated_data_size as usize))
+            Some(slice::from_raw_parts(
+                associated_data,
+                associated_data_size as usize,
+            ))
         }
     };
-    
+
     // Encrypt
     let result = aes::encrypt(plaintext_bytes, key_bytes, aad_bytes);
     let (status, encrypt_result) = handle_result(result, error_msg);
-    
+
     if status != 0 {
         return status;
     }
-    
+
     let (ct, nonce_bytes) = encrypt_result.unwrap();
-    
+
     // Copy the ciphertext
     unsafe {
         if !ciphertext.is_null() && !ciphertext_size.is_null() {
@@ -653,7 +679,7 @@ pub extern "C" fn qasa_aes_gcm_encrypt(
             }
             *ciphertext_size = written;
         }
-        
+
         // Copy the nonce
         if !nonce.is_null() && !nonce_size.is_null() {
             let max_size = *nonce_size;
@@ -672,7 +698,7 @@ pub extern "C" fn qasa_aes_gcm_encrypt(
             *nonce_size = written;
         }
     }
-    
+
     0
 }
 
@@ -695,57 +721,66 @@ pub extern "C" fn qasa_aes_gcm_decrypt(
     let key_bytes = unsafe {
         if key.is_null() || key_size <= 0 {
             handle_result::<()>(
-                Err(CryptoError::InvalidParameterError("Invalid key".to_string())),
+                Err(CryptoError::InvalidParameterError(
+                    "Invalid key".to_string(),
+                )),
                 error_msg,
             );
             return -1;
         }
         slice::from_raw_parts(key, key_size as usize)
     };
-    
+
     // Get the ciphertext
     let ciphertext_bytes = unsafe {
         if ciphertext.is_null() || ciphertext_size <= 0 {
             handle_result::<()>(
-                Err(CryptoError::InvalidParameterError("Invalid ciphertext".to_string())),
+                Err(CryptoError::InvalidParameterError(
+                    "Invalid ciphertext".to_string(),
+                )),
                 error_msg,
             );
             return -1;
         }
         slice::from_raw_parts(ciphertext, ciphertext_size as usize)
     };
-    
+
     // Get the nonce
     let nonce_bytes = unsafe {
         if nonce.is_null() || nonce_size <= 0 {
             handle_result::<()>(
-                Err(CryptoError::InvalidParameterError("Invalid nonce".to_string())),
+                Err(CryptoError::InvalidParameterError(
+                    "Invalid nonce".to_string(),
+                )),
                 error_msg,
             );
             return -1;
         }
         slice::from_raw_parts(nonce, nonce_size as usize)
     };
-    
+
     // Get the associated data (can be empty)
     let aad_bytes = unsafe {
         if associated_data.is_null() {
             None
         } else {
-            Some(slice::from_raw_parts(associated_data, associated_data_size as usize))
+            Some(slice::from_raw_parts(
+                associated_data,
+                associated_data_size as usize,
+            ))
         }
     };
-    
+
     // Decrypt
     let result = aes::decrypt(ciphertext_bytes, key_bytes, nonce_bytes, aad_bytes);
     let (status, plaintext_result) = handle_result(result, error_msg);
-    
+
     if status != 0 {
         return status;
     }
-    
+
     let pt = plaintext_result.unwrap();
-    
+
     // Copy the plaintext
     unsafe {
         if !plaintext.is_null() && !plaintext_size.is_null() {
@@ -765,6 +800,6 @@ pub extern "C" fn qasa_aes_gcm_decrypt(
             *plaintext_size = written;
         }
     }
-    
+
     0
-} 
+}

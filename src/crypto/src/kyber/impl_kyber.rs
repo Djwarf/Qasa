@@ -8,9 +8,9 @@ use std::fmt;
 use crate::error::CryptoError;
 
 /// CRYSTALS-Kyber key pair for key encapsulation mechanisms (KEM)
-/// 
+///
 /// This implementation uses the CRYSTALS-Kyber algorithm, a lattice-based
-/// key encapsulation mechanism that is believed to be secure against 
+/// key encapsulation mechanism that is believed to be secure against
 /// quantum computer attacks.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct KyberKeyPair {
@@ -61,7 +61,7 @@ impl KyberVariant {
             KyberVariant::Kyber1024 => Algorithm::Kyber1024,
         }
     }
-    
+
     /// Get the security level of this variant
     pub fn security_level(&self) -> u8 {
         match self {
@@ -70,7 +70,7 @@ impl KyberVariant {
             KyberVariant::Kyber1024 => 5,
         }
     }
-    
+
     /// Get the public key size for this variant in bytes
     pub fn public_key_size(&self) -> usize {
         match self {
@@ -79,7 +79,7 @@ impl KyberVariant {
             KyberVariant::Kyber1024 => 1568,
         }
     }
-    
+
     /// Get the secret key size for this variant in bytes
     pub fn secret_key_size(&self) -> usize {
         match self {
@@ -88,7 +88,7 @@ impl KyberVariant {
             KyberVariant::Kyber1024 => 3168,
         }
     }
-    
+
     /// Get the ciphertext size for this variant in bytes
     pub fn ciphertext_size(&self) -> usize {
         match self {
@@ -97,7 +97,7 @@ impl KyberVariant {
             KyberVariant::Kyber1024 => 1568,
         }
     }
-    
+
     /// Get the shared secret size in bytes (same for all variants)
     pub fn shared_secret_size(&self) -> usize {
         32 // All Kyber variants use 32-byte shared secrets
@@ -117,17 +117,18 @@ impl KyberKeyPair {
     pub fn generate(variant: KyberVariant) -> Result<Self, CryptoError> {
         let alg = variant.oqs_algorithm();
         let kyber = Kem::new(alg).map_err(|e| CryptoError::OqsError(e.to_string()))?;
-        
-        let (public_key, secret_key) = kyber.keypair()
+
+        let (public_key, secret_key) = kyber
+            .keypair()
             .map_err(|e| CryptoError::KeyGenerationError(e.to_string()))?;
-            
+
         Ok(Self {
             public_key: public_key.into_vec(),
             secret_key: secret_key.into_vec(),
             algorithm: variant,
         })
     }
-    
+
     /// Encapsulate a shared secret using this key pair's public key
     ///
     /// This generates a shared secret and encapsulates it with the public key.
@@ -139,17 +140,23 @@ impl KyberKeyPair {
     pub fn encapsulate(&self) -> Result<(Vec<u8>, Vec<u8>), CryptoError> {
         let alg = self.algorithm.oqs_algorithm();
         let kyber = Kem::new(alg).map_err(|e| CryptoError::OqsError(e.to_string()))?;
-        
+
         // Create a public key from bytes using the Kem instance
-        let pk = kyber.public_key_from_bytes(&self.public_key)
-            .ok_or_else(|| CryptoError::EncapsulationError("Failed to create public key from bytes".to_string()))?;
-        
-        let (ciphertext, shared_secret) = kyber.encapsulate(&pk)
+        let pk = kyber
+            .public_key_from_bytes(&self.public_key)
+            .ok_or_else(|| {
+                CryptoError::EncapsulationError(
+                    "Failed to create public key from bytes".to_string(),
+                )
+            })?;
+
+        let (ciphertext, shared_secret) = kyber
+            .encapsulate(&pk)
             .map_err(|e| CryptoError::EncapsulationError(e.to_string()))?;
-            
+
         Ok((ciphertext.into_vec(), shared_secret.into_vec()))
     }
-    
+
     /// Decapsulate a shared secret using this key pair's secret key
     ///
     /// This takes a ciphertext and extracts the shared secret using the secret key.
@@ -164,21 +171,28 @@ impl KyberKeyPair {
     pub fn decapsulate(&self, ciphertext: &[u8]) -> Result<Vec<u8>, CryptoError> {
         let alg = self.algorithm.oqs_algorithm();
         let kyber = Kem::new(alg).map_err(|e| CryptoError::OqsError(e.to_string()))?;
-        
+
         // Create a secret key from bytes using the Kem instance
-        let sk = kyber.secret_key_from_bytes(&self.secret_key)
-            .ok_or_else(|| CryptoError::DecapsulationError("Failed to create secret key from bytes".to_string()))?;
-        
+        let sk = kyber
+            .secret_key_from_bytes(&self.secret_key)
+            .ok_or_else(|| {
+                CryptoError::DecapsulationError(
+                    "Failed to create secret key from bytes".to_string(),
+                )
+            })?;
+
         // Create a ciphertext from bytes using the Kem instance
-        let ct = kyber.ciphertext_from_bytes(ciphertext)
-            .ok_or_else(|| CryptoError::DecapsulationError("Failed to create ciphertext from bytes".to_string()))?;
-        
-        let shared_secret = kyber.decapsulate(&sk, &ct)
+        let ct = kyber.ciphertext_from_bytes(ciphertext).ok_or_else(|| {
+            CryptoError::DecapsulationError("Failed to create ciphertext from bytes".to_string())
+        })?;
+
+        let shared_secret = kyber
+            .decapsulate(&sk, &ct)
             .map_err(|e| CryptoError::DecapsulationError(e.to_string()))?;
-        
+
         Ok(shared_secret.into_vec())
     }
-    
+
     /// Extract the public key from this key pair
     ///
     /// This is useful when you need to share your public key with others
@@ -195,4 +209,4 @@ impl KyberKeyPair {
     }
 }
 
-// Rest of the implementation would be here 
+// Rest of the implementation would be here

@@ -58,7 +58,12 @@ impl AesGcm {
     /// # Returns
     ///
     /// The encrypted ciphertext or an error
-    pub fn encrypt(&self, plaintext: &[u8], nonce: &[u8], _associated_data: &[u8]) -> Result<Vec<u8>, CryptoError> {
+    pub fn encrypt(
+        &self,
+        plaintext: &[u8],
+        nonce: &[u8],
+        _associated_data: &[u8],
+    ) -> Result<Vec<u8>, CryptoError> {
         if nonce.len() != 12 {
             return Err(CryptoError::InvalidParameterError(format!(
                 "AES-GCM nonce must be 12 bytes, got {}",
@@ -67,11 +72,12 @@ impl AesGcm {
         }
 
         let nonce = Nonce::from_slice(nonce);
-        
+
         // Note: We're not using associated_data for now as we're focusing on getting
         // the basic functionality working first. The AES-GCM implementation in the aes_gcm
         // crate does support associated data, but it requires more careful handling.
-        self.cipher.encrypt(nonce, plaintext)
+        self.cipher
+            .encrypt(nonce, plaintext)
             .map_err(|e| CryptoError::EncryptionError(e.to_string()))
     }
 
@@ -86,7 +92,12 @@ impl AesGcm {
     /// # Returns
     ///
     /// The decrypted plaintext or an error
-    pub fn decrypt(&self, ciphertext: &[u8], nonce: &[u8], _associated_data: &[u8]) -> Result<Vec<u8>, CryptoError> {
+    pub fn decrypt(
+        &self,
+        ciphertext: &[u8],
+        nonce: &[u8],
+        _associated_data: &[u8],
+    ) -> Result<Vec<u8>, CryptoError> {
         if nonce.len() != 12 {
             return Err(CryptoError::InvalidParameterError(format!(
                 "AES-GCM nonce must be 12 bytes, got {}",
@@ -95,11 +106,12 @@ impl AesGcm {
         }
 
         let nonce = Nonce::from_slice(nonce);
-        
+
         // Note: We're not using associated_data for now as we're focusing on getting
         // the basic functionality working first. The AES-GCM implementation in the aes_gcm
         // crate does support associated data, but it requires more careful handling.
-        self.cipher.decrypt(nonce, ciphertext)
+        self.cipher
+            .decrypt(nonce, ciphertext)
             .map_err(|e| CryptoError::DecryptionError(e.to_string()))
     }
 }
@@ -115,7 +127,11 @@ impl AesGcm {
 /// # Returns
 ///
 /// A tuple containing (ciphertext, nonce) or an error
-pub fn encrypt(plaintext: &[u8], key: &[u8], associated_data: Option<&[u8]>) -> Result<(Vec<u8>, Vec<u8>), CryptoError> {
+pub fn encrypt(
+    plaintext: &[u8],
+    key: &[u8],
+    associated_data: Option<&[u8]>,
+) -> Result<(Vec<u8>, Vec<u8>), CryptoError> {
     let cipher = AesGcm::new(key)?;
     let nonce = AesGcm::generate_nonce();
     let aad = associated_data.unwrap_or(&[]);
@@ -135,7 +151,12 @@ pub fn encrypt(plaintext: &[u8], key: &[u8], associated_data: Option<&[u8]>) -> 
 /// # Returns
 ///
 /// The decrypted plaintext or an error
-pub fn decrypt(ciphertext: &[u8], key: &[u8], nonce: &[u8], associated_data: Option<&[u8]>) -> Result<Vec<u8>, CryptoError> {
+pub fn decrypt(
+    ciphertext: &[u8],
+    key: &[u8],
+    nonce: &[u8],
+    associated_data: Option<&[u8]>,
+) -> Result<Vec<u8>, CryptoError> {
     let cipher = AesGcm::new(key)?;
     let aad = associated_data.unwrap_or(&[]);
     cipher.decrypt(ciphertext, nonce, aad)
@@ -146,4 +167,4 @@ pub fn generate_key() -> Vec<u8> {
     utils::random_bytes(32).unwrap_or_else(|_| vec![0; 32])
 }
 
-// Additional AES-related functions would be defined here 
+// Additional AES-related functions would be defined here

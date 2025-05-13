@@ -1,6 +1,6 @@
 /*!
  * QaSa Cryptography Module
- * 
+ *
  * This module implements post-quantum cryptographic primitives for the QaSa
  * secure chat application, with a focus on providing quantum-resistant security.
  */
@@ -27,16 +27,16 @@ pub mod utils;
 pub mod ffi;
 
 // Re-export main types for convenience
+pub use dilithium::DilithiumKeyPair;
 pub use error::CryptoError;
 pub use kyber::KyberKeyPair;
-pub use dilithium::DilithiumKeyPair;
 
 /// Initialize the cryptography module.
 /// This function should be called before using any cryptographic functions.
 /// It performs any necessary setup for the underlying cryptographic libraries.
-/// 
+///
 /// # Returns
-/// 
+///
 /// `Ok(())` if initialization is successful, or an error if initialization fails
 pub fn init() -> Result<(), CryptoError> {
     // Currently, no special initialization is needed

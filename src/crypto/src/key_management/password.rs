@@ -11,7 +11,10 @@ pub struct DerivedKey {
 }
 
 /// Derives a key from a password
-pub fn derive_key_from_password(_password: &str, _salt: Option<&[u8]>) -> Result<DerivedKey, CryptoError> {
+pub fn derive_key_from_password(
+    _password: &str,
+    _salt: Option<&[u8]>,
+) -> Result<DerivedKey, CryptoError> {
     // Password-based key derivation would go here
     Err(CryptoError::NotImplemented)
 }
@@ -28,4 +31,4 @@ pub fn generate_salt() -> Vec<u8> {
     Vec::new()
 }
 
-// Additional password handling functions would be defined here 
+// Additional password handling functions would be defined here
