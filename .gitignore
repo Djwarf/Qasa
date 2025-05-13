@@ -49,4 +49,5 @@ vendor/
 .rustfmt.toml
 .tool-versions 
 
+.cursor/
 .cursor
