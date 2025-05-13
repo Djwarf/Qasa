@@ -49,3 +49,4 @@ vendor/
 # User-specific configurations
 .rustfmt.toml
 .tool-versions 
+project_tasks.md

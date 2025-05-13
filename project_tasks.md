@@ -208,4 +208,4 @@
 - [ ] Write developer guides
 - [ ] Create user tutorials and guides
 - [ ] Document protocol specifications
-- [ ] Prepare academic publications 
+- [ ] Prepare academic publications
