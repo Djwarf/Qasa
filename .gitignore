@@ -1,0 +1,50 @@
+# Rust
+/target/
+**/*.rs.bk
+Cargo.lock
+.cargo/config
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.work
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Build output
+/bin/
+/pkg/
+
+# Generated files
+/generated/
+
+# Log files
+*.log
+
+# Environment variables
+.env
+.env.local
+
+# Keys and other sensitive data
+*.pem
+*.key
+
+# Test data
+/test-data/
+It seems
+# Dependency directories
+vendor/
+
+# User-specific configurations
+.rustfmt.toml
+.tool-versions 

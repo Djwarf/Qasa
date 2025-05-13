@@ -1,0 +1,81 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+#Project QaSa        
+
+*Rust** (performance-critical systems) and **Go** (networking).
+
+This project implements a secure end-to-end encrypted chat application that uses post-quantum cryptography to provide protection against quantum computer attacks.
+
+**Cryptography Module**
+   - CRYSTALS-Kyber for quantum-resistant key exchange
+   - CRYSTALS-Dilithium for secure message signing
+   - AES-GCM for symmetric encryption
+   - Key management system for storing and loading keys
+
+**Network Module**
+   - Peer-to-peer communication using libp2p
+   - End-to-end encryption for all messages
+   - Secure message exchange protocol
+   - Peer discovery and management
+
+The application employs NIST-selected post-quantum cryptographic algorithms:
+
+- **CRYSTALS-Kyber** for key encapsulation (KEM), which replaces traditional key exchange mechanisms like Diffie-Hellman that are vulnerable to quantum attacks.
+- **CRYSTALS-Dilithium** for digital signatures, which replaces traditional signature schemes like RSA and ECDSA that are vulnerable to quantum attacks.
+
+These algorithms are believed to be secure against attacks from both classical and quantum computers.
+
+During development, we encountered several challenges:
+
+1. **Integration of Post-Quantum Libraries** - Working with the relatively new oqs library required careful API handling.
+2. **Key Management** - Implementing secure key storage and exchange while maintaining usability.
+3. **P2P Network Architecture** - Building a decentralized network that can reliably deliver encrypted messages.
+4. **Performance Considerations** - Post-quantum algorithms generally have larger key sizes and computational requirements than traditional algorithms.
+
+### **Challenges & Solutions** 
+1. **Performance Overhead**: 
+   - Use hardware acceleration (FPGAs/GPUs) for lattice-based crypto (Kyber/Dilithium). 
+   - Optimize protocols for low-bandwidth regions (e.g., Compact Dilithium). 
+2. **Adoption**: 
+   - Offer "quantum-safe as a service" APIs for legacy apps to transition. 
+3. **Regulation**: 
+   - Collaborate with NIST and ITU to align with global PQC standards. 
+
+
+
+
+### **Tools & Resources** 
+| **Category**         | **Tools/Libraries**                                                                 | 
+|-----------------------|-------------------------------------------------------------------------------------| 
+| Cryptography          | liboqs, PQClean, OpenSSL-OQS, Microsoft SEAL                                       | 
+| Networking            | Libp2p, QUIC, WireGuard (PQ fork)                                                  | 
+| Storage               | IPFS, Filecoin, Storj (modified for PQC)                                           | 
+| Identity              | Iden3, Hyperledger Aries, OAuth2/OIDC with PQC                                     | 
+| Quantum Simulation    | NetSquid, Qiskit, QuTiP                                                            | 
+| Community             | Open Quantum Safe, IETF PQC Working Group, Decentralized Web Summit                 | 
+
+---
+
+### **Key Milestones** 
+| **Year** | **Milestone**                                      | **Success Metric**                                   | 
+|----------|----------------------------------------------------|------------------------------------------------------| 
+| 1-2      | Quantum-safe chat app + P2P prototype              | 100 nodes communicating with PQC-TLS.                | 
+| 3-4      | City-wide quantum-safe mesh network                | 1,000 users, 99.9% uptime.                           | 
+| 5-6      | DID system + quantum IPFS fork                     | 10,000 DIDs registered; 1PB stored.                  | 
+| 7-8      | Quantum-safe blockchain fork                       | 100 validators; $1M+ staked in DAO.                  | 
+| 9-10     | Global hybrid QKD/PQC network                      | 1M+ users; QKD backbone in 5 countries.              | 
+
+
+## Future Improvements
+
+Future work could include:
+
+- Implementing group chat with multicast encryption
+- Adding file transfer capabilities with quantum-safe encryption
+- Improving the user interface with a graphical client
+- Implementing perfect forward secrecy
+- Adding support for additional post-quantum algorithms
+- Building a mobile client with cross-platform compatibility

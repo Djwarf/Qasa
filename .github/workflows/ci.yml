@@ -1,0 +1,119 @@
+name: QaSa CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  rust-crypto:
+    name: Rust Crypto Module
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+          override: true
+      
+      - name: Install liboqs dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build
+      
+      - name: Format Check
+        working-directory: ./src/crypto
+        run: cargo fmt -- --check
+      
+      - name: Clippy
+        working-directory: ./src/crypto
+        run: cargo clippy -- -D warnings
+      
+      - name: Build
+        working-directory: ./src/crypto
+        run: cargo build --verbose
+      
+      - name: Test
+        working-directory: ./src/crypto
+        run: cargo test --verbose
+
+  go-network:
+    name: Go Network Module
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.20'
+      
+      - name: Format Check
+        working-directory: ./src/network
+        run: test -z "$(gofmt -l .)"
+      
+      - name: Go vet
+        working-directory: ./src/network
+        run: go vet ./...
+      
+      - name: Install dependencies
+        working-directory: ./src/network
+        run: go mod tidy
+      
+      - name: Build
+        working-directory: ./src/network
+        run: go build -v ./...
+      
+      - name: Test
+        working-directory: ./src/network
+        run: go test -v ./...
+
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Rust Security Audit
+        uses: actions-rs/audit-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Go Security Scan
+        uses: securego/gosec@master
+        with:
+          args: ./src/network/...
+
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [rust-crypto, go-network]
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.20'
+      
+      - name: Build Crypto Module
+        working-directory: ./src/crypto
+        run: cargo build --verbose
+      
+      - name: Build Network Module
+        working-directory: ./src/network
+        run: go build -v ./...
+      
+      # Add integration tests when they are available
+      - name: Placeholder for Integration Tests
+        run: echo "Integration tests will be run here" 
