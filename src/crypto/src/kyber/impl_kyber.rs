@@ -237,6 +237,29 @@ impl KyberPublicKey {
 
         Ok((ciphertext.into_vec(), shared_secret.into_vec()))
     }
+    
+    /// Calculate a SHA-256 fingerprint of the public key
+    ///
+    /// This produces a hex-encoded SHA-256 hash of the public key,
+    /// which can be used for key identification and verification.
+    ///
+    /// # Returns
+    ///
+    /// A hex-encoded string representing the fingerprint
+    pub fn fingerprint(&self) -> String {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(&self.public_key);
+        let hash = hasher.finalize();
+        let mut fingerprint = String::new();
+        for (i, byte) in hash.iter().enumerate() {
+            fingerprint.push_str(&format!("{:02x}", byte));
+            if i % 2 == 1 && i < hash.len() - 1 {
+                fingerprint.push(':');
+            }
+        }
+        fingerprint
+    }
 }
 
 // Rest of the implementation would be here

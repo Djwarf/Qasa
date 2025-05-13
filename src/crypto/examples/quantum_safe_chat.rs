@@ -1,7 +1,6 @@
 use qasa_crypto::{
     aes,
     kyber::{KyberKeyPair, KyberVariant},
-    utils,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -55,7 +54,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Use the shared secret to encrypt the message with AES-GCM
     let associated_data = b"QaSa-Chat-App-v1"; // Some additional authenticated data
     let (encrypted_message, nonce) =
-        aes::encrypt(message.as_bytes(), &mary_shared_secret, associated_data)?;
+        aes::encrypt(message.as_bytes(), &mary_shared_secret, Some(associated_data))?;
 
     println!(
         "  Encrypted message size: {} bytes",
@@ -71,7 +70,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &encrypted_message,
         &elena_shared_secret,
         &nonce,
-        associated_data,
+        Some(associated_data),
     )?;
 
     // Convert the decrypted bytes back to a string
@@ -100,7 +99,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (encrypted_reply, reply_nonce) = aes::encrypt(
         reply_message.as_bytes(),
         &elena_to_mary_secret,
-        associated_data,
+        Some(associated_data),
     )?;
 
     // Mary decrypts Elena's reply
@@ -108,7 +107,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &encrypted_reply,
         &mary_from_elena_secret,
         &reply_nonce,
-        associated_data,
+        Some(associated_data),
     )?;
 
     let decrypted_reply = std::str::from_utf8(&decrypted_reply_bytes)?;
