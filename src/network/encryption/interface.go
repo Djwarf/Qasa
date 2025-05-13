@@ -51,17 +51,18 @@ type Message struct {
 	SignatureAlgorithm  string
 }
 
+// SessionKey is defined in session_key.go
 // SessionKey represents a temporary session key for efficient communication
-type SessionKey struct {
-	// The key used for encryption/decryption during the session
-	Key []byte
-
-	// When the session key expires
-	ExpiresAt int64
-
-	// The peer this session is established with
-	PeerID string
-}
+//type SessionKey struct {
+//	// The key used for encryption/decryption during the session
+//	Key []byte
+//
+//	// When the session key expires
+//	ExpiresAt int64
+//
+//	// The peer this session is established with
+//	PeerID string
+//}
 
 // MessageType defines the type of message being exchanged
 type MessageType int
@@ -96,4 +97,4 @@ type EncryptionConfig struct {
 
 	// How often to rotate session keys (in seconds)
 	SessionKeyLifetime int64
-} 
+}

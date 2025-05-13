@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 
 use crate::error::CryptoError;
-use crate::utils;
 
 /// CRYSTALS-Dilithium key pair for digital signatures
 /// 

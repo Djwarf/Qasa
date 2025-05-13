@@ -3,21 +3,23 @@
 
 use crate::error::CryptoError;
 
-/// Derived key from a password, used for key encryption
+/// Derived key from a password
+#[derive(Debug, Clone)]
 pub struct DerivedKey {
-    // Implementation details
+    pub key: Vec<u8>,
+    pub salt: Vec<u8>,
 }
 
-/// Derives a key from a password using Argon2
-pub fn derive_key_from_password(password: &str, salt: Option<&[u8]>) -> Result<DerivedKey, CryptoError> {
-    // Implementation would go here
-    unimplemented!()
+/// Derives a key from a password
+pub fn derive_key_from_password(_password: &str, _salt: Option<&[u8]>) -> Result<DerivedKey, CryptoError> {
+    // Password-based key derivation would go here
+    Err(CryptoError::NotImplemented)
 }
 
-/// Verifies a password against a stored derived key
-pub fn verify_password(password: &str, derived_key: &DerivedKey) -> Result<bool, CryptoError> {
-    // Implementation would go here
-    Ok(true)
+/// Verifies a password against a derived key
+pub fn verify_password(_password: &str, _derived_key: &DerivedKey) -> Result<bool, CryptoError> {
+    // Password verification would go here
+    Err(CryptoError::NotImplemented)
 }
 
 /// Generates a cryptographically secure random salt

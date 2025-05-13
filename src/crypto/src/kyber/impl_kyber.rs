@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 
 use crate::error::CryptoError;
-use crate::utils;
 
 /// CRYSTALS-Kyber key pair for key encapsulation mechanisms (KEM)
 /// 

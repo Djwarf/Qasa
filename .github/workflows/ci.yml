@@ -40,10 +40,17 @@ jobs:
       - name: Test
         working-directory: ./src/crypto
         run: cargo test --verbose
+      
+      - name: Upload Crypto Library
+        uses: actions/upload-artifact@v3
+        with:
+          name: crypto-lib
+          path: ./src/crypto/target/debug/libqasa_crypto.so
 
   go-network:
     name: Go Network Module
     runs-on: ubuntu-latest
+    needs: [rust-crypto]
     steps:
       - uses: actions/checkout@v3
       
@@ -51,6 +58,17 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: '1.20'
+      
+      - name: Download Crypto Library
+        uses: actions/download-artifact@v3
+        with:
+          name: crypto-lib
+          path: /usr/local/lib
+      
+      - name: Set library permissions and update cache
+        run: |
+          sudo chmod +x /usr/local/lib/libqasa_crypto.so
+          sudo ldconfig
       
       - name: Format Check
         working-directory: ./src/network
@@ -62,7 +80,9 @@ jobs:
       
       - name: Install dependencies
         working-directory: ./src/network
-        run: go mod tidy
+        run: |
+          go mod tidy
+          go mod download
       
       - name: Build
         working-directory: ./src/network
@@ -71,6 +91,8 @@ jobs:
       - name: Test
         working-directory: ./src/network
         run: go test -v ./...
+        env:
+          LD_LIBRARY_PATH: /usr/local/lib:$LD_LIBRARY_PATH
 
   security-audit:
     name: Security Audit
@@ -78,15 +100,28 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       
-      - name: Rust Security Audit
-        uses: actions-rs/audit-check@v1
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          toolchain: stable
+          override: true
+      
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+      
+      - name: Rust Security Audit
+        working-directory: ./src/crypto
+        run: cargo audit
+      
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.20'
       
       - name: Go Security Scan
-        uses: securego/gosec@master
-        with:
-          args: ./src/network/...
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          gosec ./src/network/...
 
   integration-tests:
     name: Integration Tests
@@ -110,10 +145,34 @@ jobs:
         working-directory: ./src/crypto
         run: cargo build --verbose
       
+      - name: Install shared library
+        run: |
+          sudo cp ./src/crypto/target/debug/libqasa_crypto.so /usr/local/lib/
+          sudo chmod +x /usr/local/lib/libqasa_crypto.so
+          sudo ldconfig
+      
       - name: Build Network Module
         working-directory: ./src/network
         run: go build -v ./...
       
-      # Add integration tests when they are available
-      - name: Placeholder for Integration Tests
-        run: echo "Integration tests will be run here" 
+      - name: Run basic integration test
+        run: |
+          echo "Starting integration test..."
+          # Run the QaSa node in the background
+          ./src/network/network --port 9000 --enable-mdns true --require-auth true &
+          PID=$!
+          
+          # Wait for node to start
+          sleep 5
+          
+          # Check if node is running
+          if ps -p $PID > /dev/null; then
+            echo "Node started successfully"
+            kill $PID
+            echo "Integration test passed"
+          else
+            echo "Failed to start node"
+            exit 1
+          fi
+        env:
+          LD_LIBRARY_PATH: /usr/local/lib:$LD_LIBRARY_PATH 

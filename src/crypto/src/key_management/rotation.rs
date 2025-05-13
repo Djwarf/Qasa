@@ -5,35 +5,37 @@ use crate::error::CryptoError;
 use crate::kyber::KyberKeyPair;
 use crate::dilithium::DilithiumKeyPair;
 
-/// Represents a key rotation policy
+/// Key rotation policy
 pub struct RotationPolicy {
-    // Implementation details
+    /// How often keys should be rotated, in days
+    rotation_interval_days: u32,
 }
 
 impl RotationPolicy {
-    /// Creates a new key rotation policy
-    pub fn new(rotation_interval_days: u32) -> Self {
-        // Implementation would go here
-        Self {}
+    /// Create a new key rotation policy
+    pub fn new(_rotation_interval_days: u32) -> Self {
+        Self {
+            rotation_interval_days: 90, // Default to 90 days
+        }
     }
 }
 
-/// Rotates a Kyber key pair based on the rotation policy
+/// Rotate a Kyber key pair
 pub fn rotate_kyber_keypair(
-    old_keypair: &KyberKeyPair,
-    policy: &RotationPolicy,
+    _old_keypair: &KyberKeyPair,
+    _policy: &RotationPolicy,
 ) -> Result<KyberKeyPair, CryptoError> {
-    // Implementation would go here
-    unimplemented!()
+    // New key generation would go here
+    Err(CryptoError::NotImplemented)
 }
 
-/// Rotates a Dilithium key pair based on the rotation policy
+/// Rotate a Dilithium key pair
 pub fn rotate_dilithium_keypair(
-    old_keypair: &DilithiumKeyPair,
-    policy: &RotationPolicy,
+    _old_keypair: &DilithiumKeyPair,
+    _policy: &RotationPolicy,
 ) -> Result<DilithiumKeyPair, CryptoError> {
-    // Implementation would go here
-    unimplemented!()
+    // New key generation would go here
+    Err(CryptoError::NotImplemented)
 }
 
 // Additional key rotation functions would be defined here 

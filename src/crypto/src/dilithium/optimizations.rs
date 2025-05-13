@@ -6,7 +6,6 @@
  */
 
 use crate::error::CryptoError;
-use super::impl_dilithium::DilithiumKeyPair;
 
 /// Provides optimized implementations for Dilithium operations
 pub struct OptimizedDilithium;

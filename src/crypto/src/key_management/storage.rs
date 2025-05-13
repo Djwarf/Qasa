@@ -6,27 +6,27 @@ use crate::kyber::KyberKeyPair;
 use crate::dilithium::DilithiumKeyPair;
 
 /// Stores a Kyber key pair to disk
-pub fn store_kyber_keypair(keypair: &KyberKeyPair, path: &str, password: &str) -> Result<(), CryptoError> {
+pub fn store_kyber_keypair(_keypair: &KyberKeyPair, _path: &str, _password: &str) -> Result<(), CryptoError> {
     // Implementation would go here
     Ok(())
 }
 
 /// Loads a Kyber key pair from disk
-pub fn load_kyber_keypair(path: &str, password: &str) -> Result<KyberKeyPair, CryptoError> {
+pub fn load_kyber_keypair(_path: &str, _password: &str) -> Result<KyberKeyPair, CryptoError> {
     // Implementation would go here
-    unimplemented!()
+    Err(CryptoError::NotImplemented)
 }
 
 /// Stores a Dilithium key pair to disk
-pub fn store_dilithium_keypair(keypair: &DilithiumKeyPair, path: &str, password: &str) -> Result<(), CryptoError> {
+pub fn store_dilithium_keypair(_keypair: &DilithiumKeyPair, _path: &str, _password: &str) -> Result<(), CryptoError> {
     // Implementation would go here
     Ok(())
 }
 
 /// Loads a Dilithium key pair from disk
-pub fn load_dilithium_keypair(path: &str, password: &str) -> Result<DilithiumKeyPair, CryptoError> {
+pub fn load_dilithium_keypair(_path: &str, _password: &str) -> Result<DilithiumKeyPair, CryptoError> {
     // Implementation would go here
-    unimplemented!()
+    Err(CryptoError::NotImplemented)
 }
 
 // Additional key storage functions would be defined here 
