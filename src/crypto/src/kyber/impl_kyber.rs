@@ -1,6 +1,7 @@
 use oqs::kem::{Algorithm, Kem};
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use zeroize::Zeroize;
 
 use crate::error::CryptoError;
 use crate::utils;
@@ -18,6 +19,20 @@ pub struct KyberKeyPair {
     pub secret_key: Vec<u8>,
     /// The algorithm variant (Kyber512, Kyber768, or Kyber1024)
     pub algorithm: KyberVariant,
+}
+
+impl Drop for KyberKeyPair {
+    fn drop(&mut self) {
+        self.secret_key.zeroize();
+    }
+}
+
+// Implement Zeroize manually instead of using the derive
+impl Zeroize for KyberKeyPair {
+    fn zeroize(&mut self) {
+        self.secret_key.zeroize();
+        // We don't need to zeroize the public key or algorithm
+    }
 }
 
 /// Public key only version of KyberKeyPair for sharing with others

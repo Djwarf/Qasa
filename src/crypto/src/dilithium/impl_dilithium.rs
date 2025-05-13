@@ -1,6 +1,7 @@
 use oqs::sig::{Algorithm, Sig};
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use zeroize::Zeroize;
 
 use crate::error::CryptoError;
 use crate::utils;
@@ -18,6 +19,20 @@ pub struct DilithiumKeyPair {
     pub secret_key: Vec<u8>,
     /// The algorithm variant (Dilithium2, Dilithium3, or Dilithium5)
     pub algorithm: DilithiumVariant,
+}
+
+impl Drop for DilithiumKeyPair {
+    fn drop(&mut self) {
+        self.secret_key.zeroize();
+    }
+}
+
+// Implement Zeroize manually instead of using the derive
+impl Zeroize for DilithiumKeyPair {
+    fn zeroize(&mut self) {
+        self.secret_key.zeroize();
+        // We don't need to zeroize the public key or algorithm
+    }
 }
 
 /// Public key only version of DilithiumKeyPair for sharing with others
@@ -151,6 +166,12 @@ pub struct LeanDilithium {
     sig_instance: Option<Sig>,
 }
 
+impl Drop for LeanDilithium {
+    fn drop(&mut self) {
+        self.release_resources();
+    }
+}
+
 impl LeanDilithium {
     /// Create a new LeanDilithium instance without pre-initializing the Sig instance
     ///
@@ -247,8 +268,12 @@ impl LeanDilithium {
         }
     }
     
-    /// Release memory by clearing the cached Sig instance
+    /// Release any resources held by this instance
+    /// 
+    /// This frees the Sig instance, which can be important in memory-constrained
+    /// environments. It's automatically called when the LeanDilithium instance is dropped.
     pub fn release_resources(&mut self) {
+        // Drop the Sig instance to free memory
         self.sig_instance = None;
     }
     

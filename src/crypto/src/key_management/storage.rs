@@ -5,19 +5,13 @@ use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
-use aes_gcm::aead::OsRng;
-use argon2::{
-    password_hash::{PasswordHasher, SaltString},
-    Argon2, Params,
-};
 use serde::{Deserialize, Serialize};
 
 use crate::aes;
 use crate::dilithium::DilithiumKeyPair;
 use crate::error::CryptoError;
-use crate::key_management::password::{derive_key_from_password, DerivedKey};
+use crate::key_management::password::derive_key_from_password;
 use crate::kyber::KyberKeyPair;
-use crate::utils::{self, secure_zero};
 
 /// Metadata for stored key files
 #[derive(Serialize, Deserialize)]
@@ -109,30 +103,32 @@ pub fn store_kyber_keypair(
     path: Option<&str>,
     password: &str,
 ) -> Result<String, CryptoError> {
-    let key_directory = ensure_key_directory(path.map(Path::new))?;
+    // Serialize the key pair
+    let key_data = bincode::serialize(keypair)
+        .map_err(|e| CryptoError::SerializationError(format!("Failed to serialize key pair: {}", e)))?;
+    
+    // Generate a key ID
+    let key_id = generate_key_id();
     
     // Derive encryption key from password
     let derived_key = derive_key_from_password(password, None, None)?;
-    
-    // Serialize the key pair
-    let key_data = bincode::serialize(keypair)
-        .map_err(|e| CryptoError::SerializationError(format!("Failed to serialize key: {}", e)))?;
+    let key_bytes = derived_key.key.clone(); // Clone to avoid borrowing issues
+    let salt = derived_key.salt.clone(); // Clone to avoid borrowing issues
     
     // Encrypt the key data
-    let (encrypted_data, nonce) = aes::encrypt(&key_data, &derived_key.key, None)?;
+    let (encrypted_data, nonce) = aes::encrypt(&key_data, &key_bytes, None)?;
     
     // Create metadata
-    let key_id = generate_key_id();
     let metadata = KeyMetadata {
         version: 1,
         key_id: key_id.clone(),
         key_type: KeyType::Kyber,
         created_at: current_time_secs(),
         last_rotated: None,
-        password_salt: derived_key.salt.clone(),
+        password_salt: salt,
     };
     
-    // Create the encrypted key structure
+    // Create encrypted key structure
     let encrypted_key = EncryptedKeyData {
         metadata,
         encrypted_data,
@@ -140,8 +136,11 @@ pub fn store_kyber_keypair(
     };
     
     // Serialize the encrypted key
-    let encrypted_key_data = bincode::serialize(&encrypted_key)
+    let serialized = bincode::serialize(&encrypted_key)
         .map_err(|e| CryptoError::SerializationError(format!("Failed to serialize encrypted key: {}", e)))?;
+    
+    // Get/create key directory
+    let key_directory = ensure_key_directory(path.map(Path::new))?;
     
     // Write to file
     let file_path = key_directory.join(format!("{}.kyber.key", key_id));
@@ -149,8 +148,8 @@ pub fn store_kyber_keypair(
         CryptoError::KeyManagementError(format!("Failed to create key file: {}", e))
     })?;
     
-    file.write_all(&encrypted_key_data).map_err(|e| {
-        CryptoError::KeyManagementError(format!("Failed to write key data: {}", e))
+    file.write_all(&serialized).map_err(|e| {
+        CryptoError::KeyManagementError(format!("Failed to write key file: {}", e))
     })?;
     
     Ok(key_id)
@@ -173,6 +172,13 @@ pub fn load_kyber_keypair(
     let key_directory = ensure_key_directory(None)?;
     let file_path = key_directory.join(format!("{}.kyber.key", key_id));
     
+    // Check if file exists
+    if !file_path.exists() {
+        return Err(CryptoError::KeyManagementError(
+            format!("Key {} does not exist", key_id),
+        ));
+    }
+    
     // Read the encrypted key file
     let mut file = File::open(&file_path).map_err(|e| {
         CryptoError::KeyManagementError(format!("Failed to open key file: {}", e))
@@ -187,20 +193,14 @@ pub fn load_kyber_keypair(
     let encrypted_key: EncryptedKeyData = bincode::deserialize(&encrypted_data)
         .map_err(|e| CryptoError::SerializationError(format!("Failed to deserialize key file: {}", e)))?;
     
-    // Verify key type
-    if encrypted_key.metadata.key_type != KeyType::Kyber {
-        return Err(CryptoError::KeyManagementError(
-            "Invalid key type, expected Kyber key".to_string(),
-        ));
-    }
-    
-    // Derive decryption key from password using the stored salt
+    // Derive the decryption key from the password
     let derived_key = derive_key_from_password(password, Some(&encrypted_key.metadata.password_salt), None)?;
+    let key_bytes = derived_key.key.clone(); // Clone to avoid borrowing issues
     
     // Decrypt the key data
     let key_data = aes::decrypt(
         &encrypted_key.encrypted_data,
-        &derived_key.key,
+        &key_bytes,
         &encrypted_key.nonce,
         None,
     )?;
@@ -228,30 +228,32 @@ pub fn store_dilithium_keypair(
     path: Option<&str>,
     password: &str,
 ) -> Result<String, CryptoError> {
-    let key_directory = ensure_key_directory(path.map(Path::new))?;
+    // Serialize the key pair
+    let key_data = bincode::serialize(keypair)
+        .map_err(|e| CryptoError::SerializationError(format!("Failed to serialize key pair: {}", e)))?;
+    
+    // Generate a key ID
+    let key_id = generate_key_id();
     
     // Derive encryption key from password
     let derived_key = derive_key_from_password(password, None, None)?;
-    
-    // Serialize the key pair
-    let key_data = bincode::serialize(keypair)
-        .map_err(|e| CryptoError::SerializationError(format!("Failed to serialize key: {}", e)))?;
+    let key_bytes = derived_key.key.clone(); // Clone to avoid borrowing issues
+    let salt = derived_key.salt.clone(); // Clone to avoid borrowing issues
     
     // Encrypt the key data
-    let (encrypted_data, nonce) = aes::encrypt(&key_data, &derived_key.key, None)?;
+    let (encrypted_data, nonce) = aes::encrypt(&key_data, &key_bytes, None)?;
     
     // Create metadata
-    let key_id = generate_key_id();
     let metadata = KeyMetadata {
         version: 1,
         key_id: key_id.clone(),
         key_type: KeyType::Dilithium,
         created_at: current_time_secs(),
         last_rotated: None,
-        password_salt: derived_key.salt.clone(),
+        password_salt: salt,
     };
     
-    // Create the encrypted key structure
+    // Create encrypted key structure
     let encrypted_key = EncryptedKeyData {
         metadata,
         encrypted_data,
@@ -259,8 +261,11 @@ pub fn store_dilithium_keypair(
     };
     
     // Serialize the encrypted key
-    let encrypted_key_data = bincode::serialize(&encrypted_key)
+    let serialized = bincode::serialize(&encrypted_key)
         .map_err(|e| CryptoError::SerializationError(format!("Failed to serialize encrypted key: {}", e)))?;
+    
+    // Get/create key directory
+    let key_directory = ensure_key_directory(path.map(Path::new))?;
     
     // Write to file
     let file_path = key_directory.join(format!("{}.dilithium.key", key_id));
@@ -268,8 +273,8 @@ pub fn store_dilithium_keypair(
         CryptoError::KeyManagementError(format!("Failed to create key file: {}", e))
     })?;
     
-    file.write_all(&encrypted_key_data).map_err(|e| {
-        CryptoError::KeyManagementError(format!("Failed to write key data: {}", e))
+    file.write_all(&serialized).map_err(|e| {
+        CryptoError::KeyManagementError(format!("Failed to write key file: {}", e))
     })?;
     
     Ok(key_id)
@@ -292,6 +297,13 @@ pub fn load_dilithium_keypair(
     let key_directory = ensure_key_directory(None)?;
     let file_path = key_directory.join(format!("{}.dilithium.key", key_id));
     
+    // Check if file exists
+    if !file_path.exists() {
+        return Err(CryptoError::KeyManagementError(
+            format!("Key {} does not exist", key_id),
+        ));
+    }
+    
     // Read the encrypted key file
     let mut file = File::open(&file_path).map_err(|e| {
         CryptoError::KeyManagementError(format!("Failed to open key file: {}", e))
@@ -306,20 +318,14 @@ pub fn load_dilithium_keypair(
     let encrypted_key: EncryptedKeyData = bincode::deserialize(&encrypted_data)
         .map_err(|e| CryptoError::SerializationError(format!("Failed to deserialize key file: {}", e)))?;
     
-    // Verify key type
-    if encrypted_key.metadata.key_type != KeyType::Dilithium {
-        return Err(CryptoError::KeyManagementError(
-            "Invalid key type, expected Dilithium key".to_string(),
-        ));
-    }
-    
-    // Derive decryption key from password using the stored salt
+    // Derive the decryption key from the password
     let derived_key = derive_key_from_password(password, Some(&encrypted_key.metadata.password_salt), None)?;
+    let key_bytes = derived_key.key.clone(); // Clone to avoid borrowing issues
     
     // Decrypt the key data
     let key_data = aes::decrypt(
         &encrypted_key.encrypted_data,
-        &derived_key.key,
+        &key_bytes,
         &encrypted_key.nonce,
         None,
     )?;
@@ -461,7 +467,10 @@ pub fn export_key(
     
     // Now re-encrypt with the export password
     let export_derived_key = derive_key_from_password(export_password, None, None)?;
-    let (re_encrypted_data, export_nonce) = aes::encrypt(&key_data, &export_derived_key.key, None)?;
+    let export_key_bytes = export_derived_key.key.clone(); // Clone to avoid borrowing issues
+    let export_salt = export_derived_key.salt.clone(); // Clone to avoid borrowing issues
+    
+    let (re_encrypted_data, export_nonce) = aes::encrypt(&key_data, &export_key_bytes, None)?;
     
     // Create export metadata
     let export_metadata = KeyMetadata {
@@ -470,7 +479,7 @@ pub fn export_key(
         key_type: encrypted_key.metadata.key_type,
         created_at: encrypted_key.metadata.created_at,
         last_rotated: encrypted_key.metadata.last_rotated,
-        password_salt: export_derived_key.salt,
+        password_salt: export_salt,
     };
     
     // Create the export structure
@@ -542,7 +551,10 @@ pub fn import_key(
     
     // Re-encrypt with the new password
     let new_derived_key = derive_key_from_password(new_password, None, None)?;
-    let (re_encrypted_data, new_nonce) = aes::encrypt(&key_data, &new_derived_key.key, None)?;
+    let new_key_bytes = new_derived_key.key.clone(); // Clone to avoid borrowing issues
+    let new_salt = new_derived_key.salt.clone(); // Clone to avoid borrowing issues
+    
+    let (re_encrypted_data, new_nonce) = aes::encrypt(&key_data, &new_key_bytes, None)?;
     
     // Create new metadata
     let new_metadata = KeyMetadata {
@@ -551,7 +563,7 @@ pub fn import_key(
         key_type: imported_key.metadata.key_type,
         created_at: current_time_secs(),  // Use current time for import
         last_rotated: None,  // Reset rotation
-        password_salt: new_derived_key.salt,
+        password_salt: new_salt,
     };
     
     // Create the new key structure

@@ -35,6 +35,9 @@ pub mod utils;
 /// Foreign Function Interface (FFI) for integration with other languages
 pub mod ffi;
 
+/// Secure memory handling utilities
+pub mod secure_memory;
+
 // Re-export main types for convenience
 pub use dilithium::DilithiumKeyPair;
 pub use dilithium::DilithiumPublicKey;
@@ -94,6 +97,9 @@ pub mod prelude {
     pub use crate::key_management::KeyRotationMetadata;
     pub use crate::key_management::KeyAgeSummary;
     pub use crate::key_management::password::high_security_params;
+    pub use crate::secure_memory::SecureBuffer;
+    pub use crate::secure_memory::SecureBytes;
+    pub use crate::secure_memory::with_secure_scope;
     
     /// Creates an end-to-end encrypted message ready for sending
     /// 

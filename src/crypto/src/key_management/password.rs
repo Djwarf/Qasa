@@ -2,23 +2,26 @@
 // This file contains code moved from src/key_management.rs for password handling
 
 use argon2::{
-    password_hash::{rand_core::OsRng, PasswordHasher, SaltString},
+    password_hash::SaltString,
     Argon2, ParamsBuilder,
 };
-use zeroize::Zeroize;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::error::CryptoError;
 use crate::utils;
+use crate::secure_memory::SecureBytes;
 
-/// Derived key from a password
-#[derive(Debug, Clone, Zeroize)]
-#[zeroize(drop)]
+/// Derived key data, including the key itself and the salt used to generate it
+#[derive(Debug, Clone, Zeroize, ZeroizeOnDrop)]
 pub struct DerivedKey {
+    /// The derived key
     pub key: Vec<u8>,
+    /// The salt used to derive the key
     pub salt: Vec<u8>,
 }
 
 /// Parameters for key derivation
+#[derive(Debug, Clone)]
 pub struct KeyDerivationParams {
     /// Memory cost (in KB)
     pub memory_cost: u32,
@@ -62,25 +65,12 @@ pub fn high_security_params() -> KeyDerivationParams {
     }
 }
 
-/// Derives a key from a password
-///
-/// # Arguments
-///
-/// * `password` - The password to derive a key from
-/// * `salt` - Optional salt to use (generates a new one if None)
-/// * `params` - Optional parameters for key derivation (uses defaults if None)
-///
-/// # Returns
-///
-/// A DerivedKey containing the derived key and salt used
-pub fn derive_key_from_password(
-    password: &str,
-    salt: Option<&[u8]>,
-    params: Option<&KeyDerivationParams>,
-) -> Result<DerivedKey, CryptoError> {
-    let default_params = KeyDerivationParams::default();
-    let params = params.unwrap_or(&default_params);
-    
+/// Helper function to derive a key using common parameters
+fn derive_key_internal(
+    password: &[u8],
+    salt: &[u8],
+    params: &KeyDerivationParams,
+) -> Result<Vec<u8>, CryptoError> {
     // Create Argon2 params
     let mut builder = ParamsBuilder::new();
     builder
@@ -100,31 +90,67 @@ pub fn derive_key_from_password(
         argon2_params,
     );
     
-    // Generate salt if not provided
-    let salt_string = match salt {
-        Some(s) => SaltString::encode_b64(s).map_err(|e| {
-            CryptoError::KeyManagementError(format!("Failed to encode salt: {}", e))
-        })?,
-        None => SaltString::generate(&mut OsRng),
+    // Convert the salt to a SaltString
+    let salt_string = SaltString::encode_b64(salt).map_err(|e| {
+        CryptoError::KeyManagementError(format!("Failed to encode salt: {}", e))
+    })?;
+    
+    // Create a buffer for the output key
+    let mut key_buffer = vec![0u8; params.key_length];
+    
+    // Derive the key using Argon2
+    argon2.hash_password_into(
+        password,
+        salt_string.as_str().as_bytes(),
+        &mut key_buffer
+    ).map_err(|e| {
+        CryptoError::KeyManagementError(format!("Failed to derive key: {}", e))
+    })?;
+    
+    Ok(key_buffer)
+}
+
+/// Derives a key from a password
+///
+/// # Arguments
+///
+/// * `password` - The password to derive a key from
+/// * `salt` - Optional salt to use (generates a new one if None)
+/// * `params` - Optional parameters for key derivation (uses defaults if None)
+///
+/// # Returns
+///
+/// A DerivedKey containing the derived key and salt used
+pub fn derive_key_from_password(
+    password: &str,
+    salt: Option<&[u8]>,
+    params: Option<&KeyDerivationParams>,
+) -> Result<DerivedKey, CryptoError> {
+    // Create secure password handling
+    let secure_password = SecureBytes::new(password.as_bytes());
+    
+    let default_params = KeyDerivationParams::default();
+    let params = params.unwrap_or(&default_params);
+    
+    // Generate or use provided salt
+    let salt_bytes = match salt {
+        Some(s) => s.to_vec(),
+        None => {
+            // Generate fresh random salt
+            utils::random_bytes(16)?
+        },
     };
     
-    // Hash the password with the salt to derive the key
-    let derived = argon2
-        .hash_password(password.as_bytes(), &salt_string)
-        .map_err(|e| {
-            CryptoError::KeyManagementError(format!("Failed to derive key: {}", e))
-        })?;
+    // Derive the key
+    let key_buffer = derive_key_internal(
+        secure_password.as_bytes(),
+        &salt_bytes,
+        params
+    )?;
     
-    // Extract the hash as the derived key
-    let hash = derived.hash.unwrap();
-    let hash_bytes = hash.as_bytes();
-    let key = hash_bytes[..params.key_length].to_vec();
-    
-    // Get the salt bytes
-    let salt_bytes = salt_string.as_str().as_bytes().to_vec();
-    
+    // Return the derived key and salt
     Ok(DerivedKey {
-        key,
+        key: key_buffer,
         salt: salt_bytes,
     })
 }
@@ -145,11 +171,22 @@ pub fn verify_password(
     derived_key: &DerivedKey,
     params: Option<&KeyDerivationParams>,
 ) -> Result<bool, CryptoError> {
-    // Derive a key using the same salt
-    let test_derived = derive_key_from_password(password, Some(&derived_key.salt), params)?;
+    // Create secure password handling
+    let secure_password = SecureBytes::new(password.as_bytes());
+    
+    // Get parameters
+    let default_params = KeyDerivationParams::default();
+    let params = params.unwrap_or(&default_params);
+    
+    // Derive key with same salt
+    let key = derive_key_internal(
+        secure_password.as_bytes(),
+        &derived_key.salt,
+        params
+    )?;
     
     // Compare the keys in constant time
-    let result = utils::constant_time_eq(&test_derived.key, &derived_key.key);
+    let result = utils::constant_time_eq(&key, &derived_key.key);
     
     Ok(result)
 }
@@ -187,9 +224,7 @@ pub fn change_password(
 ) -> Result<DerivedKey, CryptoError> {
     // Verify the old password first
     if !verify_password(old_password, derived_key, params)? {
-        return Err(CryptoError::KeyManagementError(
-            "Invalid password".to_string(),
-        ));
+        return Err(CryptoError::InvalidPasswordError("Invalid password".to_string()));
     }
     
     // Generate a new derived key with the new password
@@ -199,14 +234,15 @@ pub fn change_password(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::secure_memory::with_secure_scope;
     
     #[test]
     fn test_derive_key() {
         let password = "secure_password123";
         let derived = derive_key_from_password(password, None, None).unwrap();
         
-        assert_eq!(derived.key.len(), 32); // Default key length
-        assert!(!derived.salt.is_empty());
+        assert_eq!(derived.key.len(), 32, "Derived key should be 32 bytes long");
+        assert!(!derived.salt.is_empty(), "Salt should not be empty");
     }
     
     #[test]
@@ -216,11 +252,11 @@ mod tests {
         
         // Correct password
         let result = verify_password(password, &derived, None).unwrap();
-        assert!(result);
+        assert!(result, "Password verification should succeed with correct password");
         
         // Incorrect password
         let result = verify_password("wrong_password", &derived, None).unwrap();
-        assert!(!result);
+        assert!(!result, "Password verification should fail with incorrect password");
     }
     
     #[test]
@@ -232,7 +268,10 @@ mod tests {
         let derived2 = derive_key_from_password(password, Some(&salt), None).unwrap();
         
         // Same password + same salt should give same key
-        assert_eq!(derived1.key, derived2.key);
+        assert_eq!(derived1.key, derived2.key, "Same password+salt should produce same key");
+        
+        // The salt should be preserved exactly
+        assert_eq!(derived1.salt, salt, "Salt should be preserved exactly");
     }
     
     #[test]
@@ -248,7 +287,7 @@ mod tests {
         let derived = derive_key_from_password(password, None, Some(&params)).unwrap();
         
         // Key length should match params
-        assert_eq!(derived.key.len(), 16);
+        assert_eq!(derived.key.len(), 16, "Key length should match specified params");
     }
     
     #[test]
@@ -256,16 +295,19 @@ mod tests {
         let old_password = "old_password123";
         let new_password = "new_secure_password";
         
+        // First derive a key with the old password
         let derived = derive_key_from_password(old_password, None, None).unwrap();
+        
+        // Change the password
         let new_derived = change_password(old_password, new_password, &derived, None).unwrap();
         
-        // Verify old password no longer works
+        // Verify old password no longer works with new derived key
         let old_result = verify_password(old_password, &new_derived, None).unwrap();
-        assert!(!old_result);
+        assert!(!old_result, "Old password should not work with new derived key");
         
-        // Verify new password works
+        // Verify new password works with new derived key
         let new_result = verify_password(new_password, &new_derived, None).unwrap();
-        assert!(new_result);
+        assert!(new_result, "New password should work with new derived key");
     }
     
     #[test]
@@ -275,6 +317,35 @@ mod tests {
         
         // Try to change with wrong password
         let result = change_password("wrong_password", "new_password", &derived, None);
-        assert!(result.is_err());
+        assert!(result.is_err(), "Password change should fail with incorrect old password");
+        
+        if let Err(CryptoError::InvalidPasswordError(_)) = result {
+            // Expected error type
+        } else {
+            panic!("Unexpected error type");
+        }
+    }
+    
+    #[test]
+    fn test_secure_memory_handling() {
+        let password = "super_secure_password";
+        
+        // Use secure memory handling for the password
+        let secure_password = SecureBytes::new(password.as_bytes());
+        let password_str = std::str::from_utf8(secure_password.as_bytes()).unwrap();
+        
+        // Derive a key using the secure password
+        let derived = derive_key_from_password(password_str, None, None).unwrap();
+        
+        // Verify the password still works
+        let verification = verify_password(password, &derived, None).unwrap();
+        assert!(verification, "Password verification should work after secure handling");
+        
+        // Test with scope-based zeroing
+        let verification_scoped = with_secure_scope(&mut password.to_string(), |pwd| {
+            verify_password(pwd, &derived, None)
+        }).unwrap();
+        
+        assert!(verification_scoped, "Password verification should work with secure scope");
     }
 }

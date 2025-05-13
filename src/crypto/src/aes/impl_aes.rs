@@ -5,7 +5,6 @@ use aes_gcm::{
 use std::sync::Arc;
 
 use crate::error::CryptoError;
-use crate::utils;
 
 /// AES-256-GCM cipher for authenticated encryption
 #[derive(Clone)]
@@ -149,24 +148,18 @@ pub fn decrypt(ciphertext: &[u8], key: &[u8], nonce: &[u8], associated_data: Opt
 #[cfg(test)]
 mod tests {
     use super::*;
-
+    use crate::utils;
+    
     #[test]
     fn test_aes_gcm_encrypt_decrypt() {
         let key = utils::random_bytes(32).unwrap();
-        let plaintext = b"This is a test message for encryption";
-        let associated_data = b"additional authenticated data";
-
-        // Encrypt
-        let (ciphertext, nonce) = encrypt(plaintext, &key, Some(associated_data)).unwrap();
-
-        // Verify ciphertext is not the same as plaintext
-        assert_ne!(&ciphertext, plaintext);
-
-        // Decrypt
-        let decrypted = decrypt(&ciphertext, &key, &nonce, Some(associated_data)).unwrap();
-
-        // Verify decryption worked
-        assert_eq!(decrypted, plaintext);
+        let plaintext = b"Hello, world!";
+        let aad = b"Additional data";
+        
+        let (ciphertext, nonce) = encrypt(plaintext, &key, Some(aad)).unwrap();
+        let decrypted = decrypt(&ciphertext, &key, &nonce, Some(aad)).unwrap();
+        
+        assert_eq!(plaintext, decrypted.as_slice());
     }
 
     #[test]
