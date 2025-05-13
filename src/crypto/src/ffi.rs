@@ -1,10 +1,20 @@
-use std::ffi::{c_char, c_int, CString};
+/*!
+ * FFI interface for the crypto module
+ *
+ * This module provides C-compatible functions for using the crypto module from other languages.
+ */
+
+// Allow pointer dereferencing in FFI functions as we guarantee proper checks and safety
+#![allow(clippy::not_unsafe_ptr_arg_deref)]
+
+use std::ffi::CString;
 use std::slice;
 
 use crate::aes;
 use crate::dilithium::{DilithiumKeyPair, DilithiumVariant};
 use crate::error::CryptoError;
 use crate::kyber::{KyberKeyPair, KyberVariant};
+use libc::{c_char, c_int};
 
 // Helper function to convert an FFI result to a C return code and message
 fn handle_result<T>(
@@ -53,22 +63,32 @@ pub extern "C" fn qasa_crypto_init(error_msg: *mut *mut c_char) -> c_int {
 }
 
 // Free a string allocated by the library
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences a raw pointer.
+/// The provided pointer must be a valid pointer to memory allocated by this library
+/// using the correct allocation method. If the pointer is invalid or has already
+/// been freed, undefined behavior will occur.
 #[no_mangle]
-pub extern "C" fn qasa_free_string(ptr: *mut c_char) {
+pub unsafe extern "C" fn qasa_free_string(ptr: *mut c_char) {
     if !ptr.is_null() {
-        unsafe {
-            let _ = CString::from_raw(ptr);
-        }
+        let _ = CString::from_raw(ptr);
     }
 }
 
 // Free a byte buffer allocated by the library
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences a raw pointer.
+/// The provided pointer must be a valid pointer to memory allocated by this library
+/// using the correct allocation method. If the pointer is invalid or has already
+/// been freed, undefined behavior will occur.
 #[no_mangle]
-pub extern "C" fn qasa_free_bytes(ptr: *mut u8) {
+pub unsafe extern "C" fn qasa_free_bytes(ptr: *mut u8) {
     if !ptr.is_null() {
-        unsafe {
-            let _ = Box::from_raw(ptr);
-        }
+        let _ = Box::from_raw(ptr);
     }
 }
 

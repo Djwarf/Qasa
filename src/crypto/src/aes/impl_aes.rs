@@ -2,7 +2,7 @@
 // This file contains code moved from src/aes.rs
 
 use aes_gcm::{
-    aead::{Aead, AeadCore, KeyInit, OsRng},
+    aead::{Aead, AeadCore, KeyInit, OsRng, Payload},
     Aes256Gcm, Key, Nonce,
 };
 
@@ -62,7 +62,7 @@ impl AesGcm {
         &self,
         plaintext: &[u8],
         nonce: &[u8],
-        _associated_data: &[u8],
+        associated_data: &[u8],
     ) -> Result<Vec<u8>, CryptoError> {
         if nonce.len() != 12 {
             return Err(CryptoError::InvalidParameterError(format!(
@@ -72,12 +72,13 @@ impl AesGcm {
         }
 
         let nonce = Nonce::from_slice(nonce);
+        let payload = Payload {
+            msg: plaintext,
+            aad: associated_data,
+        };
 
-        // Note: We're not using associated_data for now as we're focusing on getting
-        // the basic functionality working first. The AES-GCM implementation in the aes_gcm
-        // crate does support associated data, but it requires more careful handling.
         self.cipher
-            .encrypt(nonce, plaintext)
+            .encrypt(nonce, payload)
             .map_err(|e| CryptoError::EncryptionError(e.to_string()))
     }
 
@@ -96,7 +97,7 @@ impl AesGcm {
         &self,
         ciphertext: &[u8],
         nonce: &[u8],
-        _associated_data: &[u8],
+        associated_data: &[u8],
     ) -> Result<Vec<u8>, CryptoError> {
         if nonce.len() != 12 {
             return Err(CryptoError::InvalidParameterError(format!(
@@ -106,12 +107,13 @@ impl AesGcm {
         }
 
         let nonce = Nonce::from_slice(nonce);
+        let payload = Payload {
+            msg: ciphertext,
+            aad: associated_data,
+        };
 
-        // Note: We're not using associated_data for now as we're focusing on getting
-        // the basic functionality working first. The AES-GCM implementation in the aes_gcm
-        // crate does support associated data, but it requires more careful handling.
         self.cipher
-            .decrypt(nonce, ciphertext)
+            .decrypt(nonce, payload)
             .map_err(|e| CryptoError::DecryptionError(e.to_string()))
     }
 }

@@ -8,15 +8,20 @@ use crate::kyber::KyberKeyPair;
 /// Key rotation policy
 pub struct RotationPolicy {
     /// How often keys should be rotated, in days
-    rotation_interval_days: u32,
+    pub rotation_interval_days: u32,
 }
 
 impl RotationPolicy {
     /// Create a new key rotation policy
-    pub fn new(_rotation_interval_days: u32) -> Self {
+    pub fn new(rotation_interval_days: u32) -> Self {
         Self {
-            rotation_interval_days: 90, // Default to 90 days
+            rotation_interval_days,
         }
+    }
+
+    /// Get the rotation interval in days
+    pub fn get_interval(&self) -> u32 {
+        self.rotation_interval_days
     }
 }
 

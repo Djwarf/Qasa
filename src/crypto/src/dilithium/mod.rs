@@ -9,6 +9,7 @@ mod impl_dilithium;
 mod optimizations;
 
 pub use impl_dilithium::*;
+pub use optimizations::LeanDilithium;
 
 #[cfg(test)]
 mod tests;

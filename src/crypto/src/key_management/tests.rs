@@ -7,7 +7,7 @@ fn test_password_derivation() {
     let password = "SecurePassword123!";
     let salt = None; // Let the function generate a salt
 
-    let derived_key = derive_key_from_password(password, salt);
+    let _derived_key = derive_key_from_password(password, salt);
 
     // This will fail because the function is not implemented yet, but the test structure is correct
     // Uncomment when implemented
@@ -32,7 +32,7 @@ fn test_kyber_key_storage() {
     let password = "TestPassword123!";
 
     // Test storing the key
-    let store_result = store_kyber_keypair(&key_pair, path, password);
+    let _store_result = store_kyber_keypair(&key_pair, path, password);
 
     // This will fail because the function is not implemented yet, but the test structure is correct
     // Uncomment when implemented
@@ -55,7 +55,7 @@ fn test_dilithium_key_storage() {
     let password = "TestPassword123!";
 
     // Test storing the key
-    let store_result = store_dilithium_keypair(&key_pair, path, password);
+    let _store_result = store_dilithium_keypair(&key_pair, path, password);
 
     // This will fail because the function is not implemented yet, but the test structure is correct
     // Uncomment when implemented

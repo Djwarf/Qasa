@@ -59,4 +59,8 @@ pub enum CryptoError {
     /// Error during random number generation
     #[error("Random number generation error: {0}")]
     RandomGenerationError(String),
+
+    /// Feature not implemented yet
+    #[error("Feature not implemented yet")]
+    NotImplemented,
 }

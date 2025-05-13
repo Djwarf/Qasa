@@ -32,6 +32,7 @@ base64 = "0.13.0"
 sha2 = "0.10.6"
 # For handling home directory paths
 dirs = "5.0.1"
+libc = "0.2.172"
 
 [dev-dependencies]
 criterion = "0.5.1"

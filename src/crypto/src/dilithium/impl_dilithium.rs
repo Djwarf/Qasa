@@ -145,7 +145,7 @@ impl DilithiumKeyPair {
         })?;
 
         let signature = sig
-            .sign(message, &sk)
+            .sign(message, sk)
             .map_err(|e| CryptoError::SignatureGenerationError(e.to_string()))?;
 
         Ok(signature.into_vec())
@@ -201,7 +201,7 @@ impl DilithiumKeyPair {
         })?;
 
         // Verify the signature
-        match sig.verify(message, &sig_bytes, &pk) {
+        match sig.verify(message, sig_bytes, pk) {
             Ok(_) => Ok(true),
             Err(_) => Ok(false),
         }
@@ -217,6 +217,27 @@ impl DilithiumKeyPair {
             public_key: self.public_key.clone(),
             algorithm: self.algorithm,
         }
+    }
+}
+
+impl DilithiumPublicKey {
+    /// Verify a signature with this public key
+    ///
+    /// # Arguments
+    ///
+    /// * `message` - The original message
+    /// * `signature` - The signature to verify
+    ///
+    /// # Returns
+    ///
+    /// `true` if the signature is valid, `false` otherwise
+    pub fn verify(&self, message: &[u8], signature: &[u8]) -> Result<bool, CryptoError> {
+        DilithiumKeyPair::verify_with_public_key(
+            self.algorithm,
+            &self.public_key,
+            message,
+            signature,
+        )
     }
 }
 

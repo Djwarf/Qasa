@@ -11,13 +11,13 @@ fn test_aes_encrypt_decrypt() {
     let aad = b"Additional authenticated data";
 
     // Encrypt
-    let (ciphertext, nonce) = encrypt(plaintext, &key, aad).unwrap();
+    let (ciphertext, nonce) = encrypt(plaintext, &key, Some(aad)).unwrap();
 
     // Verify ciphertext is not the same as plaintext
     assert_ne!(&ciphertext[..], &plaintext[..]);
 
     // Decrypt
-    let decrypted = decrypt(&ciphertext, &key, &nonce, aad).unwrap();
+    let decrypted = decrypt(&ciphertext, &key, &nonce, Some(aad)).unwrap();
 
     // Verify decryption works
     assert_eq!(&decrypted[..], &plaintext[..]);
@@ -33,7 +33,7 @@ fn test_aes_tampering_detection() {
     let aad = b"Additional authenticated data";
 
     // Encrypt
-    let (mut ciphertext, nonce) = encrypt(plaintext, &key, aad).unwrap();
+    let (mut ciphertext, nonce) = encrypt(plaintext, &key, Some(aad)).unwrap();
 
     // Tamper with the ciphertext
     if !ciphertext.is_empty() {
@@ -41,7 +41,7 @@ fn test_aes_tampering_detection() {
     }
 
     // Decrypt should fail due to tampering
-    let result = decrypt(&ciphertext, &key, &nonce, aad);
+    let result = decrypt(&ciphertext, &key, &nonce, Some(aad));
     assert!(result.is_err());
 }
 
@@ -55,14 +55,14 @@ fn test_aes_aad_validation() {
     let aad = b"Additional authenticated data";
 
     // Encrypt with original AAD
-    let (ciphertext, nonce) = encrypt(plaintext, &key, aad).unwrap();
+    let (ciphertext, nonce) = encrypt(plaintext, &key, Some(aad)).unwrap();
 
     // Try to decrypt with wrong AAD
     let wrong_aad = b"Wrong additional data";
-    let result = decrypt(&ciphertext, &key, &nonce, wrong_aad);
+    let result = decrypt(&ciphertext, &key, &nonce, Some(wrong_aad));
     assert!(result.is_err());
 
     // Decrypt with correct AAD should work
-    let decrypted = decrypt(&ciphertext, &key, &nonce, aad).unwrap();
+    let decrypted = decrypt(&ciphertext, &key, &nonce, Some(aad)).unwrap();
     assert_eq!(&decrypted[..], &plaintext[..]);
 }
