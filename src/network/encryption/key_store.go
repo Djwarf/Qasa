@@ -285,4 +285,48 @@ func (ks *KeyStore) RemovePeer(peerID string) error {
 
 	// Save the keys to disk
 	return ks.Save()
-} 
+}
+
+// GetKeyInfo retrieves the full key info for a peer and algorithm
+func (ks *KeyStore) GetKeyInfo(peerID, algorithm string) (*KeyInfo, error) {
+	ks.mutex.RLock()
+	defer ks.mutex.RUnlock()
+
+	// Check if peer exists
+	keys, exists := ks.Keys[peerID]
+	if !exists {
+		return nil, fmt.Errorf("no keys found for peer: %s", peerID)
+	}
+
+	// Check if algorithm exists
+	key, found := keys[algorithm]
+	if !found {
+		return nil, fmt.Errorf("no key found for algorithm: %s", algorithm)
+	}
+
+	return key, nil
+}
+
+// AddLocalKey adds or updates a local key pair
+func (ks *KeyStore) AddLocalKey(peerID, algorithm string, publicKey, privateKey []byte) error {
+	ks.mutex.Lock()
+	defer ks.mutex.Unlock()
+
+	// Create map for this peer if it doesn't exist
+	if _, exists := ks.Keys[peerID]; !exists {
+		ks.Keys[peerID] = make(map[string]*KeyInfo)
+	}
+
+	// Store or update the key
+	ks.Keys[peerID][algorithm] = &KeyInfo{
+		Algorithm:  algorithm,
+		PublicKey:  publicKey,
+		PrivateKey: privateKey,
+		PeerID:     peerID,
+		CreatedAt:  time.Now(),
+		IsLocal:    true,
+	}
+
+	// Save the keys to disk
+	return ks.Save()
+}

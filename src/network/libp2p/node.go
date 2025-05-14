@@ -13,54 +13,63 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
 	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
-	
+
 	"github.com/qasa/network/discovery"
+	"github.com/qasa/network/reputation"
 )
 
 // AuthenticatedPeer represents a peer with authentication information
 type AuthenticatedPeer struct {
-	PeerID      peer.ID
-	PubKey      crypto.PubKey
-	AuthTime    time.Time
+	PeerID       peer.ID
+	PubKey       crypto.PubKey
+	AuthTime     time.Time
 	IsAuthorised bool
-	Metadata    map[string]string
+	Metadata     map[string]string
 }
 
 // Node represents a libp2p node in the QaSa network
 type Node struct {
-	host          host.Host
-	ctx           context.Context
-	cancel        context.CancelFunc
-	mdnsService   *discovery.MDNSService
-	dhtService    *discovery.DHTService
-	bootstrapList *discovery.BootstrapNodeList
-	authorisedPeers  map[peer.ID]*AuthenticatedPeer // Track authenticated peers
-	privKey       crypto.PrivKey // Store our private key for authentication
+	host            host.Host
+	ctx             context.Context
+	cancel          context.CancelFunc
+	mdnsService     *discovery.MDNSService
+	dhtService      *discovery.DHTService
+	bootstrapList   *discovery.BootstrapNodeList
+	authorisedPeers map[peer.ID]*AuthenticatedPeer // Track authenticated peers
+	privKey         crypto.PrivKey                 // Store our private key for authentication
+	repManager      *reputation.Manager            // Reputation management system
+	geoOptimizer    *GeoOptimizer                  // Geographic peer optimization
+	configDir       string                         // Configuration directory
 }
 
 // NodeConfig contains configuration options for the node
 type NodeConfig struct {
 	EnableMDNS bool
-	EnableDHT bool
+	EnableDHT  bool
 	ListenPort int
 	// Authentication options
-	RequireAuth bool
+	RequireAuth  bool
 	TrustedPeers []peer.ID
 	// Bootstrap options
 	BootstrapNodes []string
-	ConfigDir string
+	ConfigDir      string
+	// Geographical optimization options
+	EnableGeoOptimization bool
+	GeoOptimizerOptions   *GeoOptimizerOptions
 }
 
 // DefaultNodeConfig returns a default configuration for the node
 func DefaultNodeConfig() *NodeConfig {
 	return &NodeConfig{
-		EnableMDNS: true,
-		EnableDHT: false,
-		ListenPort: 0, // Use random port
-		RequireAuth: false,
-		TrustedPeers: []peer.ID{},
-		BootstrapNodes: []string{},
-		ConfigDir: ".qasa",
+		EnableMDNS:            true,
+		EnableDHT:             false,
+		ListenPort:            0, // Use random port
+		RequireAuth:           false,
+		TrustedPeers:          []peer.ID{},
+		BootstrapNodes:        []string{},
+		ConfigDir:             ".qasa",
+		EnableGeoOptimization: false, // Disabled by default
+		GeoOptimizerOptions:   nil,   // Use defaults if enabled
 	}
 }
 
@@ -86,15 +95,15 @@ func NewNodeWithConfig(ctx context.Context, config *NodeConfig) (*Node, error) {
 
 	// Set up the libp2p host with basic options
 	opts := []libp2p.Option{
-		libp2p.Identity(priv),                     // Use our private key
-		libp2p.ListenAddrStrings(listenAddr),      // Listen on specified interfaces and port
-		libp2p.Security(noise.ID, noise.New),      // Use the Noise security protocol
-		libp2p.Transport(tcp.NewTCPTransport),     // Use TCP transport
-		libp2p.NATPortMap(),                       // Attempt to NAT map ports
-		libp2p.EnableRelay(),                      // Enable relay client functionality
+		libp2p.Identity(priv),                 // Use our private key
+		libp2p.ListenAddrStrings(listenAddr),  // Listen on specified interfaces and port
+		libp2p.Security(noise.ID, noise.New),  // Use the Noise security protocol
+		libp2p.Transport(tcp.NewTCPTransport), // Use TCP transport
+		libp2p.NATPortMap(),                   // Attempt to NAT map ports
+		libp2p.EnableRelay(),                  // Enable relay client functionality
 		// Do not enable auto relay without static relays
 		// libp2p.EnableAutoRelay(),               // Automatically detect and use relays
-		libp2p.EnableHolePunching(),               // Enable hole punching for NAT traversal
+		libp2p.EnableHolePunching(), // Enable hole punching for NAT traversal
 	}
 
 	h, err := libp2p.New(opts...)
@@ -104,11 +113,12 @@ func NewNodeWithConfig(ctx context.Context, config *NodeConfig) (*Node, error) {
 	}
 
 	node := &Node{
-		host:   h,
-		ctx:    ctx,
-		cancel: cancel,
-		privKey: priv,
+		host:            h,
+		ctx:             ctx,
+		cancel:          cancel,
+		privKey:         priv,
 		authorisedPeers: make(map[peer.ID]*AuthenticatedPeer),
+		configDir:       config.ConfigDir,
 	}
 
 	// Add trusted peers to the authorised list
@@ -127,7 +137,7 @@ func NewNodeWithConfig(ctx context.Context, config *NodeConfig) (*Node, error) {
 			cancel()
 			return nil, fmt.Errorf("failed to create mDNS discovery service: %w", err)
 		}
-		
+
 		node.mdnsService = mdnsService
 		mdnsService.Start()
 	}
@@ -138,7 +148,7 @@ func NewNodeWithConfig(ctx context.Context, config *NodeConfig) (*Node, error) {
 		fmt.Printf("Warning: Failed to initialize bootstrap node list: %s\n", err)
 	} else {
 		node.bootstrapList = bootstrapList
-		
+
 		// Add provided bootstrap nodes
 		for _, addr := range config.BootstrapNodes {
 			if err := bootstrapList.AddNode(addr); err != nil {
@@ -155,14 +165,14 @@ func NewNodeWithConfig(ctx context.Context, config *NodeConfig) (*Node, error) {
 			fmt.Printf("Warning: Failed to get bootstrap nodes: %s\n", err)
 			bootstrapAddrs = nil
 		}
-		
+
 		// Create the DHT service
 		dhtService, err := discovery.NewDHTService(ctx, h, bootstrapAddrs)
 		if err != nil {
 			fmt.Printf("Warning: Failed to create DHT discovery service: %s\n", err)
 		} else {
 			node.dhtService = dhtService
-			
+
 			// Start the DHT service
 			if err := dhtService.Start(); err != nil {
 				fmt.Printf("Warning: Failed to start DHT discovery service: %s\n", err)
@@ -170,6 +180,15 @@ func NewNodeWithConfig(ctx context.Context, config *NodeConfig) (*Node, error) {
 				// Start a goroutine to handle discovered peers
 				go node.handleDHTDiscoveredPeers()
 			}
+		}
+	}
+
+	// Enable geographic optimization if requested
+	if config.EnableGeoOptimization {
+		if err := node.EnableGeoOptimization(config.GeoOptimizerOptions); err != nil {
+			fmt.Printf("Warning: Failed to enable geographic peer optimization: %s\n", err)
+		} else {
+			fmt.Println("Geographic peer optimization enabled")
 		}
 	}
 
@@ -181,13 +200,13 @@ func (n *Node) handleDHTDiscoveredPeers() {
 	if n.dhtService == nil {
 		return
 	}
-	
+
 	for peer := range n.dhtService.DiscoveredPeers() {
 		// Skip if we're already connected
 		if n.host.Network().Connectedness(peer.ID) == network.Connected {
 			continue
 		}
-		
+
 		// Try to connect to the peer
 		ctx, cancel := context.WithTimeout(n.ctx, 10*time.Second)
 		if err := n.host.Connect(ctx, peer); err != nil {
@@ -196,7 +215,7 @@ func (n *Node) handleDHTDiscoveredPeers() {
 			continue
 		}
 		cancel()
-		
+
 		fmt.Printf("Connected to discovered peer: %s\n", peer.ID)
 	}
 }
@@ -331,7 +350,7 @@ func (n *Node) AddBootstrapNode(addr string) error {
 	if n.bootstrapList == nil {
 		return fmt.Errorf("bootstrap node list not initialized")
 	}
-	
+
 	return n.bootstrapList.AddNode(addr)
 }
 
@@ -340,7 +359,7 @@ func (n *Node) RemoveBootstrapNode(addr string) error {
 	if n.bootstrapList == nil {
 		return fmt.Errorf("bootstrap node list not initialized")
 	}
-	
+
 	return n.bootstrapList.RemoveNode(addr)
 }
 
@@ -349,17 +368,17 @@ func (n *Node) GetBootstrapNodes() ([]string, error) {
 	if n.bootstrapList == nil {
 		return nil, fmt.Errorf("bootstrap node list not initialized")
 	}
-	
+
 	addrs, err := n.bootstrapList.GetNodes()
 	if err != nil {
 		return nil, err
 	}
-	
+
 	strAddrs := make([]string, len(addrs))
 	for i, addr := range addrs {
 		strAddrs[i] = addr.String()
 	}
-	
+
 	return strAddrs, nil
 }
 
@@ -369,16 +388,67 @@ func (n *Node) Close() error {
 	if n.mdnsService != nil {
 		n.mdnsService.Stop()
 	}
-	
+
 	if n.dhtService != nil {
 		if err := n.dhtService.Stop(); err != nil {
 			fmt.Printf("Error stopping DHT service: %s\n", err)
 		}
 	}
-	
+
 	// Cancel the context to signal all goroutines to stop
 	n.cancel()
-	
+
 	// Close the host
 	return n.host.Close()
-} 
+}
+
+// EnableGeoOptimization enables geographic optimization of peer connections
+func (n *Node) EnableGeoOptimization(options *GeoOptimizerOptions) error {
+	if n.geoOptimizer != nil {
+		// Already enabled
+		return nil
+	}
+
+	optimizer, err := NewGeoOptimizer(n, options)
+	if err != nil {
+		return fmt.Errorf("failed to create geographic optimizer: %w", err)
+	}
+
+	n.geoOptimizer = optimizer
+	optimizer.Start()
+
+	return nil
+}
+
+// DisableGeoOptimization disables geographic optimization of peer connections
+func (n *Node) DisableGeoOptimization() {
+	if n.geoOptimizer == nil {
+		return
+	}
+
+	n.geoOptimizer.Stop()
+	n.geoOptimizer = nil
+}
+
+// IsGeoOptimizationEnabled checks if geographic optimization is enabled
+func (n *Node) IsGeoOptimizationEnabled() bool {
+	return n.geoOptimizer != nil && n.geoOptimizer.running
+}
+
+// GetPeerGeoScore gets the geographic score for a peer
+func (n *Node) GetPeerGeoScore(peerID peer.ID) (float64, error) {
+	if n.geoOptimizer == nil {
+		return 0, fmt.Errorf("geographic optimization not enabled")
+	}
+
+	return n.geoOptimizer.ScorePeer(peerID)
+}
+
+// GetPeerLocation gets the geographic location of a peer
+func (n *Node) GetPeerLocation(peerID peer.ID) (*discovery.GeoLocation, error) {
+	if n.geoOptimizer == nil {
+		return nil, fmt.Errorf("geographic optimization not enabled")
+	}
+
+	return n.geoOptimizer.GetPeerLocation(peerID)
+}

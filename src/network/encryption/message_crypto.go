@@ -6,16 +6,19 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 )
 
 // MessageCrypto provides message encryption/decryption workflow
 type MessageCrypto struct {
-	provider      CryptoProvider
-	keyStore      *KeyStore
-	sessionManager *SessionManager
-	rotationMutex  sync.Mutex
+	provider        CryptoProvider
+	keyStore        *KeyStore
+	sessionManager  *SessionManager
+	rotationManager *KeyRotationManager
+	rotationMutex   sync.Mutex
+	configDir       string
 }
 
 // NewMessageCrypto creates a new message encryption/decryption workflow manager
@@ -25,10 +28,15 @@ func NewMessageCrypto(provider CryptoProvider, keyStorePath string) (*MessageCry
 		return nil, fmt.Errorf("failed to initialize key store: %w", err)
 	}
 
+	// Create the new rotation manager with default policy
+	rotationManager := NewKeyRotationManager(keyStore, provider, DefaultRotationPolicy())
+
 	return &MessageCrypto{
-		provider:       provider,
-		keyStore:       keyStore,
-		sessionManager: NewSessionManager(),
+		provider:        provider,
+		keyStore:        keyStore,
+		sessionManager:  NewSessionManager(),
+		rotationManager: rotationManager,
+		configDir:       keyStorePath,
 	}, nil
 }
 
@@ -54,18 +62,18 @@ func (mc *MessageCrypto) EncryptMessage(plaintext []byte, recipientID string) ([
 	if mc.sessionManager.ShouldRotateKey(recipientID) {
 		mc.rotationMutex.Lock()
 		defer mc.rotationMutex.Unlock()
-		
+
 		// Double-check after acquiring the lock
 		if mc.sessionManager.ShouldRotateKey(recipientID) {
 			// Create a key generator function
 			keyGenerator := func() ([]byte, error) {
 				return mc.EstablishSessionKey(recipientID)
 			}
-			
+
 			// Rotate the key
 			_, err := mc.sessionManager.RotateSessionKey(recipientID, keyGenerator)
 			if err != nil {
-				fmt.Printf("Warning: Failed to rotate session key: %s\n", err)
+				log.Printf("Warning: Failed to rotate session key: %s\n", err)
 				// Continue with existing key or direct encryption
 			}
 		}
@@ -109,7 +117,7 @@ func (mc *MessageCrypto) encryptWithSessionKey(plaintext []byte, sessionKey []by
 
 	// Format: [0x02][session key ID (8 bytes)][nonce][encrypted data]
 	result := make([]byte, 1+8+len(nonce)+len(encryptedData))
-	
+
 	result[0] = 0x02 // Session key encryption marker
 	binary.BigEndian.PutUint64(result[1:9], keyID)
 	copy(result[9:], nonce)
@@ -135,28 +143,28 @@ func (mc *MessageCrypto) DecryptMessage(ciphertext []byte, senderID string) ([]b
 	switch encType {
 	case 0x01: // Direct encryption
 		return mc.provider.Decrypt(ciphertext[1:], myKey.PrivateKey)
-		
+
 	case 0x02: // Session key encryption
 		if len(ciphertext) < 9+12 { // Marker + Key ID + Minimum nonce size
 			return nil, errors.New("invalid session-encrypted ciphertext: too short")
 		}
-		
+
 		// Extract session key ID
 		sessionKeyID := binary.BigEndian.Uint64(ciphertext[1:9])
-		
+
 		// Get the session key
 		sessionKey, found := mc.sessionManager.GetSessionKeyByID(sessionKeyID)
 		if !found {
 			return nil, fmt.Errorf("session key not found: %d", sessionKeyID)
 		}
-		
+
 		// Extract nonce and encrypted data
 		nonce := ciphertext[9:21]
 		encryptedData := ciphertext[21:]
-		
+
 		// Decrypt the message
 		return aesGcmDecrypt(sessionKey.Key, encryptedData, nonce, nil)
-		
+
 	default:
 		return nil, fmt.Errorf("unknown encryption type: %d", encType)
 	}
@@ -188,23 +196,80 @@ func (mc *MessageCrypto) EstablishSessionKey(peerID string) ([]byte, error) {
 	return sharedSecret, nil
 }
 
-// StartKeyRotation starts a background routine for key rotation
+// StartKeyRotation starts background routines for key rotation
 func (mc *MessageCrypto) StartKeyRotation(ctx context.Context) {
+	// Create a context that can be cancelled
+	rotationCtx, cancel := context.WithCancel(ctx)
+
+	// Start session key rotation - short-term keys
 	// Run the cleanup every minute
-	ticker := time.NewTicker(1 * time.Minute)
-	
+	sessionTicker := time.NewTicker(1 * time.Minute)
+
 	go func() {
 		for {
 			select {
-			case <-ticker.C:
-				// Clean up expired keys
+			case <-sessionTicker.C:
+				// Clean up expired session keys
 				mc.sessionManager.CleanupExpiredKeys()
-			case <-ctx.Done():
-				ticker.Stop()
+			case <-rotationCtx.Done():
+				sessionTicker.Stop()
 				return
 			}
 		}
 	}()
+
+	// Start long-term key rotation (Kyber and Dilithium keys)
+	mc.rotationManager.StartKeyRotation(rotationCtx)
+
+	// If context is done, cancel our derived context
+	go func() {
+		<-ctx.Done()
+		cancel()
+	}()
+}
+
+// SetRotationPolicy sets the key rotation policy
+func (mc *MessageCrypto) SetRotationPolicy(policy *RotationPolicy) {
+	mc.rotationManager = NewKeyRotationManager(mc.keyStore, mc.provider, policy)
+}
+
+// ApplyHighSecurityPolicy applies high security settings for key rotation
+func (mc *MessageCrypto) ApplyHighSecurityPolicy() {
+	mc.SetRotationPolicy(HighSecurityRotationPolicy())
+	mc.sessionManager.SetKeyLifetime(4 * time.Hour)      // Shorter session key lifetime
+	mc.sessionManager.SetRotationInterval(1 * time.Hour) // More frequent rotation
+}
+
+// VerifyKeyIntegrity checks if the keys are valid and not corrupted
+func (mc *MessageCrypto) VerifyKeyIntegrity() error {
+	// Get my peer ID
+	peerID, err := mc.keyStore.GetMyPeerID()
+	if err != nil {
+		return err
+	}
+
+	// Check Kyber key
+	kyberKeyInfo, err := mc.keyStore.GetKeyInfo(peerID, "kyber768")
+	if err != nil {
+		return fmt.Errorf("failed to get Kyber key: %w", err)
+	}
+
+	// Check Dilithium key
+	dilithiumKeyInfo, err := mc.keyStore.GetKeyInfo(peerID, "dilithium3")
+	if err != nil {
+		return fmt.Errorf("failed to get Dilithium key: %w", err)
+	}
+
+	// Verify that the keys have both public and private components
+	if len(kyberKeyInfo.PublicKey) == 0 || len(kyberKeyInfo.PrivateKey) == 0 {
+		return fmt.Errorf("invalid Kyber key: missing key components")
+	}
+
+	if len(dilithiumKeyInfo.PublicKey) == 0 || len(dilithiumKeyInfo.PrivateKey) == 0 {
+		return fmt.Errorf("invalid Dilithium key: missing key components")
+	}
+
+	return nil
 }
 
 // SignMessage signs a message using the local identity
@@ -234,4 +299,14 @@ func (mc *MessageCrypto) VerifySignature(message, signature []byte, senderID str
 
 	// Verify the signature
 	return mc.provider.Verify(message, signature, senderKey)
-} 
+}
+
+// GetMyPeerID returns the peer ID of the local node
+func (mc *MessageCrypto) GetMyPeerID() (string, error) {
+	return mc.keyStore.GetMyPeerID()
+}
+
+// GetMyPublicKey retrieves a public key for the local node
+func (mc *MessageCrypto) GetMyPublicKey(peerID, algorithm string) ([]byte, error) {
+	return mc.keyStore.GetPublicKey(peerID, algorithm)
+}

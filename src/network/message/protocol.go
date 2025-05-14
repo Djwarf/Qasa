@@ -40,6 +40,12 @@ const (
 
 	// TypeKeyExchange indicates a key exchange message
 	TypeKeyExchange MessageType = "key_exchange"
+
+	// TypeRekey indicates a request to rotate the key
+	TypeRekey MessageType = "rekey"
+
+	// TypeKeyRotationNotice indicates a notification that keys have been rotated
+	TypeKeyRotationNotice MessageType = "key_rotation_notice"
 )
 
 // Message represents a chat message
@@ -124,6 +130,10 @@ type ChatProtocol struct {
 	// Key-related settings
 	useEncryption bool   // Whether encryption is enabled
 	configDir     string // Directory for configuration files
+
+	// Rate limiting
+	rateLimiter    *RateLimiter // Rate limiter for incoming messages
+	useRateLimiter bool         // Whether rate limiting is enabled
 }
 
 // ChatProtocolOptions defines options for creating a new chat protocol
@@ -134,6 +144,8 @@ type ChatProtocolOptions struct {
 	ConfigDir          string // Directory for configuration and key storage
 	EnableOfflineQueue bool   // Whether to enable offline message queueing
 	UseEncryption      bool   // Whether to enable end-to-end encryption
+	HighSecurity       bool   // Whether to apply high security policy
+	EnableRateLimiting bool   // Whether to enable rate limiting
 }
 
 // DefaultChatProtocolOptions returns the default options for chat protocol
@@ -149,6 +161,8 @@ func DefaultChatProtocolOptions() *ChatProtocolOptions {
 		ConfigDir:          ".qasa",
 		EnableOfflineQueue: true,
 		UseEncryption:      true,
+		HighSecurity:       true,
+		EnableRateLimiting: true,
 	}
 }
 
@@ -205,6 +219,7 @@ func NewChatProtocolWithOptions(ctx context.Context, h host.Host, callback ChatC
 		isOfflineQueueEnabled: options.EnableOfflineQueue,
 		useEncryption:         options.UseEncryption,
 		configDir:             options.ConfigDir,
+		useRateLimiter:        options.EnableRateLimiting,
 	}
 
 	// Set the default acknowledge function
@@ -237,7 +252,27 @@ func NewChatProtocolWithOptions(ctx context.Context, h host.Host, callback ChatC
 				cp.useEncryption = false
 			} else {
 				cp.messageCrypto = messageCrypto
+
+				// Set high security policy for enhanced post-quantum protection
+				if options.HighSecurity {
+					cp.messageCrypto.ApplyHighSecurityPolicy()
+				}
+
+				// Verify key integrity
+				if err := cp.messageCrypto.VerifyKeyIntegrity(); err != nil {
+					fmt.Printf("Warning: Key integrity verification failed: %s\n", err)
+					// Don't disable encryption, but log the warning
+				}
 			}
+		}
+	}
+
+	// Initialize rate limiter if enabled
+	if options.EnableRateLimiting {
+		if options.HighSecurity {
+			cp.rateLimiter = NewRateLimiter(HighSecurityRateLimitConfig())
+		} else {
+			cp.rateLimiter = NewRateLimiter(DefaultRateLimitConfig())
 		}
 	}
 
@@ -287,7 +322,26 @@ func (cp *ChatProtocol) Start() {
 
 	// If encryption is enabled, start key rotation
 	if cp.useEncryption && cp.messageCrypto != nil {
-		cp.messageCrypto.StartKeyRotation(cp.ctx)
+		// Create a channel to receive key rotation events
+		keyRotationCh := make(chan struct{}, 10)
+
+		// Start key rotation with event notification
+		cp.startKeyRotationWithNotification(cp.ctx, keyRotationCh)
+
+		// Start a goroutine to handle key rotation events
+		go func() {
+			for {
+				select {
+				case <-keyRotationCh:
+					// Notify peers about the key rotation
+					if err := cp.NotifyKeyRotation(); err != nil {
+						fmt.Printf("Failed to notify peers about key rotation: %s\n", err)
+					}
+				case <-cp.ctx.Done():
+					return
+				}
+			}
+		}()
 	}
 }
 
@@ -697,6 +751,17 @@ func (cp *ChatProtocol) handlePlaintextMessage(message Message, peerID peer.ID) 
 		message.From = peerID.String()
 	}
 
+	// Apply rate limiting if enabled
+	if cp.useRateLimiter && cp.rateLimiter != nil {
+		// Skip rate limiting for ACK and key exchange messages
+		if message.Type != TypeAck && message.Type != TypeKeyExchange && message.Type != TypeRekey {
+			if !cp.rateLimiter.AllowMessage(peerID.String()) {
+				fmt.Printf("Message from %s rejected due to rate limiting\n", peerID.String())
+				return
+			}
+		}
+	}
+
 	// Process based on message type
 	switch message.Type {
 	case TypeAck:
@@ -727,6 +792,14 @@ func (cp *ChatProtocol) handlePlaintextMessage(message Message, peerID peer.ID) 
 	case TypeKeyExchange:
 		// Handle key exchange message
 		cp.handleKeyExchangeMessage(message, peerID)
+
+	case TypeRekey:
+		// Handle rekey request
+		cp.handleRekeyRequest(message, peerID)
+
+	case TypeKeyRotationNotice:
+		// Handle key rotation notice
+		cp.handleKeyRotationNotice(message, peerID)
 	}
 }
 
@@ -736,34 +809,249 @@ func (cp *ChatProtocol) handleKeyExchangeMessage(message Message, peerID peer.ID
 		return
 	}
 
-	// Establish a session key with the peer
-	_, err := cp.messageCrypto.EstablishSessionKey(peerID.String())
-	if err != nil {
-		fmt.Printf("Error establishing session key with %s: %s\n", peerID.String(), err)
+	// Depending on the content, handle different key exchange operations
+	switch message.Content {
+	case "KEY_EXCHANGE_REQUEST":
+		// Basic key exchange request - establish a session key
+		_, err := cp.messageCrypto.EstablishSessionKey(peerID.String())
+		if err != nil {
+			fmt.Printf("Error establishing session key with %s: %s\n", peerID.String(), err)
+			return
+		}
+
+		fmt.Printf("Established session key with peer: %s\n", peerID.String())
+
+		// Send a response confirming key establishment
+		responseMsg := Message{
+			ID:      generateMessageID(),
+			From:    cp.host.ID().String(),
+			To:      peerID.String(),
+			Type:    TypeKeyExchange,
+			Content: "KEY_EXCHANGE_CONFIRMED",
+			Time:    time.Now(),
+		}
+
+		cp.sendMessageToPeer(peerID, responseMsg)
+
+	case "PUBLIC_KEY_REQUEST":
+		// TODO: Implement public key request handling
+		fmt.Printf("Public key request received from %s\n", peerID.String())
+	}
+}
+
+// handleRekeyRequest processes a rekey request message
+func (cp *ChatProtocol) handleRekeyRequest(message Message, peerID peer.ID) {
+	if !cp.useEncryption || cp.messageCrypto == nil {
 		return
 	}
 
-	fmt.Printf("Established session key with peer: %s\n", peerID.String())
+	// Process based on content
+	if message.Content == "REKEY_REQUEST" {
+		// Peer is requesting a new key - force rotation of our session key with them
+		_, err := cp.messageCrypto.EstablishSessionKey(peerID.String())
+		if err != nil {
+			fmt.Printf("Error establishing new session key after rekey request from %s: %s\n", peerID.String(), err)
+			return
+		}
+
+		fmt.Printf("Rekeyed with peer %s after their request\n", peerID.String())
+
+		// Send confirmation
+		responseMsg := Message{
+			ID:      generateMessageID(),
+			From:    cp.host.ID().String(),
+			To:      peerID.String(),
+			Type:    TypeRekey,
+			Content: "REKEY_CONFIRMED",
+			Time:    time.Now(),
+		}
+
+		cp.sendMessageToPeer(peerID, responseMsg)
+	}
 }
 
-// InitiateKeyExchange starts a key exchange with a peer
-func (cp *ChatProtocol) InitiateKeyExchange(peerID peer.ID) error {
+// handleKeyRotationNotice processes a key rotation notice message
+func (cp *ChatProtocol) handleKeyRotationNotice(message Message, peerID peer.ID) {
 	if !cp.useEncryption || cp.messageCrypto == nil {
-		return fmt.Errorf("encryption not enabled")
+		return
 	}
 
-	// Create a key exchange message
-	message := Message{
+	fmt.Printf("Received key rotation notice from peer %s\n", peerID.String())
+
+	// Request their updated public key
+	// This will be handled by the key discovery protocol
+	requestMsg := Message{
 		ID:      generateMessageID(),
 		From:    cp.host.ID().String(),
 		To:      peerID.String(),
 		Type:    TypeKeyExchange,
-		Content: "KEY_EXCHANGE_REQUEST",
+		Content: "PUBLIC_KEY_REQUEST",
 		Time:    time.Now(),
 	}
 
+	cp.sendMessageToPeer(peerID, requestMsg)
+}
+
+// RequestRekey requests a new session key from a peer
+func (cp *ChatProtocol) RequestRekey(peerID peer.ID) error {
+	if !cp.useEncryption || cp.messageCrypto == nil {
+		return fmt.Errorf("encryption not enabled")
+	}
+
+	// Create a rekey request message
+	message := Message{
+		ID:      generateMessageID(),
+		From:    cp.host.ID().String(),
+		To:      peerID.String(),
+		Type:    TypeRekey,
+		Content: "REKEY_REQUEST",
+		Time:    time.Now(),
+	}
+
+	fmt.Printf("Requesting rekey with peer: %s\n", peerID.String())
+
 	// Send the message
 	return cp.sendMessageToPeer(peerID, message)
+}
+
+// NotifyKeyRotation notifies peers about our key rotation
+func (cp *ChatProtocol) NotifyKeyRotation() error {
+	if !cp.useEncryption || cp.messageCrypto == nil {
+		return fmt.Errorf("encryption not enabled")
+	}
+
+	fmt.Printf("Notifying peers about key rotation\n")
+
+	// Broadcast a key rotation notice to all connected peers
+	cp.streamsMu.RLock()
+	defer cp.streamsMu.RUnlock()
+
+	for peerID := range cp.streams {
+		// Create a key rotation notice message
+		message := Message{
+			ID:      generateMessageID(),
+			From:    cp.host.ID().String(),
+			To:      peerID.String(),
+			Type:    TypeKeyRotationNotice,
+			Content: "KEY_ROTATION_NOTICE",
+			Time:    time.Now(),
+		}
+
+		// Send the message
+		if err := cp.sendMessageToPeer(peerID, message); err != nil {
+			fmt.Printf("Failed to notify peer %s about key rotation: %s\n", peerID.String(), err)
+		}
+	}
+
+	return nil
+}
+
+// startKeyRotationWithNotification starts key rotation with notification events
+func (cp *ChatProtocol) startKeyRotationWithNotification(ctx context.Context, rotationCh chan<- struct{}) {
+	// First start the normal key rotation
+	cp.messageCrypto.StartKeyRotation(ctx)
+
+	// Then start a separate goroutine to monitor for key rotations
+	go func() {
+		// Check for key rotations once per day
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+
+		// Get the current keys for comparison
+		peerID, err := cp.messageCrypto.GetMyPeerID()
+		if err != nil {
+			fmt.Printf("Error getting peer ID: %s\n", err)
+			return
+		}
+
+		var (
+			lastKyberKey     []byte
+			lastDilithiumKey []byte
+		)
+
+		// Get initial key states
+		if kyberKey, err := cp.messageCrypto.GetMyPublicKey(peerID, "kyber768"); err == nil {
+			lastKyberKey = kyberKey
+		}
+
+		if dilithiumKey, err := cp.messageCrypto.GetMyPublicKey(peerID, "dilithium3"); err == nil {
+			lastDilithiumKey = dilithiumKey
+		}
+
+		// Monitor for changes
+		for {
+			select {
+			case <-ticker.C:
+				changed := false
+
+				// Check if Kyber key has changed
+				if currentKyberKey, err := cp.messageCrypto.GetMyPublicKey(peerID, "kyber768"); err == nil {
+					if !bytesEqual(lastKyberKey, currentKyberKey) {
+						lastKyberKey = currentKyberKey
+						changed = true
+					}
+				}
+
+				// Check if Dilithium key has changed
+				if currentDilithiumKey, err := cp.messageCrypto.GetMyPublicKey(peerID, "dilithium3"); err == nil {
+					if !bytesEqual(lastDilithiumKey, currentDilithiumKey) {
+						lastDilithiumKey = currentDilithiumKey
+						changed = true
+					}
+				}
+
+				// If either key has changed, send a notification
+				if changed {
+					select {
+					case rotationCh <- struct{}{}:
+						// notification sent
+					default:
+						// channel full, skip notification
+					}
+				}
+
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+}
+
+// bytesEqual compares two byte slices for equality
+func bytesEqual(a, b []byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := 0; i < len(a); i++ {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// generateMessageID generates a unique ID for a message
+func generateMessageID() string {
+	return fmt.Sprintf("%d-%d", time.Now().UnixNano(), randInt(1000, 9999))
+}
+
+// randInt generates a random integer in the given range
+func randInt(min, max int) int {
+	return min + time.Now().Nanosecond()%(max-min+1)
+}
+
+// GetOfflineQueuedMessageCount returns the number of queued messages for a peer
+func (cp *ChatProtocol) GetOfflineQueuedMessageCount(peerID peer.ID) int {
+	if !cp.isOfflineQueueEnabled || cp.offlineQueue == nil {
+		return 0
+	}
+
+	messages, err := cp.offlineQueue.PeekQueuedMessages(peerID)
+	if err != nil || messages == nil {
+		return 0
+	}
+
+	return len(messages)
 }
 
 // sendMessageToPeer sends a message to a peer
@@ -879,36 +1167,4 @@ func (cp *ChatProtocol) sendPlaintextMessageToPeer(message Message, stream netwo
 	}
 
 	return nil
-}
-
-// generateMessageID generates a unique ID for a message
-func generateMessageID() string {
-	return fmt.Sprintf("%d-%d", time.Now().UnixNano(), randInt(1000, 9999))
-}
-
-// randInt generates a random integer in the given range
-func randInt(min, max int) int {
-	return min + time.Now().Nanosecond()%(max-min+1)
-}
-
-// GetOfflineQueuedPeers returns a list of peers with queued offline messages
-func (cp *ChatProtocol) GetOfflineQueuedPeers() []peer.ID {
-	if !cp.isOfflineQueueEnabled || cp.offlineQueue == nil {
-		return nil
-	}
-	return cp.offlineQueue.GetQueuedPeers()
-}
-
-// GetOfflineQueuedMessageCount returns the number of queued messages for a peer
-func (cp *ChatProtocol) GetOfflineQueuedMessageCount(peerID peer.ID) int {
-	if !cp.isOfflineQueueEnabled || cp.offlineQueue == nil {
-		return 0
-	}
-
-	messages, err := cp.offlineQueue.PeekQueuedMessages(peerID)
-	if err != nil || messages == nil {
-		return 0
-	}
-
-	return len(messages)
 }

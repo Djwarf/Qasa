@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/qasa/network/encryption"
 	"github.com/qasa/network/libp2p"
 	"github.com/qasa/network/message"
-	"github.com/qasa/network/encryption"
 )
 
 func main() {
@@ -56,7 +56,7 @@ func main() {
 
 	// Initialize the metadata exchange protocol
 	metadataExchange := libp2p.NewMetadataExchange(ctx, node)
-	
+
 	// Register metadata handlers
 	metadataExchange.RegisterMetadataHandler("pq-algos", func(peerID peer.ID, value string) error {
 		fmt.Printf("Peer %s supports post-quantum algorithms: %s\n", shortPeerID(peerID.String()), value)
@@ -97,17 +97,17 @@ func main() {
 			fmt.Printf("Invalid peer ID in message: %s\n", err)
 			return
 		}
-		
+
 		if config.RequireAuth && !node.IsPeerAuthenticated(peerID) {
-			fmt.Printf("\n[%s] Rejected message from unauthenticated peer %s\n> ", 
+			fmt.Printf("\n[%s] Rejected message from unauthenticated peer %s\n> ",
 				msg.Time.Format("15:04:05"),
 				shortPeerID(msg.From))
 			return
 		}
-		
-		fmt.Printf("\n[%s] %s: %s\n> ", 
+
+		fmt.Printf("\n[%s] %s: %s\n> ",
 			msg.Time.Format("15:04:05"),
-			shortPeerID(msg.From), 
+			shortPeerID(msg.From),
 			msg.Content)
 	}, chatOptions)
 	chatProtocol.Start()
@@ -130,7 +130,7 @@ func main() {
 						fmt.Printf("Failed to authenticate peer: %s\n", err)
 					} else {
 						fmt.Printf("Peer authenticated: %s\n", shortPeerID(peerIDStr))
-						
+
 						// Exchange metadata
 						if err := metadataExchange.ExchangeMetadata(peerID); err != nil {
 							fmt.Printf("Failed to exchange metadata: %s\n", err)
@@ -146,7 +146,7 @@ func main() {
 	// Start a goroutine to periodically print connected peers
 	var peerListMutex sync.Mutex
 	var connectedPeers []peer.ID
-	
+
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
@@ -155,12 +155,12 @@ func main() {
 			select {
 			case <-ticker.C:
 				peers := node.Peers()
-				
+
 				// Update the list of connected peers
 				peerListMutex.Lock()
 				connectedPeers = make([]peer.ID, len(peers))
 				copy(connectedPeers, peers)
-				
+
 				for _, peer := range peers {
 					// Try to authenticate peers automatically if not already authenticated
 					if config.RequireAuth && !node.IsPeerAuthenticated(peer) {
@@ -173,7 +173,7 @@ func main() {
 					}
 				}
 				peerListMutex.Unlock()
-				
+
 				if len(peers) > 0 {
 					fmt.Printf("\nConnected to %d peers:\n", len(peers))
 					for i, peer := range peers {
@@ -181,7 +181,7 @@ func main() {
 						if node.IsPeerAuthenticated(peer) {
 							status = " (authenticated)"
 						}
-						
+
 						// Add offline message count if available
 						if !*disableOfflineQueue {
 							queuedCount := chatProtocol.GetOfflineQueuedMessageCount(peer)
@@ -189,7 +189,7 @@ func main() {
 								status += fmt.Sprintf(" [%d queued msgs]", queuedCount)
 							}
 						}
-						
+
 						fmt.Printf("  %d. %s%s\n", i+1, peer.String(), status)
 					}
 					fmt.Print("> ")
@@ -247,31 +247,31 @@ func parseIndex(s string) (int, error) {
 // Handle user commands
 func handleUserCommands(ctx context.Context, node *libp2p.Node, chatProtocol *message.ChatProtocol, metadataExchange *libp2p.MetadataExchange) {
 	reader := bufio.NewReader(os.Stdin)
-	
+
 	fmt.Println("\nCommands: 'send <peer index> <message>', 'list', 'bootstrap <addr>', 'connect <addr>', 'quit'")
 	fmt.Println("Additional commands: 'key-exchange <peer index>' to initiate key exchange, 'encrypt-test' to test encryption workflow")
 	fmt.Print("> ")
-	
+
 	for {
 		command, err := reader.ReadString('\n')
 		if err != nil {
 			fmt.Printf("Error reading command: %s\n", err)
 			break
 		}
-		
+
 		command = strings.TrimSpace(command)
-		
+
 		if command == "quit" || command == "exit" {
 			fmt.Println("Exiting...")
 			break
 		}
-		
+
 		tokens := strings.Fields(command)
 		if len(tokens) == 0 {
 			fmt.Print("> ")
 			continue
 		}
-		
+
 		switch tokens[0] {
 		case "send":
 			// Send a message to a peer
@@ -279,30 +279,30 @@ func handleUserCommands(ctx context.Context, node *libp2p.Node, chatProtocol *me
 				fmt.Println("Usage: send <peer index> <message>")
 				break
 			}
-			
+
 			peerIdx, err := parseIndex(tokens[1])
 			if err != nil {
 				fmt.Printf("Invalid peer index: %s\n", err)
 				break
 			}
-			
+
 			// Get the list of peers
 			peers := node.Peers()
-			
+
 			if peerIdx < 0 || peerIdx >= len(peers) {
 				fmt.Printf("Invalid peer index: must be between 0 and %d\n", len(peers)-1)
 				break
 			}
-			
+
 			message := strings.Join(tokens[2:], " ")
 			peerID := peers[peerIdx]
-			
+
 			if err := chatProtocol.SendMessageToPeer(peerID.String(), message); err != nil {
 				fmt.Printf("Failed to send message: %s\n", err)
 			} else {
 				fmt.Printf("Message sent to peer %d (%s)\n", peerIdx, shortPeerID(peerID.String()))
 			}
-		
+
 		case "list":
 			// List connected peers
 			peers := node.Peers()
@@ -318,34 +318,34 @@ func handleUserCommands(ctx context.Context, node *libp2p.Node, chatProtocol *me
 					fmt.Printf("  %d. %s%s\n", i, shortPeerID(peer.String()), status)
 				}
 			}
-		
+
 		case "bootstrap":
 			// Add a bootstrap node
 			if len(tokens) < 2 {
 				fmt.Println("Usage: bootstrap <address>")
 				break
 			}
-			
+
 			addr := tokens[1]
 			if err := node.AddBootstrapNode(addr); err != nil {
 				fmt.Printf("Failed to add bootstrap node: %s\n", err)
 			} else {
 				fmt.Printf("Added bootstrap node: %s\n", addr)
 			}
-		
+
 		case "connect":
 			// Connect to a peer
 			if len(tokens) < 2 {
 				fmt.Println("Usage: connect <address>")
 				break
 			}
-			
+
 			addr := tokens[1]
 			if err := node.Connect(ctx, addr); err != nil {
 				fmt.Printf("Failed to connect to peer: %s\n", err)
 			} else {
 				fmt.Printf("Connected to peer: %s\n", addr)
-				
+
 				// Try to authenticate the peer
 				peerIDStr := extractPeerID(addr)
 				if peerIDStr != "" {
@@ -357,7 +357,7 @@ func handleUserCommands(ctx context.Context, node *libp2p.Node, chatProtocol *me
 							fmt.Printf("Failed to authenticate peer: %s\n", err)
 						} else {
 							fmt.Printf("Peer authenticated: %s\n", shortPeerID(peerIDStr))
-							
+
 							// Exchange metadata
 							if err := metadataExchange.ExchangeMetadata(peerID); err != nil {
 								fmt.Printf("Failed to exchange metadata: %s\n", err)
@@ -368,41 +368,42 @@ func handleUserCommands(ctx context.Context, node *libp2p.Node, chatProtocol *me
 					}
 				}
 			}
-		
+
 		case "key-exchange":
 			// Initiate key exchange with a peer
 			if len(tokens) < 2 {
 				fmt.Println("Usage: key-exchange <peer index>")
 				break
 			}
-			
+
 			peerIdx, err := parseIndex(tokens[1])
 			if err != nil {
 				fmt.Printf("Invalid peer index: %s\n", err)
 				break
 			}
-			
+
 			// Get the list of peers
 			peers := node.Peers()
-			
+
 			if peerIdx < 0 || peerIdx >= len(peers) {
 				fmt.Printf("Invalid peer index: must be between 0 and %d\n", len(peers)-1)
 				break
 			}
-			
+
 			peerID := peers[peerIdx]
-			
-			// Initiate key exchange
-			if err := chatProtocol.InitiateKeyExchange(peerID); err != nil {
-				fmt.Printf("Failed to initiate key exchange: %s\n", err)
+
+			// Send a key exchange request message instead of using InitiateKeyExchange
+			keyExchangeMsg := "KEY_EXCHANGE_REQUEST"
+			if err := chatProtocol.SendMessageToPeer(peerID.String(), keyExchangeMsg); err != nil {
+				fmt.Printf("Failed to send key exchange request: %s\n", err)
 			} else {
-				fmt.Printf("Key exchange initiated with peer %d (%s)\n", peerIdx, shortPeerID(peerID.String()))
+				fmt.Printf("Key exchange request sent to peer %d (%s)\n", peerIdx, shortPeerID(peerID.String()))
 			}
-		
+
 		case "encrypt-test":
 			// Test the encryption/decryption workflow
 			fmt.Println("Testing message encryption/decryption workflow...")
-			
+
 			// Create temporary directory
 			tempDir, err := os.MkdirTemp("", "qasa-test")
 			if err != nil {
@@ -410,69 +411,69 @@ func handleUserCommands(ctx context.Context, node *libp2p.Node, chatProtocol *me
 				break
 			}
 			defer os.RemoveAll(tempDir)
-			
+
 			// Get crypto provider
 			provider, err := encryption.GetCryptoProvider()
 			if err != nil {
 				fmt.Printf("Failed to get crypto provider: %v\n", err)
 				break
 			}
-			
+
 			// Create message crypto
 			msgCrypto, err := encryption.NewMessageCrypto(provider, tempDir)
 			if err != nil {
 				fmt.Printf("Failed to create message crypto: %v\n", err)
 				break
 			}
-			
+
 			// Get key store
 			keyStore, err := encryption.NewKeyStore(tempDir)
 			if err != nil {
 				fmt.Printf("Failed to create key store: %v\n", err)
 				break
 			}
-			
+
 			// Get local peer ID
 			localPeerID, err := keyStore.GetMyPeerID()
 			if err != nil {
 				fmt.Printf("Failed to get local peer ID: %v\n", err)
 				break
 			}
-			
+
 			fmt.Printf("Local peer ID: %s\n", localPeerID)
-			
+
 			// Create test message
 			testMessage := []byte("This is a test message for encryption and decryption.")
 			fmt.Printf("Original message: %s\n", testMessage)
-			
+
 			// Encrypt message to self
 			ciphertext, err := msgCrypto.EncryptMessage(testMessage, localPeerID)
 			if err != nil {
 				fmt.Printf("Failed to encrypt message: %v\n", err)
 				break
 			}
-			
+
 			fmt.Printf("Encrypted message length: %d bytes\n", len(ciphertext))
-			
+
 			// Decrypt message
 			decrypted, err := msgCrypto.DecryptMessage(ciphertext, localPeerID)
 			if err != nil {
 				fmt.Printf("Failed to decrypt message: %v\n", err)
 				break
 			}
-			
+
 			fmt.Printf("Decrypted message: %s\n", decrypted)
-			
+
 			if string(decrypted) == string(testMessage) {
 				fmt.Println("Success: Encryption/decryption test passed!")
 			} else {
 				fmt.Println("Error: Decrypted message does not match original message!")
 			}
-		
+
 		default:
 			fmt.Printf("Unknown command: %s\n", tokens[0])
 		}
-		
+
 		fmt.Print("> ")
 	}
-} 
+}

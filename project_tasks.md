@@ -76,19 +76,19 @@
 - [x] Create reliable message delivery system
 - [x] Develop message acknowledgment mechanism
 - [x] Implement message queuing for offline peers
-- [ ] Add message priority handling
-- [ ] Develop rate limiting and spam protection
+- [x] Add message priority handling
+- [x] Develop rate limiting and spam protection
 - [ ] Write comprehensive tests
 
 ### Peer Discovery and Management
 - [x] Implement DHT-based peer discovery
 - [x] Create bootstrap node mechanism
 - [x] Develop peer connectivity monitoring
-- [ ] Implement peer reputation system
-- [ ] Create blacklist mechanism for malicious peers
-- [ ] Add geographic peer optimization
+- [x] Implement peer reputation system
+- [x] Create blacklist mechanism for malicious peers
+- [x] Add geographic peer optimization
 - [x] Develop offline peer message queuing
-- [ ] Write integration tests
+- [x] Write integration tests
 
 ## User Interface
 

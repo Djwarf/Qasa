@@ -63,6 +63,30 @@ func main() {
 	fmt.Printf("Alice's peer ID: %s\n", aliceHost.ID())
 	fmt.Printf("Bob's peer ID: %s\n", bobHost.ID())
 
+	// Get the crypto provider first for use throughout the example
+	provider, err := encryption.GetCryptoProvider()
+	if err != nil {
+		fmt.Printf("Failed to get crypto provider: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Create message crypto instances for the example
+	aliceMsgCrypto, err := encryption.NewMessageCrypto(provider, aliceDir)
+	if err != nil {
+		fmt.Printf("Failed to create Alice's message crypto: %v\n", err)
+		os.Exit(1)
+	}
+
+	bobMsgCrypto, err := encryption.NewMessageCrypto(provider, bobDir)
+	if err != nil {
+		fmt.Printf("Failed to create Bob's message crypto: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Get peer IDs as strings for easier use
+	alicePeerIDStr := aliceHost.ID().String()
+	bobPeerIDStr := bobHost.ID().String()
+
 	// Test 1: Direct messaging with encryption
 	fmt.Println("\nTest 1: Direct Messaging with Encryption")
 	fmt.Println("----------------------------------------")
@@ -106,11 +130,25 @@ func main() {
 	// Exchange keys
 	time.Sleep(1 * time.Second) // Wait for connection to be established
 	fmt.Println("Initiating key exchange...")
-	
-	// Bob initiates key exchange with Alice
-	err = bobChatProtocol.InitiateKeyExchange(aliceHost.ID())
+
+	// Bob initiates key exchange with Alice using a message
+	keyExchangeMsg := "KEY_EXCHANGE_REQUEST"
+	err = bobChatProtocol.SendMessageToPeer(alicePeerIDStr, keyExchangeMsg)
 	if err != nil {
-		fmt.Printf("Failed to initiate key exchange: %v\n", err)
+		fmt.Printf("Failed to send key exchange request: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Establish session keys directly
+	_, err = bobMsgCrypto.EstablishSessionKey(alicePeerIDStr)
+	if err != nil {
+		fmt.Printf("Failed to establish session key for Bob→Alice: %v\n", err)
+		os.Exit(1)
+	}
+
+	_, err = aliceMsgCrypto.EstablishSessionKey(bobPeerIDStr)
+	if err != nil {
+		fmt.Printf("Failed to establish session key for Alice→Bob: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -120,8 +158,8 @@ func main() {
 	// Send an encrypted message from Bob to Alice
 	testMessage := "Hello Alice! This is a secret encrypted message from Bob."
 	fmt.Printf("Bob sending to Alice: %s\n", testMessage)
-	
-	err = bobChatProtocol.SendMessageToPeer(aliceHost.ID().String(), testMessage)
+
+	err = bobChatProtocol.SendMessageToPeer(alicePeerIDStr, testMessage)
 	if err != nil {
 		fmt.Printf("Failed to send message from Bob to Alice: %v\n", err)
 		os.Exit(1)
@@ -146,25 +184,7 @@ func main() {
 	fmt.Println("\nTest 2: Low-level Encryption/Decryption")
 	fmt.Println("--------------------------------------")
 
-	// Get the crypto provider
-	provider, err := encryption.GetCryptoProvider()
-	if err != nil {
-		fmt.Printf("Failed to get crypto provider: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Create the message crypto modules
-	aliceMsgCrypto, err := encryption.NewMessageCrypto(provider, aliceDir)
-	if err != nil {
-		fmt.Printf("Failed to create Alice's message crypto: %v\n", err)
-		os.Exit(1)
-	}
-
-	bobMsgCrypto, err := encryption.NewMessageCrypto(provider, bobDir)
-	if err != nil {
-		fmt.Printf("Failed to create Bob's message crypto: %v\n", err)
-		os.Exit(1)
-	}
+	fmt.Println("Using existing crypto provider and message crypto instances")
 
 	// Get Alice's peer ID from her key store
 	aliceKeyStore, err := encryption.NewKeyStore(aliceDir)
@@ -229,7 +249,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("Encrypted message: %s... (%d bytes)\n", 
+	fmt.Printf("Encrypted message: %s... (%d bytes)\n",
 		hex.EncodeToString(ciphertext[:32]), len(ciphertext))
 
 	// Alice decrypts the message from Bob
@@ -306,4 +326,4 @@ func connectHosts(h1, h2 host.Host) error {
 		Addrs: h2.Addrs(),
 	}
 	return h1.Connect(context.Background(), h2Info)
-} 
+}
