@@ -7,6 +7,39 @@ use std::sync::Arc;
 use crate::error::CryptoError;
 
 /// AES-256-GCM cipher for authenticated encryption
+/// 
+/// This struct provides authenticated encryption with associated data (AEAD)
+/// using the AES-256-GCM algorithm. It combines encryption for confidentiality 
+/// with authentication for integrity and authenticity.
+///
+/// # Security Properties
+///
+/// 1. Provides confidentiality through AES-256 encryption
+/// 2. Provides integrity and authenticity through GCM authentication
+/// 3. Protects against tampering and forgery
+/// 4. Uses 256-bit keys for post-quantum-appropriate symmetric security
+///
+/// # Examples
+///
+/// ```
+/// use qasa_crypto::aes::AesGcm;
+/// 
+/// // Create a new AES-GCM cipher with a 32-byte key
+/// let key = [0x42; 32];
+/// let cipher = AesGcm::new(&key).unwrap();
+/// 
+/// // Generate a nonce (should be unique for each encryption)
+/// let nonce = AesGcm::generate_nonce();
+/// 
+/// // Encrypt a message with optional associated data
+/// let plaintext = b"Secret message";
+/// let aad = b"Additional authenticated data";
+/// let ciphertext = cipher.encrypt(plaintext, &nonce, Some(aad)).unwrap();
+/// 
+/// // Decrypt the message with the same nonce and associated data
+/// let decrypted = cipher.decrypt(&ciphertext, &nonce, Some(aad)).unwrap();
+/// assert_eq!(decrypted, plaintext);
+/// ```
 #[derive(Clone)]
 pub struct AesGcm {
     cipher: Arc<Aes256Gcm>,
@@ -15,13 +48,38 @@ pub struct AesGcm {
 impl AesGcm {
     /// Create a new AES-GCM cipher with the given key
     ///
+    /// This function initializes a new AES-256-GCM cipher instance with
+    /// the provided 32-byte key. This cipher can then be used for both
+    /// encryption and decryption operations.
+    ///
     /// # Arguments
     ///
     /// * `key` - A 32-byte key (e.g., from Kyber KEM)
     ///
     /// # Returns
     ///
-    /// A new AesGcm cipher or an error
+    /// A new AesGcm cipher or an error if the key is invalid
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the key is not exactly 32 bytes long
+    ///
+    /// # Security Considerations
+    ///
+    /// 1. The key should be cryptographically secure and kept secret
+    /// 2. Ideally, keys should be derived from a key exchange like Kyber
+    /// 3. Each key should only be used for a limited amount of data (typically < 2^32 messages)
+    /// 4. Consider key rotation for long-term security
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use qasa_crypto::aes::AesGcm;
+    /// 
+    /// // Create a new AES-GCM cipher with a 32-byte key
+    /// let key = [0x42; 32];
+    /// let cipher = AesGcm::new(&key).unwrap();
+    /// ```
     pub fn new(key: &[u8]) -> Result<Self, CryptoError> {
         if key.len() != 32 {
             return Err(CryptoError::InvalidParameterError(format!(
@@ -38,14 +96,39 @@ impl AesGcm {
 
     /// Generate a random nonce for encryption
     ///
+    /// Generates a cryptographically secure random nonce (number used once)
+    /// for use with AES-GCM encryption. A unique nonce must be used for each 
+    /// encryption operation with the same key.
+    ///
     /// # Returns
     ///
-    /// A 12-byte nonce
+    /// A 12-byte random nonce
+    ///
+    /// # Security Considerations
+    ///
+    /// 1. Each nonce must be unique for a given key
+    /// 2. Reusing a nonce with the same key compromises security
+    /// 3. For high-volume applications, consider using a deterministic 
+    ///    nonce construction with a counter
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use qasa_crypto::aes::AesGcm;
+    /// 
+    /// // Generate a random nonce
+    /// let nonce = AesGcm::generate_nonce();
+    /// assert_eq!(nonce.len(), 12);
+    /// ```
     pub fn generate_nonce() -> Vec<u8> {
         Aes256Gcm::generate_nonce(&mut OsRng).to_vec()
     }
 
     /// Encrypt plaintext using AES-GCM
+    ///
+    /// Encrypts the provided plaintext using AES-256-GCM with the given nonce
+    /// and optional associated data. The associated data is authenticated but
+    /// not encrypted.
     ///
     /// # Arguments
     ///
@@ -55,7 +138,39 @@ impl AesGcm {
     ///
     /// # Returns
     ///
-    /// The encrypted ciphertext or an error
+    /// The encrypted ciphertext or an error if encryption fails
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// * The nonce is not exactly 12 bytes
+    /// * Encryption fails for any reason
+    ///
+    /// # Security Considerations
+    ///
+    /// 1. The nonce must be unique for each encryption with the same key
+    /// 2. Associated data can be used to authenticate context information 
+    ///    (e.g., headers, sender/recipient info)
+    /// 3. The resulting ciphertext includes the authentication tag
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use qasa_crypto::aes::AesGcm;
+    /// 
+    /// // Create a cipher and generate a nonce
+    /// let key = [0x42; 32];
+    /// let cipher = AesGcm::new(&key).unwrap();
+    /// let nonce = AesGcm::generate_nonce();
+    /// 
+    /// // Encrypt with associated data
+    /// let plaintext = b"Secret message";
+    /// let aad = b"Message metadata";
+    /// let ciphertext = cipher.encrypt(plaintext, &nonce, Some(aad)).unwrap();
+    /// 
+    /// // The ciphertext will be longer than the plaintext due to the auth tag
+    /// assert!(ciphertext.len() > plaintext.len());
+    /// ```
     pub fn encrypt(&self, plaintext: &[u8], nonce: &[u8], associated_data: Option<&[u8]>) -> Result<Vec<u8>, CryptoError> {
         if nonce.len() != 12 {
             return Err(CryptoError::InvalidParameterError(format!(
@@ -79,6 +194,10 @@ impl AesGcm {
 
     /// Decrypt ciphertext using AES-GCM
     ///
+    /// Decrypts and authenticates the provided ciphertext using AES-256-GCM with 
+    /// the given nonce and optional associated data. This operation will fail if
+    /// the ciphertext has been tampered with or if the associated data doesn't match.
+    ///
     /// # Arguments
     ///
     /// * `ciphertext` - The encrypted data
@@ -87,7 +206,47 @@ impl AesGcm {
     ///
     /// # Returns
     ///
-    /// The decrypted plaintext or an error
+    /// The decrypted plaintext or an error if decryption or authentication fails
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// * The nonce is not exactly 12 bytes
+    /// * The ciphertext has been tampered with
+    /// * The associated data doesn't match what was used for encryption
+    /// * Decryption fails for any other reason
+    ///
+    /// # Security Considerations
+    ///
+    /// 1. Authentication failure should be treated as a security alert
+    /// 2. Always use the same associated data for decryption as was used for encryption
+    /// 3. Avoid timing attacks by using constant-time comparison for authentication tags
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use qasa_crypto::aes::AesGcm;
+    /// 
+    /// // Create a cipher and generate a nonce
+    /// let key = [0x42; 32];
+    /// let cipher = AesGcm::new(&key).unwrap();
+    /// let nonce = AesGcm::generate_nonce();
+    /// 
+    /// // Encrypt and then decrypt
+    /// let plaintext = b"Secret message";
+    /// let aad = b"Message metadata";
+    /// let ciphertext = cipher.encrypt(plaintext, &nonce, Some(aad)).unwrap();
+    /// let decrypted = cipher.decrypt(&ciphertext, &nonce, Some(aad)).unwrap();
+    /// 
+    /// assert_eq!(decrypted, plaintext);
+    /// 
+    /// // Tampering with the ciphertext will cause decryption to fail
+    /// let mut tampered = ciphertext.clone();
+    /// if !tampered.is_empty() {
+    ///     tampered[0] ^= 1;
+    ///     assert!(cipher.decrypt(&tampered, &nonce, Some(aad)).is_err());
+    /// }
+    /// ```
     pub fn decrypt(&self, ciphertext: &[u8], nonce: &[u8], associated_data: Option<&[u8]>) -> Result<Vec<u8>, CryptoError> {
         if nonce.len() != 12 {
             return Err(CryptoError::InvalidParameterError(format!(
@@ -112,6 +271,10 @@ impl AesGcm {
 
 /// Convenience function to encrypt data using AES-GCM
 ///
+/// This is a wrapper around AesGcm that handles key setup, nonce generation,
+/// and encryption in a single function call. It generates a fresh random nonce
+/// for each encryption operation.
+///
 /// # Arguments
 ///
 /// * `plaintext` - The data to encrypt
@@ -120,7 +283,33 @@ impl AesGcm {
 ///
 /// # Returns
 ///
-/// A tuple containing (ciphertext, nonce) or an error
+/// A tuple containing:
+/// * `ciphertext` - The encrypted data (including authentication tag)
+/// * `nonce` - The randomly generated nonce used for encryption
+///
+/// Or an error if encryption fails
+///
+/// # Security Considerations
+///
+/// 1. The key should be cryptographically secure and kept secret
+/// 2. The nonce is automatically generated for each call, ensuring uniqueness
+/// 3. Both the ciphertext and nonce must be stored or transmitted for decryption
+///
+/// # Examples
+///
+/// ```
+/// use qasa_crypto::aes::encrypt;
+/// 
+/// // Encrypt a message
+/// let key = [0x42; 32];
+/// let message = b"Top secret information";
+/// let metadata = b"Classification: SECRET";
+/// 
+/// let (ciphertext, nonce) = encrypt(message, &key, Some(metadata)).unwrap();
+/// 
+/// // The ciphertext and nonce are needed for decryption
+/// // Both should be stored or transmitted securely
+/// ```
 pub fn encrypt(plaintext: &[u8], key: &[u8], associated_data: Option<&[u8]>) -> Result<(Vec<u8>, Vec<u8>), CryptoError> {
     let cipher = AesGcm::new(key)?;
     let nonce = AesGcm::generate_nonce();
@@ -129,6 +318,10 @@ pub fn encrypt(plaintext: &[u8], key: &[u8], associated_data: Option<&[u8]>) -> 
 }
 
 /// Convenience function to decrypt data using AES-GCM
+///
+/// This is a wrapper around AesGcm that handles key setup and decryption
+/// in a single function call. It decrypts and authenticates the ciphertext
+/// with the provided key, nonce, and associated data.
 ///
 /// # Arguments
 ///
@@ -139,7 +332,30 @@ pub fn encrypt(plaintext: &[u8], key: &[u8], associated_data: Option<&[u8]>) -> 
 ///
 /// # Returns
 ///
-/// The decrypted plaintext or an error
+/// The decrypted plaintext or an error if decryption or authentication fails
+///
+/// # Security Considerations
+///
+/// 1. Authentication failure indicates possible tampering and should be treated as a security incident
+/// 2. The same key, nonce, and associated data must be used as during encryption
+/// 3. The decryption process verifies integrity and authenticity of the data
+///
+/// # Examples
+///
+/// ```
+/// use qasa_crypto::aes::{encrypt, decrypt};
+/// 
+/// // Encrypt a message
+/// let key = [0x42; 32];
+/// let message = b"Top secret information";
+/// let metadata = b"Classification: SECRET";
+/// 
+/// let (ciphertext, nonce) = encrypt(message, &key, Some(metadata)).unwrap();
+/// 
+/// // Decrypt the message
+/// let decrypted = decrypt(&ciphertext, &key, &nonce, Some(metadata)).unwrap();
+/// assert_eq!(decrypted, message);
+/// ```
 pub fn decrypt(ciphertext: &[u8], key: &[u8], nonce: &[u8], associated_data: Option<&[u8]>) -> Result<Vec<u8>, CryptoError> {
     let cipher = AesGcm::new(key)?;
     cipher.decrypt(ciphertext, nonce, associated_data)

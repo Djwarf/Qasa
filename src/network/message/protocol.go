@@ -20,7 +20,7 @@ import (
 const (
 	// ProtocolID is the ID of the chat protocol
 	ProtocolID = "/qasa/chat/1.0.0"
-	
+
 	// MaxMessageSize is the maximum size of a message
 	MaxMessageSize = 1024 * 64 // 64KB
 )
@@ -34,81 +34,116 @@ type MessageType string
 const (
 	// TypeChat indicates a regular chat message
 	TypeChat MessageType = "chat"
-	
+
 	// TypeAck indicates an acknowledgment message
 	TypeAck MessageType = "ack"
-	
+
 	// TypeKeyExchange indicates a key exchange message
 	TypeKeyExchange MessageType = "key_exchange"
 )
 
 // Message represents a chat message
+//
+// This structure contains all the information about a chat message,
+// including metadata and content. It is serialized to JSON for
+// transmission over the network.
 type Message struct {
-	ID        string      `json:"id"`
-	From      string      `json:"from"`
-	To        string      `json:"to,omitempty"`
-	Type      MessageType `json:"type"`
-	Content   string      `json:"content"`
-	Time      time.Time   `json:"time"`
-	Signature []byte      `json:"signature,omitempty"` // Added for message verification
+	ID        string      `json:"id"`                  // Unique message identifier
+	From      string      `json:"from"`                // Sender's peer ID
+	To        string      `json:"to,omitempty"`        // Recipient's peer ID (empty for broadcasts)
+	Type      MessageType `json:"type"`                // Type of message (chat, ack, key_exchange)
+	Content   string      `json:"content"`             // Message content (may be encrypted)
+	Time      time.Time   `json:"time"`                // Time the message was created
+	Signature []byte      `json:"signature,omitempty"` // Digital signature for message verification
 }
 
 // EncryptedMessage wraps a message with encryption information
+//
+// This structure is used when encryption is enabled to provide
+// end-to-end security for message content. The original message
+// is encrypted, and additional metadata is provided for decryption.
 type EncryptedMessage struct {
-	ID          string    `json:"id"`          // Message ID
-	From        string    `json:"from"`        // Sender's peer ID
-	To          string    `json:"to"`          // Recipient's peer ID
-	Ciphertext  []byte    `json:"ciphertext"`  // Encrypted message content
-	MessageType string    `json:"type"`        // Type of the original message
-	Timestamp   time.Time `json:"timestamp"`   // When the message was sent
-	Signature   []byte    `json:"signature"`   // Signature of the original plaintext message
+	ID          string    `json:"id"`         // Message ID
+	From        string    `json:"from"`       // Sender's peer ID
+	To          string    `json:"to"`         // Recipient's peer ID
+	Ciphertext  []byte    `json:"ciphertext"` // Encrypted message content
+	MessageType string    `json:"type"`       // Type of the original message
+	Timestamp   time.Time `json:"timestamp"`  // When the message was sent
+	Signature   []byte    `json:"signature"`  // Signature of the original plaintext message
 }
 
 // ChatCallback is a function that will be called when a message is received
+//
+// Applications can register this callback to be notified of new messages.
 type ChatCallback func(message Message)
 
 // AcknowledgeFunc is a function that acknowledges received messages
+//
+// This can be customized by the application if needed.
 type AcknowledgeFunc func(Message) error
 
 // PendingMessage represents a message waiting for acknowledgment
+//
+// This is used internally by the ChatProtocol to track messages
+// that have been sent but not yet acknowledged by the recipient.
 type PendingMessage struct {
-	Message    Message
-	RetryCount int
-	SentAt     time.Time
-	Acked      bool
-	AckedAt    time.Time
-	Callback   func(acked bool, msg Message)
+	Message    Message                       // The message that was sent
+	RetryCount int                           // Number of times the message has been retried
+	SentAt     time.Time                     // When the message was sent
+	Acked      bool                          // Whether the message has been acknowledged
+	AckedAt    time.Time                     // When the message was acknowledged (if Acked is true)
+	Callback   func(acked bool, msg Message) // Optional callback when ack is received or times out
 }
 
 // ChatProtocol represents the QaSa chat protocol handler
+//
+// This is the main component that handles the chat protocol functionality,
+// including message sending/receiving, encryption, offline message queueing,
+// and acknowledgment handling.
+//
+// It implements a reliable messaging system with the following features:
+// - End-to-end encryption (optional)
+// - Message acknowledgments with automatic retries
+// - Offline message queueing
+// - Key exchange and rotation
 type ChatProtocol struct {
-	host            host.Host
-	callback        ChatCallback
-	ctx             context.Context
-	cancel          context.CancelFunc
-	streams         map[peer.ID]network.Stream
-	streamsMu       sync.RWMutex
-	pendingMsgs     map[string]*PendingMessage
-	pendingMsgsMu   sync.RWMutex
-	messageCrypto   *encryption.MessageCrypto
-	AcknowledgeMessage AcknowledgeFunc
+	host               host.Host                  // The libp2p host
+	callback           ChatCallback               // Callback for received messages
+	ctx                context.Context            // Context for cancellation
+	cancel             context.CancelFunc         // Function to cancel the context
+	streams            map[peer.ID]network.Stream // Active streams to peers
+	streamsMu          sync.RWMutex               // Mutex for streams map
+	pendingMsgs        map[string]*PendingMessage // Messages waiting for acknowledgment
+	pendingMsgsMu      sync.RWMutex               // Mutex for pendingMsgs map
+	messageCrypto      *encryption.MessageCrypto  // Crypto provider for message encryption
+	AcknowledgeMessage AcknowledgeFunc            // Function to acknowledge messages
 	// Offline message queue
-	offlineQueue    *OfflineMessageQueue
-	isOfflineQueueEnabled bool
-	
+	offlineQueue          *OfflineMessageQueue // Queue for messages to offline peers
+	isOfflineQueueEnabled bool                 // Whether offline queueing is enabled
+
 	// Key-related settings
-	useEncryption   bool
-	configDir       string
+	useEncryption bool   // Whether encryption is enabled
+	configDir     string // Directory for configuration files
 }
 
 // ChatProtocolOptions defines options for creating a new chat protocol
+//
+// This structure allows customization of the ChatProtocol behavior
+// when it is created.
 type ChatProtocolOptions struct {
-	ConfigDir          string
-	EnableOfflineQueue bool
-	UseEncryption      bool
+	ConfigDir          string // Directory for configuration and key storage
+	EnableOfflineQueue bool   // Whether to enable offline message queueing
+	UseEncryption      bool   // Whether to enable end-to-end encryption
 }
 
 // DefaultChatProtocolOptions returns the default options for chat protocol
+//
+// By default, offline queueing and encryption are enabled, and the
+// configuration directory is set to ".qasa".
+//
+// # Returns
+//
+// Default options for the chat protocol
 func DefaultChatProtocolOptions() *ChatProtocolOptions {
 	return &ChatProtocolOptions{
 		ConfigDir:          ".qasa",
@@ -117,33 +152,67 @@ func DefaultChatProtocolOptions() *ChatProtocolOptions {
 	}
 }
 
-// NewChatProtocol creates a new chat protocol handler
+// NewChatProtocol creates a new chat protocol handler with default options
+//
+// This is a convenience wrapper around NewChatProtocolWithOptions
+// that uses the default options.
+//
+// # Parameters
+//
+// - ctx: Context for managing the protocol's lifecycle
+// - h: libp2p host to use for networking
+// - callback: Function to call when a message is received
+//
+// # Returns
+//
+// A new ChatProtocol instance
 func NewChatProtocol(ctx context.Context, h host.Host, callback ChatCallback) *ChatProtocol {
 	return NewChatProtocolWithOptions(ctx, h, callback, DefaultChatProtocolOptions())
 }
 
 // NewChatProtocolWithOptions creates a new chat protocol handler with the specified options
+//
+// This function initializes a new ChatProtocol with custom options,
+// setting up the necessary handlers and components based on the provided
+// configuration.
+//
+// # Parameters
+//
+// - ctx: Context for managing the protocol's lifecycle
+// - h: libp2p host to use for networking
+// - callback: Function to call when a message is received
+// - options: Configuration options for the protocol
+//
+// # Returns
+//
+// # A new ChatProtocol instance
+//
+// # Security Considerations
+//
+// If encryption is enabled, this function will attempt to initialize the
+// cryptographic components. If that fails, encryption will be disabled
+// automatically, with a warning message.
 func NewChatProtocolWithOptions(ctx context.Context, h host.Host, callback ChatCallback, options *ChatProtocolOptions) *ChatProtocol {
 	ctx, cancel := context.WithCancel(ctx)
-	
+
 	cp := &ChatProtocol{
-		host:        h,
-		callback:    callback,
-		ctx:         ctx,
-		cancel:      cancel,
-		streams:     make(map[peer.ID]network.Stream),
-		pendingMsgs: make(map[string]*PendingMessage),
+		host:                  h,
+		callback:              callback,
+		ctx:                   ctx,
+		cancel:                cancel,
+		streams:               make(map[peer.ID]network.Stream),
+		pendingMsgs:           make(map[string]*PendingMessage),
 		isOfflineQueueEnabled: options.EnableOfflineQueue,
-		useEncryption: options.UseEncryption,
-		configDir:   options.ConfigDir,
+		useEncryption:         options.UseEncryption,
+		configDir:             options.ConfigDir,
 	}
-	
+
 	// Set the default acknowledge function
 	cp.AcknowledgeMessage = cp.defaultAcknowledgeMessage
-	
+
 	// Set the stream handler for the chat protocol
 	h.SetStreamHandler(protocol.ID(ProtocolID), cp.handleStream)
-	
+
 	// Initialize offline message queue if enabled
 	if options.EnableOfflineQueue {
 		queue, err := NewOfflineMessageQueue(options.ConfigDir)
@@ -154,7 +223,7 @@ func NewChatProtocolWithOptions(ctx context.Context, h host.Host, callback ChatC
 			cp.offlineQueue = queue
 		}
 	}
-	
+
 	// Initialize message crypto if encryption is enabled
 	if options.UseEncryption {
 		provider, err := encryption.GetCryptoProvider()
@@ -171,11 +240,23 @@ func NewChatProtocolWithOptions(ctx context.Context, h host.Host, callback ChatC
 			}
 		}
 	}
-	
+
 	return cp
 }
 
 // Start starts the chat protocol handler
+//
+// This function activates the protocol, setting up network notification
+// handlers, opening streams to connected peers, and starting background
+// management goroutines.
+//
+// It should be called after creating the ChatProtocol and before
+// attempting to send or receive messages.
+//
+// # Security Considerations
+//
+// If encryption is enabled, this will start the key rotation system
+// to periodically rotate encryption keys for enhanced security.
 func (cp *ChatProtocol) Start() {
 	// Listen for new peers
 	cp.host.Network().Notify(&network.NotifyBundle{
@@ -190,20 +271,20 @@ func (cp *ChatProtocol) Start() {
 			cp.streamsMu.Unlock()
 		},
 	})
-	
+
 	// Try to open streams to already connected peers
 	for _, peer := range cp.host.Network().Peers() {
 		go cp.openStream(peer)
 	}
-	
+
 	// Start a goroutine to handle message acknowledgments and retries
 	go cp.manageAcknowledgments()
-	
+
 	// If offline queue is enabled, start a periodic cleanup
 	if cp.isOfflineQueueEnabled && cp.offlineQueue != nil {
 		go cp.manageOfflineQueue()
 	}
-	
+
 	// If encryption is enabled, start key rotation
 	if cp.useEncryption && cp.messageCrypto != nil {
 		cp.messageCrypto.StartKeyRotation(cp.ctx)
@@ -211,10 +292,15 @@ func (cp *ChatProtocol) Start() {
 }
 
 // manageAcknowledgments periodically checks for unacknowledged messages and retries them
+//
+// This is an internal function that runs in a separate goroutine to handle
+// message acknowledgments. It will periodically check for messages that
+// have not been acknowledged and retry them if necessary, or time them out
+// after too many retries.
 func (cp *ChatProtocol) manageAcknowledgments() {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-ticker.C:
@@ -226,12 +312,18 @@ func (cp *ChatProtocol) manageAcknowledgments() {
 }
 
 // checkPendingMessages checks for unacknowledged messages and retries or times them out
+//
+// This internal function is called periodically to check the status of
+// pending messages. It will:
+// - Remove acknowledged messages that have been in the pending list for a while
+// - Retry unacknowledged messages that have timed out
+// - Give up on messages that have been retried too many times
 func (cp *ChatProtocol) checkPendingMessages() {
 	now := time.Now()
-	
+
 	cp.pendingMsgsMu.Lock()
 	defer cp.pendingMsgsMu.Unlock()
-	
+
 	for id, pending := range cp.pendingMsgs {
 		if pending.Acked {
 			// If message is acknowledged and old enough, remove it from pending
@@ -240,21 +332,21 @@ func (cp *ChatProtocol) checkPendingMessages() {
 			}
 			continue
 		}
-		
+
 		// Check if message has timed out waiting for acknowledgment
 		if now.Sub(pending.SentAt) > AckTimeout {
 			if pending.RetryCount < 3 {
 				// Retry sending the message
 				pending.RetryCount++
 				pending.SentAt = now
-				
+
 				// Extract peer ID
 				peerID, err := peer.Decode(pending.Message.To)
 				if err != nil {
 					fmt.Printf("Failed to decode peer ID '%s': %s\n", pending.Message.To, err)
 					continue
 				}
-				
+
 				// Try to resend the message
 				if err := cp.sendMessageToPeer(peerID, pending.Message); err != nil {
 					fmt.Printf("Failed to retry message to %s: %s\n", peerID.String(), err)
@@ -264,12 +356,12 @@ func (cp *ChatProtocol) checkPendingMessages() {
 			} else {
 				// Message exceeded retry count, consider it failed
 				fmt.Printf("Message to %s timed out after %d attempts\n", pending.Message.To, pending.RetryCount)
-				
+
 				// Call the callback if provided
 				if pending.Callback != nil {
 					pending.Callback(false, pending.Message)
 				}
-				
+
 				// Remove from pending
 				delete(cp.pendingMsgs, id)
 			}
@@ -281,11 +373,11 @@ func (cp *ChatProtocol) checkPendingMessages() {
 func (cp *ChatProtocol) manageOfflineQueue() {
 	ticker := time.NewTicker(30 * time.Minute)
 	defer ticker.Stop()
-	
+
 	// Shorter ticker for delivering queued messages
 	deliveryTicker := time.NewTicker(1 * time.Minute)
 	defer deliveryTicker.Stop()
-	
+
 	for {
 		select {
 		case <-ticker.C:
@@ -307,13 +399,13 @@ func (cp *ChatProtocol) tryDeliverOfflineMessages() {
 	if !cp.isOfflineQueueEnabled || cp.offlineQueue == nil {
 		return
 	}
-	
+
 	// Get all peers with queued messages
 	peers := cp.offlineQueue.GetQueuedPeers()
 	if len(peers) == 0 {
 		return
 	}
-	
+
 	// Check which peers are connected
 	for _, peerID := range peers {
 		if cp.host.Network().Connectedness(peerID) == network.Connected {
@@ -323,13 +415,13 @@ func (cp *ChatProtocol) tryDeliverOfflineMessages() {
 				fmt.Printf("Error retrieving queued messages for peer %s: %s\n", peerID, err)
 				continue
 			}
-			
+
 			if len(messages) == 0 {
 				continue
 			}
-			
+
 			fmt.Printf("Delivering %d offline messages to peer %s\n", len(messages), peerID)
-			
+
 			// Send each message
 			for _, msg := range messages {
 				if err := cp.sendMessageWithAck(peerID, msg); err != nil {
@@ -347,7 +439,7 @@ func (cp *ChatProtocol) tryDeliverOfflineMessages() {
 // Stop stops the chat protocol handler
 func (cp *ChatProtocol) Stop() {
 	cp.cancel()
-	
+
 	// Close all streams
 	cp.streamsMu.Lock()
 	for _, stream := range cp.streams {
@@ -366,18 +458,18 @@ func (cp *ChatProtocol) BroadcastMessage(content string) error {
 		Content: content,
 		Time:    time.Now(),
 	}
-	
+
 	cp.streamsMu.RLock()
 	defer cp.streamsMu.RUnlock()
-	
+
 	for peerID, _ := range cp.streams {
 		// Create a copy of the message with the recipient
 		msgCopy := message
 		msgCopy.To = peerID.String()
-		
+
 		if err := cp.sendMessageWithAck(peerID, msgCopy); err != nil {
 			fmt.Printf("Failed to send message to %s: %s\n", peerID.String(), err)
-			
+
 			// If offline queue is enabled, queue the message for later delivery
 			if cp.isOfflineQueueEnabled && cp.offlineQueue != nil {
 				if err := cp.offlineQueue.QueueMessage(msgCopy); err != nil {
@@ -387,7 +479,7 @@ func (cp *ChatProtocol) BroadcastMessage(content string) error {
 			continue
 		}
 	}
-	
+
 	return nil
 }
 
@@ -397,7 +489,7 @@ func (cp *ChatProtocol) SendMessageToPeer(peerID string, content string) error {
 	if err != nil {
 		return fmt.Errorf("invalid peer ID: %w", err)
 	}
-	
+
 	message := Message{
 		ID:      generateMessageID(),
 		From:    cp.host.ID().String(),
@@ -406,7 +498,7 @@ func (cp *ChatProtocol) SendMessageToPeer(peerID string, content string) error {
 		Content: content,
 		Time:    time.Now(),
 	}
-	
+
 	// Check if peer is connected
 	if cp.host.Network().Connectedness(peer) != network.Connected {
 		// If offline queue is enabled, queue the message for later delivery
@@ -416,7 +508,7 @@ func (cp *ChatProtocol) SendMessageToPeer(peerID string, content string) error {
 		}
 		return fmt.Errorf("peer is not connected")
 	}
-	
+
 	return cp.sendMessageWithAck(peer, message)
 }
 
@@ -429,21 +521,21 @@ func (cp *ChatProtocol) sendMessageWithAck(peerID peer.ID, message Message) erro
 		SentAt:     time.Now(),
 		Acked:      false,
 	}
-	
+
 	cp.pendingMsgsMu.Lock()
 	cp.pendingMsgs[message.ID] = pending
 	cp.pendingMsgsMu.Unlock()
-	
+
 	// Send the message
 	if err := cp.sendMessageToPeer(peerID, message); err != nil {
 		// If sending failed, remove from pending
 		cp.pendingMsgsMu.Lock()
 		delete(cp.pendingMsgs, message.ID)
 		cp.pendingMsgsMu.Unlock()
-		
+
 		return fmt.Errorf("failed to send message: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -454,7 +546,7 @@ func (cp *ChatProtocol) defaultAcknowledgeMessage(originalMsg Message) error {
 	if err != nil {
 		return fmt.Errorf("invalid peer ID: %w", err)
 	}
-	
+
 	// Create an acknowledgment message
 	ackMsg := Message{
 		ID:      generateMessageID(),
@@ -464,7 +556,7 @@ func (cp *ChatProtocol) defaultAcknowledgeMessage(originalMsg Message) error {
 		Content: originalMsg.ID, // Use content to store the original message ID
 		Time:    time.Now(),
 	}
-	
+
 	// Send the acknowledgment
 	return cp.sendMessageToPeer(peerID, ackMsg)
 }
@@ -473,11 +565,11 @@ func (cp *ChatProtocol) defaultAcknowledgeMessage(originalMsg Message) error {
 func (cp *ChatProtocol) recordMessageAcknowledged(messageID string) {
 	cp.pendingMsgsMu.Lock()
 	defer cp.pendingMsgsMu.Unlock()
-	
+
 	if pending, exists := cp.pendingMsgs[messageID]; exists {
 		pending.Acked = true
 		pending.AckedAt = time.Now()
-		
+
 		// Call the callback if provided
 		if pending.Callback != nil {
 			pending.Callback(true, pending.Message)
@@ -491,40 +583,40 @@ func (cp *ChatProtocol) openStream(peerID peer.ID) (network.Stream, error) {
 	cp.streamsMu.RLock()
 	stream, exists := cp.streams[peerID]
 	cp.streamsMu.RUnlock()
-	
+
 	if exists {
 		return stream, nil
 	}
-	
+
 	// Open a new stream
 	ctx, cancel := context.WithTimeout(cp.ctx, 10*time.Second)
 	defer cancel()
-	
+
 	stream, err := cp.host.NewStream(ctx, peerID, protocol.ID(ProtocolID))
 	if err != nil {
 		return nil, fmt.Errorf("failed to open stream: %w", err)
 	}
-	
+
 	// Store the stream
 	cp.streamsMu.Lock()
 	cp.streams[peerID] = stream
 	cp.streamsMu.Unlock()
-	
+
 	// Start reading from the stream
 	go cp.readMessages(stream, peerID)
-	
+
 	return stream, nil
 }
 
 // handleStream is called when we receive a new stream from a peer
 func (cp *ChatProtocol) handleStream(stream network.Stream) {
 	peer := stream.Conn().RemotePeer()
-	
+
 	// Store the stream
 	cp.streamsMu.Lock()
 	cp.streams[peer] = stream
 	cp.streamsMu.Unlock()
-	
+
 	// Start reading messages from the stream
 	go cp.readMessages(stream, peer)
 }
@@ -532,7 +624,7 @@ func (cp *ChatProtocol) handleStream(stream network.Stream) {
 // readMessages reads messages from a stream
 func (cp *ChatProtocol) readMessages(stream network.Stream, peerID peer.ID) {
 	reader := bufio.NewReader(stream)
-	
+
 	for {
 		// Read a line from the stream
 		line, err := reader.ReadString('\n')
@@ -542,11 +634,11 @@ func (cp *ChatProtocol) readMessages(stream network.Stream, peerID peer.ID) {
 			}
 			break
 		}
-		
+
 		// Check if this might be an encrypted message
 		var encryptedMsg EncryptedMessage
 		err = json.Unmarshal([]byte(line), &encryptedMsg)
-		
+
 		if err == nil && encryptedMsg.Ciphertext != nil && cp.useEncryption && cp.messageCrypto != nil {
 			// Process as encrypted message
 			cp.handleEncryptedMessage(encryptedMsg, peerID)
@@ -557,11 +649,11 @@ func (cp *ChatProtocol) readMessages(stream network.Stream, peerID peer.ID) {
 				fmt.Printf("Error unmarshaling message: %s\n", err)
 				continue
 			}
-			
+
 			cp.handlePlaintextMessage(message, peerID)
 		}
 	}
-	
+
 	// Remove the stream when it's closed
 	cp.streamsMu.Lock()
 	delete(cp.streams, peerID)
@@ -576,14 +668,14 @@ func (cp *ChatProtocol) handleEncryptedMessage(encryptedMsg EncryptedMessage, pe
 		fmt.Printf("Error decrypting message: %s\n", err)
 		return
 	}
-	
+
 	// Unmarshal the plaintext message
 	var message Message
 	if err := json.Unmarshal(plaintextBytes, &message); err != nil {
 		fmt.Printf("Error unmarshaling decrypted message: %s\n", err)
 		return
 	}
-	
+
 	// Verify the signature
 	valid, err := cp.messageCrypto.VerifySignature(plaintextBytes, encryptedMsg.Signature, peerID.String())
 	if err != nil {
@@ -593,7 +685,7 @@ func (cp *ChatProtocol) handleEncryptedMessage(encryptedMsg EncryptedMessage, pe
 		fmt.Printf("Warning: Invalid signature for message from %s\n", peerID.String())
 		// Continue processing even if verification fails
 	}
-	
+
 	// Process the message
 	cp.handlePlaintextMessage(message, peerID)
 }
@@ -604,7 +696,7 @@ func (cp *ChatProtocol) handlePlaintextMessage(message Message, peerID peer.ID) 
 	if message.From == "" {
 		message.From = peerID.String()
 	}
-	
+
 	// Process based on message type
 	switch message.Type {
 	case TypeAck:
@@ -613,25 +705,25 @@ func (cp *ChatProtocol) handlePlaintextMessage(message Message, peerID peer.ID) 
 		if pending, exists := cp.pendingMsgs[message.ID]; exists {
 			pending.Acked = true
 			pending.AckedAt = time.Now()
-			
+
 			// Call the callback if any
 			if pending.Callback != nil {
 				go pending.Callback(true, message)
 			}
 		}
 		cp.pendingMsgsMu.Unlock()
-		
+
 	case TypeChat:
 		// Call the callback with the message
 		if cp.callback != nil {
 			cp.callback(message)
 		}
-		
+
 		// Send acknowledgment
 		if cp.AcknowledgeMessage != nil {
 			go cp.AcknowledgeMessage(message)
 		}
-		
+
 	case TypeKeyExchange:
 		// Handle key exchange message
 		cp.handleKeyExchangeMessage(message, peerID)
@@ -643,14 +735,14 @@ func (cp *ChatProtocol) handleKeyExchangeMessage(message Message, peerID peer.ID
 	if !cp.useEncryption || cp.messageCrypto == nil {
 		return
 	}
-	
+
 	// Establish a session key with the peer
 	_, err := cp.messageCrypto.EstablishSessionKey(peerID.String())
 	if err != nil {
 		fmt.Printf("Error establishing session key with %s: %s\n", peerID.String(), err)
 		return
 	}
-	
+
 	fmt.Printf("Established session key with peer: %s\n", peerID.String())
 }
 
@@ -659,7 +751,7 @@ func (cp *ChatProtocol) InitiateKeyExchange(peerID peer.ID) error {
 	if !cp.useEncryption || cp.messageCrypto == nil {
 		return fmt.Errorf("encryption not enabled")
 	}
-	
+
 	// Create a key exchange message
 	message := Message{
 		ID:      generateMessageID(),
@@ -669,7 +761,7 @@ func (cp *ChatProtocol) InitiateKeyExchange(peerID peer.ID) error {
 		Content: "KEY_EXCHANGE_REQUEST",
 		Time:    time.Now(),
 	}
-	
+
 	// Send the message
 	return cp.sendMessageToPeer(peerID, message)
 }
@@ -712,28 +804,28 @@ func (cp *ChatProtocol) sendEncryptedMessageToPeer(peerID peer.ID, message Messa
 	if err != nil {
 		return fmt.Errorf("failed to marshal message: %w", err)
 	}
-	
+
 	// Sign the plaintext message
 	signature, err := cp.messageCrypto.SignMessage(messageBytes)
 	if err != nil {
 		return fmt.Errorf("failed to sign message: %w", err)
 	}
-	
+
 	// Add the signature
 	message.Signature = signature
-	
+
 	// Re-marshal with signature
 	messageBytes, err = json.Marshal(message)
 	if err != nil {
 		return fmt.Errorf("failed to marshal message with signature: %w", err)
 	}
-	
+
 	// Encrypt the message
 	ciphertext, err := cp.messageCrypto.EncryptMessage(messageBytes, peerID.String())
 	if err != nil {
 		return fmt.Errorf("failed to encrypt message: %w", err)
 	}
-	
+
 	// Create the encrypted message wrapper
 	encryptedMsg := EncryptedMessage{
 		ID:          message.ID,
@@ -744,13 +836,13 @@ func (cp *ChatProtocol) sendEncryptedMessageToPeer(peerID peer.ID, message Messa
 		Timestamp:   message.Time,
 		Signature:   signature,
 	}
-	
+
 	// Marshal the encrypted message
 	encryptedBytes, err := json.Marshal(encryptedMsg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal encrypted message: %w", err)
 	}
-	
+
 	// Send the encrypted message
 	writer := bufio.NewWriter(stream)
 	if _, err := writer.Write(encryptedBytes); err != nil {
@@ -762,7 +854,7 @@ func (cp *ChatProtocol) sendEncryptedMessageToPeer(peerID peer.ID, message Messa
 	if err := writer.Flush(); err != nil {
 		return fmt.Errorf("failed to flush writer: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -773,7 +865,7 @@ func (cp *ChatProtocol) sendPlaintextMessageToPeer(message Message, stream netwo
 	if err != nil {
 		return fmt.Errorf("failed to marshal message: %w", err)
 	}
-	
+
 	// Send the message
 	writer := bufio.NewWriter(stream)
 	if _, err := writer.Write(messageBytes); err != nil {
@@ -785,7 +877,7 @@ func (cp *ChatProtocol) sendPlaintextMessageToPeer(message Message, stream netwo
 	if err := writer.Flush(); err != nil {
 		return fmt.Errorf("failed to flush writer: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -812,11 +904,11 @@ func (cp *ChatProtocol) GetOfflineQueuedMessageCount(peerID peer.ID) int {
 	if !cp.isOfflineQueueEnabled || cp.offlineQueue == nil {
 		return 0
 	}
-	
+
 	messages, err := cp.offlineQueue.PeekQueuedMessages(peerID)
 	if err != nil || messages == nil {
 		return 0
 	}
-	
+
 	return len(messages)
-} 
+}

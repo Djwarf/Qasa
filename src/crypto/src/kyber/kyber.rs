@@ -11,6 +11,31 @@ use crate::utils;
 /// This implementation uses the CRYSTALS-Kyber algorithm, a lattice-based
 /// key encapsulation mechanism that is believed to be secure against 
 /// quantum computer attacks.
+///
+/// # Security Properties
+///
+/// 1. Quantum-resistant security based on the module learning with errors (MLWE) problem
+/// 2. Public keys and ciphertexts have small sizes compared to other post-quantum schemes
+/// 3. Secret keys are automatically zeroed when the struct is dropped
+/// 4. Provides IND-CCA2 security (indistinguishability under adaptive chosen-ciphertext attack)
+///
+/// # Examples
+///
+/// ```
+/// use qasa_crypto::kyber::{KyberKeyPair, KyberVariant};
+///
+/// // Generate a new Kyber-768 key pair
+/// let key_pair = KyberKeyPair::generate(KyberVariant::Kyber768).unwrap();
+///
+/// // Encapsulate a shared secret using the public key
+/// let (ciphertext, shared_secret) = key_pair.encapsulate().unwrap();
+///
+/// // Decapsulate the shared secret using the private key
+/// let decapsulated_secret = key_pair.decapsulate(&ciphertext).unwrap();
+///
+/// // The encapsulated and decapsulated secrets should match
+/// assert_eq!(shared_secret, decapsulated_secret);
+/// ```
 #[derive(Serialize, Deserialize)]
 pub struct KyberKeyPair {
     /// Public key for encapsulation
@@ -36,6 +61,31 @@ impl Zeroize for KyberKeyPair {
 }
 
 /// Public key only version of KyberKeyPair for sharing with others
+///
+/// This structure contains only the public key and algorithm variant,
+/// making it safe to share with other parties for establishing secure
+/// communication channels.
+///
+/// # Security Properties
+///
+/// 1. Contains no sensitive secret key material
+/// 2. Can be freely shared without compromising security
+/// 3. Used by recipients for encapsulating shared secrets
+///
+/// # Examples
+///
+/// ```
+/// use qasa_crypto::kyber::{KyberKeyPair, KyberVariant};
+///
+/// // Generate a full key pair
+/// let key_pair = KyberKeyPair::generate(KyberVariant::Kyber768).unwrap();
+///
+/// // Extract just the public key for sharing
+/// let public_key = key_pair.public_key();
+///
+/// // A different party can use the public key to encapsulate a shared secret
+/// let (ciphertext, shared_secret) = public_key.encapsulate().unwrap();
+/// ```
 #[derive(Serialize, Deserialize, Clone)]
 pub struct KyberPublicKey {
     /// Public key for encapsulation
@@ -45,6 +95,19 @@ pub struct KyberPublicKey {
 }
 
 /// CRYSTALS-Kyber algorithm variants with different security levels
+///
+/// Kyber offers three different parameter sets that trade off between
+/// security and performance/key size. Each variant corresponds to a 
+/// different NIST security level.
+///
+/// # Security Levels
+///
+/// * Kyber512: NIST Level 1 (equivalent to AES-128)
+/// * Kyber768: NIST Level 3 (equivalent to AES-192)
+/// * Kyber1024: NIST Level 5 (equivalent to AES-256)
+///
+/// For most applications, Kyber768 provides a good balance between
+/// security and performance.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum KyberVariant {
     /// Kyber512 (NIST security level 1)
@@ -67,6 +130,13 @@ impl fmt::Display for KyberVariant {
 
 impl KyberVariant {
     /// Get the OQS algorithm for this variant
+    ///
+    /// This is an internal helper method that converts our KyberVariant
+    /// enum to the corresponding OQS library Algorithm enum.
+    ///
+    /// # Returns
+    ///
+    /// The OQS Algorithm enum corresponding to this variant
     fn oqs_algorithm(&self) -> Algorithm {
         match self {
             KyberVariant::Kyber512 => Algorithm::Kyber512,
@@ -75,7 +145,16 @@ impl KyberVariant {
         }
     }
     
-    /// Get the security level of this variant
+    /// Get the security level of this Kyber variant
+    ///
+    /// The security level is defined according to NIST standards:
+    /// - Level 1: At least as hard to break as AES-128
+    /// - Level 3: At least as hard to break as AES-192
+    /// - Level 5: At least as hard to break as AES-256
+    ///
+    /// # Returns
+    ///
+    /// A number representing the NIST security level (1, 3, or 5)
     pub fn security_level(&self) -> u8 {
         match self {
             KyberVariant::Kyber512 => 1,
@@ -85,6 +164,10 @@ impl KyberVariant {
     }
     
     /// Get the public key size for this variant in bytes
+    ///
+    /// # Returns
+    ///
+    /// The size of the public key in bytes for this variant
     pub fn public_key_size(&self) -> usize {
         match self {
             KyberVariant::Kyber512 => 800,
@@ -94,6 +177,10 @@ impl KyberVariant {
     }
     
     /// Get the secret key size for this variant in bytes
+    ///
+    /// # Returns
+    ///
+    /// The size of the secret key in bytes for this variant
     pub fn secret_key_size(&self) -> usize {
         match self {
             KyberVariant::Kyber512 => 1632,
@@ -103,6 +190,13 @@ impl KyberVariant {
     }
     
     /// Get the ciphertext size for this variant in bytes
+    ///
+    /// This is the size of the encapsulated key that would be sent
+    /// to the recipient during key exchange.
+    ///
+    /// # Returns
+    ///
+    /// The size of the ciphertext in bytes for this variant
     pub fn ciphertext_size(&self) -> usize {
         match self {
             KyberVariant::Kyber512 => 768,
@@ -112,6 +206,13 @@ impl KyberVariant {
     }
     
     /// Get the shared secret size in bytes (same for all variants)
+    ///
+    /// All Kyber variants produce a 32-byte (256-bit) shared secret,
+    /// which is suitable for use as a symmetric encryption key.
+    ///
+    /// # Returns
+    ///
+    /// The size of the shared secret in bytes (32)
     pub fn shared_secret_size(&self) -> usize {
         32 // All Kyber variants use 32-byte shared secrets
     }
@@ -120,6 +221,10 @@ impl KyberVariant {
 impl KyberKeyPair {
     /// Generate a new Kyber key pair with the specified variant
     ///
+    /// This function generates a new random key pair for the specified
+    /// Kyber variant. The key pair includes both public and private keys
+    /// and can be used for key encapsulation.
+    ///
     /// # Arguments
     ///
     /// * `variant` - The Kyber variant to use (Kyber512, Kyber768, or Kyber1024)
@@ -127,6 +232,21 @@ impl KyberKeyPair {
     /// # Returns
     ///
     /// A new KyberKeyPair or an error if key generation failed
+    ///
+    /// # Security Considerations
+    ///
+    /// 1. Uses cryptographically secure random number generation
+    /// 2. Secret key material is protected in memory and zeroed on drop
+    /// 3. Higher security variants (Kyber768, Kyber1024) provide stronger security guarantees
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use qasa_crypto::kyber::{KyberKeyPair, KyberVariant};
+    ///
+    /// // Generate a Kyber-768 key pair (NIST Level 3 security)
+    /// let key_pair = KyberKeyPair::generate(KyberVariant::Kyber768).unwrap();
+    /// ```
     pub fn generate(variant: KyberVariant) -> Result<Self, CryptoError> {
         let alg = variant.oqs_algorithm();
         let kyber = Kem::new(alg).map_err(|e| CryptoError::OqsError(e.to_string()))?;
@@ -144,11 +264,39 @@ impl KyberKeyPair {
     /// Encapsulate a shared secret using this key pair's public key
     ///
     /// This generates a shared secret and encapsulates it with the public key.
-    /// Both the ciphertext and shared secret are returned.
+    /// Both the ciphertext and shared secret are returned. The ciphertext can be
+    /// sent to the owner of the key pair, who can then decapsulate it to recover
+    /// the same shared secret.
     ///
     /// # Returns
     ///
-    /// A tuple containing (ciphertext, shared_secret) or an error
+    /// A tuple containing:
+    /// * `ciphertext` - The encapsulated shared secret (to be sent to the recipient)
+    /// * `shared_secret` - The shared secret (to be used for symmetric encryption)
+    ///
+    /// Or an error if encapsulation fails
+    ///
+    /// # Security Considerations
+    ///
+    /// 1. The shared secret is generated using a cryptographically secure random number generator
+    /// 2. This operation only requires the public key, so it can be performed by anyone
+    /// 3. The same shared secret is only revealed to the holder of the corresponding private key
+    /// 4. The shared secret can be used as a key for symmetric encryption (e.g., AES-GCM)
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use qasa_crypto::kyber::{KyberKeyPair, KyberVariant};
+    ///
+    /// // Generate a key pair
+    /// let key_pair = KyberKeyPair::generate(KyberVariant::Kyber768).unwrap();
+    ///
+    /// // Encapsulate a shared secret
+    /// let (ciphertext, shared_secret) = key_pair.encapsulate().unwrap();
+    ///
+    /// // The ciphertext can be sent to the recipient
+    /// // The shared secret can be used for symmetric encryption
+    /// ```
     pub fn encapsulate(&self) -> Result<(Vec<u8>, Vec<u8>), CryptoError> {
         let alg = self.algorithm.oqs_algorithm();
         let kyber = Kem::new(alg).map_err(|e| CryptoError::OqsError(e.to_string()))?;
@@ -165,7 +313,9 @@ impl KyberKeyPair {
     
     /// Decapsulate a shared secret using this key pair's secret key
     ///
-    /// This takes a ciphertext and extracts the shared secret using the secret key.
+    /// This takes a ciphertext produced by encapsulate() and extracts the 
+    /// shared secret using the secret key. The resulting shared secret will
+    /// be identical to the one produced during encapsulation.
     ///
     /// # Arguments
     ///
@@ -173,7 +323,31 @@ impl KyberKeyPair {
     ///
     /// # Returns
     ///
-    /// The shared secret or an error
+    /// The shared secret or an error if decapsulation fails
+    ///
+    /// # Security Considerations
+    ///
+    /// 1. This operation requires the secret key, so only the intended recipient can recover the shared secret
+    /// 2. If decapsulation fails, it may indicate tampering or corruption of the ciphertext
+    /// 3. Kyber provides IND-CCA2 security, so invalid ciphertexts will be detected and rejected
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use qasa_crypto::kyber::{KyberKeyPair, KyberVariant};
+    ///
+    /// // Generate a key pair
+    /// let key_pair = KyberKeyPair::generate(KyberVariant::Kyber768).unwrap();
+    ///
+    /// // Encapsulate a shared secret
+    /// let (ciphertext, original_secret) = key_pair.encapsulate().unwrap();
+    ///
+    /// // Decapsulate the shared secret
+    /// let recovered_secret = key_pair.decapsulate(&ciphertext).unwrap();
+    ///
+    /// // The recovered secret should match the original secret
+    /// assert_eq!(original_secret, recovered_secret);
+    /// ```
     pub fn decapsulate(&self, ciphertext: &[u8]) -> Result<Vec<u8>, CryptoError> {
         let alg = self.algorithm.oqs_algorithm();
         let kyber = Kem::new(alg).map_err(|e| CryptoError::OqsError(e.to_string()))?;
@@ -200,6 +374,18 @@ impl KyberKeyPair {
     /// # Returns
     ///
     /// A KyberPublicKey containing only the public key information
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use qasa_crypto::kyber::{KyberKeyPair, KyberVariant};
+    ///
+    /// // Generate a key pair
+    /// let key_pair = KyberKeyPair::generate(KyberVariant::Kyber768).unwrap();
+    ///
+    /// // Extract the public key to share with others
+    /// let public_key = key_pair.public_key();
+    /// ```
     pub fn public_key(&self) -> KyberPublicKey {
         KyberPublicKey {
             public_key: self.public_key.clone(),
@@ -214,7 +400,25 @@ impl KyberKeyPair {
     ///
     /// # Returns
     ///
-    /// Ok(()) if the keys match, Err(CryptoError) otherwise
+    /// `Ok(())` if the keys match, or an error if verification fails
+    ///
+    /// # Security Considerations
+    ///
+    /// 1. This function performs a full encapsulation and decapsulation to verify key correctness
+    /// 2. It's useful to check key integrity after loading keys from storage
+    /// 3. Failure could indicate key corruption or tampering
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use qasa_crypto::kyber::{KyberKeyPair, KyberVariant};
+    ///
+    /// // Generate a key pair
+    /// let key_pair = KyberKeyPair::generate(KyberVariant::Kyber768).unwrap();
+    ///
+    /// // Verify that the public and secret keys match
+    /// key_pair.verify_key_pair().unwrap();
+    /// ```
     pub fn verify_key_pair(&self) -> Result<(), CryptoError> {
         let alg = self.algorithm.oqs_algorithm();
         let kyber = Kem::new(alg).map_err(|e| CryptoError::OqsError(e.to_string()))?;

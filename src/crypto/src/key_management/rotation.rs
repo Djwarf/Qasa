@@ -15,6 +15,14 @@ use crate::kyber::KyberKeyPair;
 use crate::secure_memory::{SecureBytes, with_secure_scope};
 
 /// Key rotation policy
+///
+/// This structure defines the policy for rotating cryptographic keys,
+/// including rotation intervals, whether to keep old keys, and whether
+/// rotation should happen automatically.
+///
+/// Regular key rotation is an important security practice that limits
+/// the impact of potential key compromises and ensures cryptographic
+/// hygiene.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RotationPolicy {
     /// How often keys should be rotated, in days
@@ -40,6 +48,25 @@ impl Default for RotationPolicy {
 
 impl RotationPolicy {
     /// Create a new key rotation policy
+    ///
+    /// # Arguments
+    ///
+    /// * `rotation_interval_days` - How often keys should be rotated, in days
+    ///
+    /// # Returns
+    ///
+    /// A new RotationPolicy with the specified interval and default values
+    /// for other settings
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use qasa_crypto::key_management::RotationPolicy;
+    ///
+    /// // Create a policy that rotates keys every 30 days
+    /// let policy = RotationPolicy::new(30);
+    /// assert_eq!(policy.get_interval(), 30);
+    /// ```
     pub fn new(rotation_interval_days: u32) -> Self {
         Self {
             rotation_interval_days,
@@ -48,11 +75,39 @@ impl RotationPolicy {
     }
 
     /// Get the rotation interval in days
+    ///
+    /// # Returns
+    ///
+    /// The number of days between key rotations
     pub fn get_interval(&self) -> u32 {
         self.rotation_interval_days
     }
     
     /// Create a policy with high security (frequent rotation)
+    ///
+    /// This preset policy is designed for high-security environments
+    /// where keys should be rotated frequently (monthly) and multiple
+    /// previous keys should be kept to ensure access to older data.
+    ///
+    /// # Returns
+    ///
+    /// A RotationPolicy configured for high security
+    ///
+    /// # Security Considerations
+    ///
+    /// 1. More frequent rotations reduce the window of opportunity if a key is compromised
+    /// 2. Keeping multiple old keys ensures decryption capability for older messages
+    /// 3. Automatic rotation ensures security policies are enforced without manual intervention
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use qasa_crypto::key_management::RotationPolicy;
+    ///
+    /// let policy = RotationPolicy::high_security();
+    /// assert_eq!(policy.rotation_interval_days, 30); // Monthly rotation
+    /// assert!(policy.auto_rotate); // Automatic rotation
+    /// ```
     pub fn high_security() -> Self {
         Self {
             rotation_interval_days: 30, // 1 month
@@ -63,6 +118,23 @@ impl RotationPolicy {
     }
     
     /// Create a policy with standard security (moderate rotation)
+    ///
+    /// This preset policy provides a balance between security and
+    /// operational overhead, with quarterly rotation and retention
+    /// of a moderate number of old keys.
+    ///
+    /// # Returns
+    ///
+    /// The default RotationPolicy
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use qasa_crypto::key_management::RotationPolicy;
+    ///
+    /// let policy = RotationPolicy::standard_security();
+    /// assert_eq!(policy.rotation_interval_days, 90); // Quarterly rotation
+    /// ```
     pub fn standard_security() -> Self {
         Self::default()
     }
@@ -291,12 +363,6 @@ pub fn rotate_dilithium_keypair(
     // Save updated metadata
     save_metadata(&new_key_id, "dilithium", &metadata)?;
     
-    // Update the old key's last_rotated field to indicate it was rotated
-    if let Ok(mut old_metadata) = load_metadata(key_id, "dilithium") {
-        old_metadata.last_rotated = Some(Utc::now());
-        let _ = save_metadata(key_id, "dilithium", &old_metadata);
-    }
-    
     Ok(new_key_id)
 }
 
@@ -306,27 +372,53 @@ pub fn rotate_dilithium_keypair(
 ///
 /// A vector of tuples with (key_id, key_type) for keys that need rotation
 pub fn check_keys_for_rotation() -> Result<Vec<(String, String)>, CryptoError> {
-    let keys = storage::list_keys()?;
-    let mut keys_to_rotate = Vec::new();
+    let dir = storage::get_key_storage_directory();
+    let mut due_for_rotation = Vec::new();
     
-    for (key_id, key_type) in keys {
-        // Load metadata for the key
-        match load_metadata(&key_id, &key_type) {
+    if !dir.exists() {
+        return Ok(Vec::new());
+    }
+    
+    let entries = fs::read_dir(&dir)
+        .map_err(|e| CryptoError::KeyManagementError(format!("Failed to read key directory: {}", e)))?;
+    
+    for entry in entries {
+        let entry = entry.map_err(|e| CryptoError::KeyManagementError(format!("Failed to read directory entry: {}", e)))?;
+        let path = entry.path();
+        
+        if !path.is_file() {
+            continue;
+        }
+        
+        let filename = path.file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("");
+        
+        if !filename.ends_with(".metadata") {
+            continue;
+        }
+        
+        // Parse key ID and type from filename
+        let parts: Vec<&str> = filename.split('.').collect();
+        if parts.len() < 3 {
+            continue;
+        }
+        
+        let key_id = parts[0];
+        let key_type = parts[1];
+        
+        // Load metadata and check if rotation is due
+        match load_metadata(key_id, key_type) {
             Ok(metadata) => {
-                // Check if rotation is due based on policy
                 if metadata.is_rotation_due() {
-                    keys_to_rotate.push((key_id, key_type));
+                    due_for_rotation.push((key_id.to_string(), key_type.to_string()));
                 }
             },
-            Err(_) => {
-                // If metadata can't be loaded, create default metadata
-                let default_metadata = KeyRotationMetadata::new(RotationPolicy::default());
-                let _ = save_metadata(&key_id, &key_type, &default_metadata);
-            }
+            Err(_) => continue, // Skip keys with invalid metadata
         }
     }
     
-    Ok(keys_to_rotate)
+    Ok(due_for_rotation)
 }
 
 /// Automatically rotate all keys that are due according to policy
@@ -342,33 +434,66 @@ pub fn auto_rotate_keys<F>(password_provider: F) -> Result<Vec<(String, String)>
 where
     F: Fn(&str) -> Result<String, CryptoError>,
 {
-    let keys_to_rotate = check_keys_for_rotation()?;
+    let dir = storage::get_key_storage_directory();
     let mut rotated_keys = Vec::new();
     
-    for (key_id, key_type) in keys_to_rotate {
-        // Get the password for this key
-        let password = password_provider(&key_id)?;
+    if !dir.exists() {
+        return Ok(Vec::new());
+    }
+    
+    let entries = fs::read_dir(&dir)
+        .map_err(|e| CryptoError::KeyManagementError(format!("Failed to read key directory: {}", e)))?;
+    
+    for entry in entries {
+        let entry = entry.map_err(|e| CryptoError::KeyManagementError(format!("Failed to read directory entry: {}", e)))?;
+        let path = entry.path();
         
-        // Use secure memory handling for the password
-        let password_secure = SecureBytes::new(password.as_bytes());
+        if !path.is_file() {
+            continue;
+        }
         
-        // Determine the key type and rotate
-        let new_key_id = match key_type.as_str() {
-            "kyber" => {
-                // Use string slice to avoid unnecessary allocation
-                let password_str = std::str::from_utf8(password_secure.as_bytes())
-                    .map_err(|_| CryptoError::InvalidParameterError("Invalid UTF-8 in password".to_string()))?;
-                rotate_kyber_keypair(&key_id, password_str)?
+        let filename = path.file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("");
+        
+        if !filename.ends_with(".metadata") {
+            continue;
+        }
+        
+        // Parse key ID and type from filename
+        let parts: Vec<&str> = filename.split('.').collect();
+        if parts.len() < 3 {
+            continue;
+        }
+        
+        let key_id = parts[0];
+        let key_type = parts[1];
+        
+        // Load metadata and check if rotation is due and auto-rotate is enabled
+        match load_metadata(key_id, key_type) {
+            Ok(metadata) => {
+                if metadata.is_rotation_due() && metadata.policy.auto_rotate {
+                    // Get password for this key
+                    let password = match password_provider(key_id) {
+                        Ok(pw) => pw,
+                        Err(_) => continue, // Skip if password not available
+                    };
+                    
+                    // Rotate the key based on its type
+                    let result = match key_type {
+                        "kyber" => rotate_kyber_keypair(key_id, &password),
+                        "dilithium" => rotate_dilithium_keypair(key_id, &password),
+                        _ => continue, // Skip unknown key types
+                    };
+                    
+                    // Record successful rotations
+                    if let Ok(new_key_id) = result {
+                        rotated_keys.push((key_id.to_string(), new_key_id));
+                    }
+                }
             },
-            "dilithium" => {
-                let password_str = std::str::from_utf8(password_secure.as_bytes())
-                    .map_err(|_| CryptoError::InvalidParameterError("Invalid UTF-8 in password".to_string()))?;
-                rotate_dilithium_keypair(&key_id, password_str)?
-            },
-            _ => continue,
-        };
-        
-        rotated_keys.push((key_id, new_key_id));
+            Err(_) => continue, // Skip keys with invalid metadata
+        }
     }
     
     Ok(rotated_keys)
@@ -385,22 +510,13 @@ where
 ///
 /// A KeyAgeSummary containing age information and recommendations
 pub fn get_key_age(key_id: &str, key_type: &str) -> Result<KeyAgeSummary, CryptoError> {
-    // Load metadata for the key
     let metadata = load_metadata(key_id, key_type)?;
     
-    // Use the new helper methods for consistent calculations
-    let days_since_creation = metadata.key_age_days();
-    let days_since_rotation = metadata.days_since_rotation();
-    let days_until_next_rotation = metadata.days_until_rotation();
-    
-    // Determine if rotation is recommended
-    let rotation_recommended = days_until_next_rotation == 0;
-    
     Ok(KeyAgeSummary {
-        days_since_creation,
-        days_since_rotation,
-        days_until_next_rotation,
-        rotation_recommended,
+        days_since_creation: metadata.key_age_days(),
+        days_since_rotation: metadata.days_since_rotation(),
+        days_until_next_rotation: metadata.days_until_rotation(),
+        rotation_recommended: metadata.is_rotation_due(),
     })
 }
 
@@ -437,23 +553,51 @@ impl KeyAgeSummary {
 
 /// Get the age of all keys in days
 pub fn get_all_key_ages() -> Result<Vec<(String, String, KeyAgeSummary)>, CryptoError> {
-    let keys = storage::list_keys()?;
-    let mut results = Vec::new();
+    let dir = storage::get_key_storage_directory();
+    let mut summaries = Vec::new();
     
-    for (key_id, key_type) in keys {
-        match get_key_age(&key_id, &key_type) {
+    if !dir.exists() {
+        return Ok(Vec::new());
+    }
+    
+    let entries = fs::read_dir(&dir)
+        .map_err(|e| CryptoError::KeyManagementError(format!("Failed to read key directory: {}", e)))?;
+    
+    for entry in entries {
+        let entry = entry.map_err(|e| CryptoError::KeyManagementError(format!("Failed to read directory entry: {}", e)))?;
+        let path = entry.path();
+        
+        if !path.is_file() {
+            continue;
+        }
+        
+        let filename = path.file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("");
+        
+        if !filename.ends_with(".metadata") {
+            continue;
+        }
+        
+        // Parse key ID and type from filename
+        let parts: Vec<&str> = filename.split('.').collect();
+        if parts.len() < 3 {
+            continue;
+        }
+        
+        let key_id = parts[0];
+        let key_type = parts[1];
+        
+        // Get age summary for this key
+        match get_key_age(key_id, key_type) {
             Ok(summary) => {
-                results.push((key_id, key_type, summary));
+                summaries.push((key_id.to_string(), key_type.to_string(), summary));
             },
-            Err(_) => {
-                // If we can't get the age, create default metadata
-                let default_metadata = KeyRotationMetadata::new(RotationPolicy::default());
-                let _ = save_metadata(&key_id, &key_type, &default_metadata);
-            }
+            Err(_) => continue, // Skip keys with errors
         }
     }
     
-    Ok(results)
+    Ok(summaries)
 }
 
 // Helper function that takes a function to get the key storage directory
