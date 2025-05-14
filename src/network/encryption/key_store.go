@@ -17,6 +17,7 @@ const KeyStoreFile = "keys.json"
 
 // KeyInfo represents information about a stored key
 type KeyInfo struct {
+	ID         string    `json:"id"` // Unique identifier for the key
 	Algorithm  string    `json:"algorithm"`
 	PublicKey  []byte    `json:"public_key"`
 	PrivateKey []byte    `json:"private_key,omitempty"` // Only stored for local keys
@@ -89,79 +90,75 @@ func (ks *KeyStore) Save() error {
 	return os.WriteFile(ks.configPath, data, 0600) // More restrictive permissions for keys
 }
 
-// GenerateDefaultKeys generates the default key pairs for the local node
+// GenerateDefaultKeys generates default key pairs for the local peer
 func (ks *KeyStore) GenerateDefaultKeys() error {
-	// Generate a local peer identity for networking
-	_, pubKey, err := crypto.GenerateKeyPair(crypto.Ed25519, -1)
-	if err != nil {
-		return fmt.Errorf("failed to generate networking key: %w", err)
-	}
-
-	// Derive the peer ID from the public key
-	peerID, err := peer.IDFromPublicKey(pubKey)
-	if err != nil {
-		return fmt.Errorf("failed to derive peer ID: %w", err)
-	}
-
-	peerIDStr := peerID.String()
-
 	// Get the crypto provider
 	provider, err := GetCryptoProvider()
 	if err != nil {
 		return fmt.Errorf("failed to get crypto provider: %w", err)
 	}
 
-	// Generate a Kyber key pair for encryption
-	kyberKey, err := provider.GenerateKeyPair("kyber768")
+	// Get local peer ID
+	peerID, err := ks.GetMyPeerID()
+	if err != nil {
+		return fmt.Errorf("failed to get local peer ID: %w", err)
+	}
+
+	// Generate Kyber key pair
+	kyberKeyPair, err := provider.GenerateKeyPair("kyber768")
 	if err != nil {
 		return fmt.Errorf("failed to generate Kyber key pair: %w", err)
 	}
 
-	// Generate a Dilithium key pair for signing
-	dilithiumKey, err := provider.GenerateKeyPair("dilithium3")
+	// Generate Dilithium key pair
+	dilithiumKeyPair, err := provider.GenerateKeyPair("dilithium3")
 	if err != nil {
 		return fmt.Errorf("failed to generate Dilithium key pair: %w", err)
 	}
 
 	// Store the keys
 	ks.mutex.Lock()
-	defer ks.mutex.Unlock()
-
-	// Create map for this peer if it doesn't exist
-	if _, exists := ks.Keys[peerIDStr]; !exists {
-		ks.Keys[peerIDStr] = make(map[string]*KeyInfo)
+	if _, exists := ks.Keys[peerID]; !exists {
+		ks.Keys[peerID] = make(map[string]*KeyInfo)
 	}
 
-	// Store the Kyber key
-	ks.Keys[peerIDStr]["kyber768"] = &KeyInfo{
+	// Store Kyber key
+	ks.Keys[peerID]["kyber768"] = &KeyInfo{
+		ID:         fmt.Sprintf("%s-kyber768", peerID),
 		Algorithm:  "kyber768",
-		PublicKey:  kyberKey.PublicKey,
-		PrivateKey: kyberKey.PrivateKey,
-		PeerID:     peerIDStr,
+		PublicKey:  kyberKeyPair.PublicKey,
+		PrivateKey: kyberKeyPair.PrivateKey,
+		PeerID:     peerID,
 		CreatedAt:  time.Now(),
 		IsLocal:    true,
 	}
 
-	// Store the Dilithium key
-	ks.Keys[peerIDStr]["dilithium3"] = &KeyInfo{
+	// Store Dilithium key
+	ks.Keys[peerID]["dilithium3"] = &KeyInfo{
+		ID:         fmt.Sprintf("%s-dilithium3", peerID),
 		Algorithm:  "dilithium3",
-		PublicKey:  dilithiumKey.PublicKey,
-		PrivateKey: dilithiumKey.PrivateKey,
-		PeerID:     peerIDStr,
+		PublicKey:  dilithiumKeyPair.PublicKey,
+		PrivateKey: dilithiumKeyPair.PrivateKey,
+		PeerID:     peerID,
 		CreatedAt:  time.Now(),
 		IsLocal:    true,
 	}
+	ks.mutex.Unlock()
 
-	// Save the keys to disk
-	return ks.Save()
+	// Save to disk
+	if err := ks.Save(); err != nil {
+		return fmt.Errorf("failed to save default keys: %w", err)
+	}
+
+	return nil
 }
 
-// GetMyPeerID returns the peer ID of the local node
+// GetMyPeerID returns the local peer's ID
 func (ks *KeyStore) GetMyPeerID() (string, error) {
-	ks.mutex.RLock()
-	defer ks.mutex.RUnlock()
+	ks.mutex.Lock()
+	defer ks.mutex.Unlock()
 
-	// Find a local key
+	// Look for any local key to get the peer ID
 	for peerID, keys := range ks.Keys {
 		for _, key := range keys {
 			if key.IsLocal {
@@ -170,90 +167,125 @@ func (ks *KeyStore) GetMyPeerID() (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("no local keys found")
+	// If no local key found, generate a new peer ID
+	_, pubKey, err := crypto.GenerateKeyPair(crypto.Ed25519, -1)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate networking key: %w", err)
+	}
+
+	// Derive the peer ID from the public key
+	peerID, err := peer.IDFromPublicKey(pubKey)
+	if err != nil {
+		return "", fmt.Errorf("failed to derive peer ID: %w", err)
+	}
+
+	return peerID.String(), nil
 }
 
-// GetMyKeyPair returns a key pair for the local node
-func (ks *KeyStore) GetMyKeyPair(algorithm string) (KeyPair, error) {
+// GetMyKeyPair returns the local peer's key pair for the specified algorithm
+func (ks *KeyStore) GetMyKeyPair(algorithm string) (*KeyInfo, error) {
+	// Get local peer ID
 	peerID, err := ks.GetMyPeerID()
 	if err != nil {
-		return KeyPair{}, err
+		return nil, fmt.Errorf("failed to get local peer ID: %w", err)
 	}
 
-	ks.mutex.RLock()
-	defer ks.mutex.RUnlock()
-
-	// Get the key for this algorithm
-	if keys, exists := ks.Keys[peerID]; exists {
-		if key, found := keys[algorithm]; found && key.IsLocal {
-			return KeyPair{
-				PublicKey:  key.PublicKey,
-				PrivateKey: key.PrivateKey,
-				Algorithm:  algorithm,
-			}, nil
-		}
-	}
-
-	return KeyPair{}, fmt.Errorf("no local key found for algorithm: %s", algorithm)
-}
-
-// AddPeerKey adds a public key for a peer
-func (ks *KeyStore) AddPeerKey(peerID, algorithm string, publicKey []byte) error {
 	ks.mutex.Lock()
 	defer ks.mutex.Unlock()
 
-	// Create map for this peer if it doesn't exist
-	if _, exists := ks.Keys[peerID]; !exists {
-		ks.Keys[peerID] = make(map[string]*KeyInfo)
+	// Check if we have a key for this algorithm
+	if keys, exists := ks.Keys[peerID]; exists {
+		if key, exists := keys[algorithm]; exists && key.IsLocal {
+			return key, nil
+		}
+	}
+
+	// If no key found, generate a new one
+	ks.mutex.Unlock() // Release lock before generating key
+	keyInfo, err := ks.GenerateKey(algorithm)
+	ks.mutex.Lock() // Reacquire lock
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate new key: %w", err)
+	}
+
+	return keyInfo, nil
+}
+
+// AddPeerKey adds a peer's public key to the store
+func (ks *KeyStore) AddPeerKey(peerID, algorithm string, publicKey []byte) (*KeyInfo, error) {
+	// Create the key info
+	keyInfo := &KeyInfo{
+		ID:         fmt.Sprintf("%s-%s", peerID, algorithm),
+		Algorithm:  algorithm,
+		PublicKey:  publicKey,
+		PrivateKey: nil, // No private key for peer keys
+		PeerID:     peerID,
+		CreatedAt:  time.Now(),
+		IsLocal:    false,
 	}
 
 	// Store the key
-	ks.Keys[peerID][algorithm] = &KeyInfo{
-		Algorithm: algorithm,
-		PublicKey: publicKey,
-		PeerID:    peerID,
-		CreatedAt: time.Now(),
-		IsLocal:   false,
+	ks.mutex.Lock()
+	if _, exists := ks.Keys[peerID]; !exists {
+		ks.Keys[peerID] = make(map[string]*KeyInfo)
+	}
+	ks.Keys[peerID][algorithm] = keyInfo
+	ks.mutex.Unlock()
+
+	// Save to disk
+	if err := ks.Save(); err != nil {
+		return nil, fmt.Errorf("failed to save peer key: %w", err)
 	}
 
-	// Save the keys to disk
-	return ks.Save()
+	return keyInfo, nil
 }
 
-// GetPublicKey retrieves a public key for a peer and algorithm
+// GetPublicKey returns a peer's public key for the specified algorithm
 func (ks *KeyStore) GetPublicKey(peerID, algorithm string) ([]byte, error) {
-	ks.mutex.RLock()
-	defer ks.mutex.RUnlock()
+	ks.mutex.Lock()
+	defer ks.mutex.Unlock()
 
-	// Check if peer exists
-	keys, exists := ks.Keys[peerID]
-	if !exists {
-		return nil, fmt.Errorf("no keys found for peer: %s", peerID)
+	// Check if we have a key for this peer and algorithm
+	if keys, exists := ks.Keys[peerID]; exists {
+		if key, exists := keys[algorithm]; exists {
+			return key.PublicKey, nil
+		}
 	}
 
-	// Check if algorithm exists
-	key, found := keys[algorithm]
-	if !found {
-		return nil, fmt.Errorf("no key found for algorithm: %s", algorithm)
+	// If no key found and this is our peer ID, generate a new one
+	myPeerID, err := ks.GetMyPeerID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get local peer ID: %w", err)
+	}
+	if peerID == myPeerID {
+		ks.mutex.Unlock() // Release lock before generating key
+		keyInfo, err := ks.GenerateKey(algorithm)
+		ks.mutex.Lock() // Reacquire lock
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate new key: %w", err)
+		}
+		return keyInfo.PublicKey, nil
 	}
 
-	return key.PublicKey, nil
+	return nil, fmt.Errorf("no public key found for peer %s and algorithm %s", peerID, algorithm)
 }
 
-// HasPeerKey checks if a key exists for a peer and algorithm
+// HasPeerKey checks if we have a public key for a peer and algorithm
 func (ks *KeyStore) HasPeerKey(peerID, algorithm string) bool {
 	ks.mutex.RLock()
 	defer ks.mutex.RUnlock()
 
+	// Check if we have a key for this peer and algorithm
 	if keys, exists := ks.Keys[peerID]; exists {
-		_, found := keys[algorithm]
-		return found
+		if key, exists := keys[algorithm]; exists {
+			return !key.IsLocal // Only return true for peer keys
+		}
 	}
 
 	return false
 }
 
-// ListPeerIDs returns a list of all known peer IDs
+// ListPeerIDs returns a list of all peer IDs in the store
 func (ks *KeyStore) ListPeerIDs() []string {
 	ks.mutex.RLock()
 	defer ks.mutex.RUnlock()
@@ -271,20 +303,20 @@ func (ks *KeyStore) RemovePeer(peerID string) error {
 	ks.mutex.Lock()
 	defer ks.mutex.Unlock()
 
-	// Check if this is the local node
-	if keys, exists := ks.Keys[peerID]; exists {
-		for _, key := range keys {
-			if key.IsLocal {
-				return fmt.Errorf("cannot remove local node keys")
-			}
-		}
+	// Check if peer exists
+	if _, exists := ks.Keys[peerID]; !exists {
+		return fmt.Errorf("no keys found for peer: %s", peerID)
 	}
 
-	// Remove the peer
+	// Remove all keys for this peer
 	delete(ks.Keys, peerID)
 
-	// Save the keys to disk
-	return ks.Save()
+	// Save to disk
+	if err := ks.Save(); err != nil {
+		return fmt.Errorf("failed to save after removing peer: %w", err)
+	}
+
+	return nil
 }
 
 // GetKeyInfo retrieves the full key info for a peer and algorithm
@@ -307,18 +339,17 @@ func (ks *KeyStore) GetKeyInfo(peerID, algorithm string) (*KeyInfo, error) {
 	return key, nil
 }
 
-// AddLocalKey adds or updates a local key pair
-func (ks *KeyStore) AddLocalKey(peerID, algorithm string, publicKey, privateKey []byte) error {
-	ks.mutex.Lock()
-	defer ks.mutex.Unlock()
-
-	// Create map for this peer if it doesn't exist
-	if _, exists := ks.Keys[peerID]; !exists {
-		ks.Keys[peerID] = make(map[string]*KeyInfo)
+// AddLocalKey adds a local key to the store
+func (ks *KeyStore) AddLocalKey(algorithm string, publicKey, privateKey []byte) (*KeyInfo, error) {
+	// Get local peer ID
+	peerID, err := ks.GetMyPeerID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get local peer ID: %w", err)
 	}
 
-	// Store or update the key
-	ks.Keys[peerID][algorithm] = &KeyInfo{
+	// Create the key info
+	keyInfo := &KeyInfo{
+		ID:         fmt.Sprintf("%s-%s", peerID, algorithm),
 		Algorithm:  algorithm,
 		PublicKey:  publicKey,
 		PrivateKey: privateKey,
@@ -327,8 +358,20 @@ func (ks *KeyStore) AddLocalKey(peerID, algorithm string, publicKey, privateKey 
 		IsLocal:    true,
 	}
 
-	// Save the keys to disk
-	return ks.Save()
+	// Store the key
+	ks.mutex.Lock()
+	if _, exists := ks.Keys[peerID]; !exists {
+		ks.Keys[peerID] = make(map[string]*KeyInfo)
+	}
+	ks.Keys[peerID][algorithm] = keyInfo
+	ks.mutex.Unlock()
+
+	// Save to disk
+	if err := ks.Save(); err != nil {
+		return nil, fmt.Errorf("failed to save key: %w", err)
+	}
+
+	return keyInfo, nil
 }
 
 // ListKeys returns a list of all keys in the store
@@ -367,6 +410,7 @@ func (ks *KeyStore) GenerateKey(algorithm string) (*KeyInfo, error) {
 
 	// Create the key info
 	keyInfo := &KeyInfo{
+		ID:         fmt.Sprintf("%s-%s", peerID, algorithm),
 		Algorithm:  algorithm,
 		PublicKey:  keyPair.PublicKey,
 		PrivateKey: keyPair.PrivateKey,
@@ -419,10 +463,15 @@ func (ks *KeyStore) ExportKey(keyID string) ([]byte, error) {
 }
 
 // ImportKey imports a key from JSON format
-func (ks *KeyStore) ImportKey(data []byte) (*KeyInfo, error) {
+func (ks *KeyStore) ImportKey(keyData []byte) (*KeyInfo, error) {
 	var keyInfo KeyInfo
-	if err := json.Unmarshal(data, &keyInfo); err != nil {
-		return nil, fmt.Errorf("failed to parse key data: %w", err)
+	if err := json.Unmarshal(keyData, &keyInfo); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal key data: %w", err)
+	}
+
+	// Ensure ID is set
+	if keyInfo.ID == "" {
+		keyInfo.ID = fmt.Sprintf("%s-%s", keyInfo.PeerID, keyInfo.Algorithm)
 	}
 
 	// Store the key

@@ -110,7 +110,7 @@ func (krm *KeyRotationManager) RotateKey(algorithm string) error {
 
 	// Store the new key
 	now := time.Now()
-	if err := krm.keyStore.AddLocalKey(peerID, algorithm, newKey.PublicKey, newKey.PrivateKey); err != nil {
+	if _, err := krm.keyStore.AddLocalKey(peerID, newKey.PublicKey, newKey.PrivateKey); err != nil {
 		return fmt.Errorf("failed to store new key: %w", err)
 	}
 
