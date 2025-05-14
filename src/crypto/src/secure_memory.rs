@@ -294,7 +294,7 @@ impl AsMut<[u8]> for SecureBytes {
 /// - If the closure returns early via a `return` statement
 /// - If the closure panics
 /// - If an exception is thrown during execution
-///
+/// 
 /// # Example
 /// 
 /// ```
