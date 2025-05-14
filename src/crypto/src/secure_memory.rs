@@ -3,12 +3,45 @@
 //! This module provides utilities for secure memory operations, including
 //! securely zeroing memory, preventing memory from being swapped, and
 //! creating secure containers for sensitive data.
+//!
+//! The primary goal of these utilities is to minimize the exposure of sensitive
+//! cryptographic material (like keys, passwords, and plaintext) in memory, 
+//! reducing the risk of memory-based attacks such as cold boot attacks or 
+//! memory scanning by malicious processes.
 
 use std::ops::{Deref, DerefMut};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// A secure container for sensitive data that will be automatically
 /// zeroed when dropped, preventing the data from remaining in memory.
+///
+/// This generic container can hold any type that implements the Zeroize trait,
+/// ensuring that its contents are securely erased from memory when the
+/// container goes out of scope or is explicitly dropped.
+///
+/// # Type Parameters
+///
+/// * `T` - The type of data to store, which must implement Zeroize
+///
+/// # Security Properties
+///
+/// 1. The contained data is automatically zeroed when the container is dropped
+/// 2. If the container is cloned, each clone will independently zeroize its data
+/// 3. The container provides controlled access through Deref/DerefMut
+///
+/// # Example
+///
+/// ```
+/// use qasa_crypto::secure_memory::SecureBuffer;
+///
+/// // Create a secure buffer for a sensitive key
+/// let key = SecureBuffer::new(vec![1, 2, 3, 4, 5]);
+///
+/// // Use the key for cryptographic operations
+/// // ...
+///
+/// // When 'key' goes out of scope, it will be automatically zeroed
+/// ```
 #[derive(Clone, Debug, Zeroize, ZeroizeOnDrop)]
 pub struct SecureBuffer<T: Zeroize> {
     /// The contained sensitive data
@@ -17,14 +50,33 @@ pub struct SecureBuffer<T: Zeroize> {
 
 impl<T: Zeroize> SecureBuffer<T> {
     /// Create a new secure buffer containing the given data
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - The sensitive data to store in the secure buffer
+    ///
+    /// # Returns
+    ///
+    /// A new SecureBuffer containing the data
     pub fn new(data: T) -> Self {
         Self { inner: data }
     }
 
     /// Consume the secure buffer and return the contained data
     /// 
-    /// Note: After calling this method, it becomes the caller's responsibility
-    /// to properly handle and zeroize the sensitive data.
+    /// This method extracts the sensitive data from the secure buffer,
+    /// bypassing the automatic zeroing that would normally occur when the
+    /// buffer is dropped. This should only be used when absolutely necessary.
+    ///
+    /// # Security Considerations
+    ///
+    /// After calling this method, it becomes the caller's responsibility
+    /// to properly handle and zeroize the sensitive data. Failure to do so
+    /// may leave sensitive data in memory.
+    ///
+    /// # Returns
+    ///
+    /// The contained data, which the caller must now properly handle
     pub fn into_inner(mut self) -> T {
         // Use std::mem::replace to move out of self.inner without triggering Drop
         std::mem::replace(&mut self.inner, unsafe { std::mem::zeroed() })
@@ -47,6 +99,32 @@ impl<T: Zeroize> DerefMut for SecureBuffer<T> {
 
 /// A specialized SecureBuffer for byte arrays that adds additional
 /// functionality specific to cryptographic keys and other sensitive byte data.
+///
+/// SecureBytes provides a memory-safe container specifically optimized for
+/// handling sensitive binary data such as cryptographic keys, passwords, or
+/// plaintext messages. It automatically zeroes the memory when dropped.
+///
+/// # Security Properties
+///
+/// 1. Automatically zeroes memory when dropped
+/// 2. Prevents contents from being inadvertently logged or displayed
+/// 3. Provides controlled access to the underlying bytes
+/// 4. Implements Clone using secure copying
+///
+/// # Example
+///
+/// ```
+/// use qasa_crypto::secure_memory::SecureBytes;
+///
+/// // Store a sensitive key in secure memory
+/// let mut key = SecureBytes::new(&[0x01, 0x02, 0x03, 0x04]);
+///
+/// // Use the key for operations
+/// let key_bytes = key.as_bytes();
+/// // ... perform cryptographic operations
+///
+/// // When key goes out of scope, memory is securely zeroed
+/// ```
 #[derive(Clone, Zeroize, ZeroizeOnDrop)]
 pub struct SecureBytes {
     bytes: Vec<u8>,
@@ -54,6 +132,14 @@ pub struct SecureBytes {
 
 impl SecureBytes {
     /// Create a new SecureBytes with the given data
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - The sensitive byte data to securely store
+    ///
+    /// # Returns
+    ///
+    /// A new SecureBytes containing a copy of the provided data
     pub fn new(data: &[u8]) -> Self {
         Self {
             bytes: data.to_vec(),
@@ -61,6 +147,17 @@ impl SecureBytes {
     }
 
     /// Create a new SecureBytes with the given capacity
+    ///
+    /// This pre-allocates memory without initializing it, which is useful
+    /// when planning to fill the buffer later.
+    ///
+    /// # Arguments
+    ///
+    /// * `capacity` - The number of bytes to pre-allocate
+    ///
+    /// # Returns
+    ///
+    /// A new empty SecureBytes with the specified capacity
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             bytes: Vec::with_capacity(capacity),
@@ -68,40 +165,84 @@ impl SecureBytes {
     }
 
     /// Get a reference to the underlying bytes
+    ///
+    /// This provides read-only access to the sensitive data for operations
+    /// that need to use the raw bytes.
+    ///
+    /// # Returns
+    ///
+    /// A slice referring to the protected bytes
     pub fn as_bytes(&self) -> &[u8] {
         &self.bytes
     }
 
     /// Get a mutable reference to the underlying bytes
+    ///
+    /// This provides read-write access to the sensitive data for operations
+    /// that need to modify the raw bytes.
+    ///
+    /// # Returns
+    ///
+    /// A mutable slice referring to the protected bytes
     pub fn as_bytes_mut(&mut self) -> &mut [u8] {
         &mut self.bytes
     }
 
     /// Consume the container and return the contained bytes
     /// 
-    /// Note: After calling this method, it becomes the caller's responsibility
-    /// to properly handle and zeroize the sensitive data.
+    /// This method extracts the byte vector from the secure container,
+    /// bypassing the automatic zeroing that would occur when dropped.
+    /// This should only be used when absolutely necessary.
+    ///
+    /// # Security Considerations
+    ///
+    /// After calling this method, it becomes the caller's responsibility
+    /// to properly handle and zeroize the sensitive data. Failure to do so
+    /// may leave sensitive data in memory.
+    ///
+    /// # Returns
+    ///
+    /// The contained byte vector, which the caller must now properly handle
     pub fn into_vec(mut self) -> Vec<u8> {
         std::mem::replace(&mut self.bytes, Vec::new())
     }
     
     /// Append data to the end of the buffer
+    ///
+    /// This method adds additional data to the secure buffer, which may be
+    /// useful when accumulating sensitive data over multiple operations.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - The data to append to this buffer
     pub fn extend_from_slice(&mut self, data: &[u8]) {
         self.bytes.extend_from_slice(data);
     }
     
     /// Clear the buffer, securely zeroing all data
+    ///
+    /// This method zeroes and removes all data from the buffer while
+    /// preserving the allocated capacity. This is useful when reusing
+    /// a buffer for multiple operations with sensitive data.
     pub fn clear(&mut self) {
         self.bytes.zeroize();
         self.bytes.clear();
     }
     
-    /// Length of the buffer
+    /// Get the current length of the buffer in bytes
+    ///
+    /// # Returns
+    ///
+    /// The number of bytes currently stored in the buffer
     pub fn len(&self) -> usize {
         self.bytes.len()
     }
     
     /// Check if the buffer is empty
+    ///
+    /// # Returns
+    ///
+    /// `true` if the buffer contains no data, `false` otherwise
     pub fn is_empty(&self) -> bool {
         self.bytes.is_empty()
     }
@@ -137,6 +278,23 @@ impl AsMut<[u8]> for SecureBytes {
 /// sensitive data, ensuring the data is zeroized even if the function
 /// returns early or panics.
 /// 
+/// # Arguments
+///
+/// * `data` - A mutable reference to the sensitive data to be zeroized after use
+/// * `f` - A closure that will be executed with access to the sensitive data
+///
+/// # Returns
+///
+/// The result of executing the closure `f`
+///
+/// # Security Considerations
+///
+/// This function guarantees that the sensitive data will be zeroized:
+/// - After the closure successfully completes
+/// - If the closure returns early via a `return` statement
+/// - If the closure panics
+/// - If an exception is thrown during execution
+///
 /// # Example
 /// 
 /// ```

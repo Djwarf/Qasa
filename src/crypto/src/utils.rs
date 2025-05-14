@@ -4,17 +4,55 @@ use zeroize::Zeroize;
 
 use crate::error::CryptoError;
 
-/// Generate random bytes of the specified length
+/// Generate cryptographically secure random bytes of the specified length
+///
+/// This function uses the operating system's secure random number generator (OsRng)
+/// to generate cryptographically secure random bytes. It's suitable for generating
+/// keys, nonces, initialization vectors, and other cryptographic material.
+///
+/// # Arguments
+///
+/// * `length` - The number of random bytes to generate
+///
+/// # Returns
+///
+/// * `Ok(Vec<u8>)` - A vector containing the random bytes
+/// * `Err(CryptoError)` - If random generation fails
+///
+/// # Security Considerations
+///
+/// This function relies on the OS's entropy source, which should be secure for
+/// cryptographic purposes. The resulting bytes are suitable for sensitive
+/// cryptographic operations.
 pub fn random_bytes(length: usize) -> Result<Vec<u8>, CryptoError> {
     let mut bytes = vec![0u8; length];
     OsRng.fill_bytes(&mut bytes);
     Ok(bytes)
 }
 
-/// Constant-time comparison of two byte slices to avoid timing attacks
+/// Perform constant-time comparison of two byte slices to prevent timing attacks
 ///
-/// This function compares two byte slices in constant time to prevent
-/// timing attacks that could leak information about the content.
+/// This function compares two byte slices in constant time, meaning the time taken
+/// to perform the comparison is independent of the content of the slices.
+/// This helps prevent timing attacks that could extract secrets by measuring
+/// small differences in execution time.
+///
+/// # Arguments
+///
+/// * `a` - First byte slice
+/// * `b` - Second byte slice
+///
+/// # Returns
+///
+/// * `true` if the slices are equal
+/// * `false` if the slices differ in length or content
+///
+/// # Security Considerations
+///
+/// This function is designed to be resistant to timing attacks by using the
+/// subtle crate's constant-time comparison functions. It should be used when
+/// comparing sensitive data like MACs, signatures, or other values where
+/// timing information could leak secrets.
 pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     if a.len() != b.len() {
         return false;
@@ -25,20 +63,55 @@ pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     a.ct_eq(b).into()
 }
 
-/// Securely zero out sensitive data from memory
+/// Securely erase sensitive data from memory
 ///
-/// This function uses the zeroize crate to ensure the data is properly
-/// zeroed and not optimized away by the compiler.
+/// This function securely zeroes out sensitive data, ensuring that the zeroing
+/// operation is not optimized away by the compiler. This is crucial for sensitive
+/// information like cryptographic keys that should be removed from memory once
+/// they're no longer needed.
+///
+/// # Arguments
+///
+/// * `data` - Mutable slice of bytes to be zeroed
+///
+/// # Security Considerations
+///
+/// Uses the zeroize crate which implements secure zeroing that resists
+/// compiler optimizations which might remove "unnecessary" memory writes.
+/// This helps prevent secrets from being unintentionally left in memory.
 pub fn secure_zero(data: &mut [u8]) {
     data.zeroize();
 }
 
-/// Convert bytes to a hexadecimal string
+/// Convert a byte array to a hexadecimal string representation
+///
+/// This function converts a byte slice to a lowercase hexadecimal string,
+/// which is useful for debug output, log messages, or user display.
+///
+/// # Arguments
+///
+/// * `data` - The byte slice to convert
+///
+/// # Returns
+///
+/// A String containing the hexadecimal representation of the input bytes
 pub fn to_hex(data: &[u8]) -> String {
     data.iter().map(|b| format!("{:02x}", b)).collect()
 }
 
-/// Convert a hexadecimal string to bytes
+/// Convert a hexadecimal string to a byte array
+///
+/// This function parses a hexadecimal string and converts it to the corresponding
+/// bytes. It expects a valid hexadecimal string with an even number of characters.
+///
+/// # Arguments
+///
+/// * `hex` - The hexadecimal string to convert
+///
+/// # Returns
+///
+/// * `Ok(Vec<u8>)` - The parsed bytes
+/// * `Err(CryptoError)` - If the string has an odd length or contains invalid characters
 pub fn from_hex(hex: &str) -> Result<Vec<u8>, CryptoError> {
     if hex.len() % 2 != 0 {
         return Err(CryptoError::InvalidParameterError(
@@ -58,15 +131,43 @@ pub fn from_hex(hex: &str) -> Result<Vec<u8>, CryptoError> {
     Ok(result)
 }
 
-/// Securely compare two potentially sensitive strings in constant time
+/// Compare two strings in constant time to prevent timing attacks
 ///
-/// This is useful for comparing passwords, tokens, or other sensitive strings
-/// where timing attacks could be a concern.
+/// This function is a specialized wrapper around constant_time_eq for string
+/// comparisons. It's useful for comparing passwords, tokens, or other sensitive
+/// string data where timing attacks could be a concern.
+///
+/// # Arguments
+///
+/// * `a` - First string
+/// * `b` - Second string
+///
+/// # Returns
+///
+/// * `true` if the strings are equal
+/// * `false` if the strings are different
+///
+/// # Security Considerations
+///
+/// This function ensures that the comparison time does not depend on the
+/// content of the strings, which helps prevent timing attacks that could
+/// extract sensitive information by measuring execution time differences.
 pub fn secure_compare(a: &str, b: &str) -> bool {
     constant_time_eq(a.as_bytes(), b.as_bytes())
 }
 
-/// Concatenate multiple byte slices efficiently
+/// Efficiently concatenate multiple byte slices into a single vector
+///
+/// This function concatenates multiple byte slices into a single Vec<u8>,
+/// pre-allocating the exact amount of memory needed to avoid reallocations.
+///
+/// # Arguments
+///
+/// * `slices` - Slice of byte slices to concatenate
+///
+/// # Returns
+///
+/// A Vec<u8> containing all input slices concatenated in order
 pub fn concat_bytes(slices: &[&[u8]]) -> Vec<u8> {
     let total_len = slices.iter().map(|s| s.len()).sum();
     let mut result = Vec::with_capacity(total_len);
@@ -76,19 +177,27 @@ pub fn concat_bytes(slices: &[&[u8]]) -> Vec<u8> {
     result
 }
 
-/// Copy bytes from source to destination
+/// Safely copy bytes from one buffer to another using low-level memory operations
 ///
-/// This is a safe wrapper around ptr::copy_nonoverlapping for when
-/// you need to copy bytes between slices.
+/// This function provides a safe wrapper around the unsafe ptr::copy_nonoverlapping
+/// function, which allows for efficiently copying bytes between buffers. It performs
+/// bounds checking to ensure memory safety.
 ///
 /// # Arguments
 ///
 /// * `src` - Source byte slice
-/// * `dst` - Destination byte slice
+/// * `dst` - Destination mutable byte slice
 ///
 /// # Returns
 ///
-/// `Ok(())` if successful, or an error if dst is not large enough
+/// * `Ok(())` if the copy was successful
+/// * `Err(CryptoError)` if the destination buffer is too small to hold the source data
+///
+/// # Security Considerations
+///
+/// This function ensures safe memory operations by checking bounds before
+/// performing the copy. The underlying implementation uses ptr::copy_nonoverlapping,
+/// which is typically more efficient than a loop-based copy.
 pub fn copy_bytes(src: &[u8], dst: &mut [u8]) -> Result<(), CryptoError> {
     if dst.len() < src.len() {
         return Err(CryptoError::InvalidParameterError(

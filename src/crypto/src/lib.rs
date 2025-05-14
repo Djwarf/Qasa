@@ -48,12 +48,33 @@ pub use kyber::KyberPublicKey;
 pub use kyber::KyberVariant;
 
 /// Initialize the cryptography module.
+/// 
 /// This function should be called before using any cryptographic functions.
 /// It performs any necessary setup for the underlying cryptographic libraries.
+///
+/// While currently no special initialization is needed, this function provides
+/// a consistent API that can accommodate future initialization requirements
+/// for cryptographic backends.
 ///
 /// # Returns
 ///
 /// `Ok(())` if initialization is successful, or an error if initialization fails
+///
+/// # Example
+///
+/// ```
+/// use qasa_crypto::prelude::*;
+///
+/// fn main() -> Result<(), CryptoError> {
+///     // Initialize the cryptography module
+///     init()?;
+///     
+///     // Now safe to use cryptographic functions
+///     // ...
+///     
+///     Ok(())
+/// }
+/// ```
 pub fn init() -> Result<(), CryptoError> {
     // Currently, no special initialization is needed, but this function exists
     // to provide a consistent API that can accommodate future requirements
@@ -115,6 +136,13 @@ pub mod prelude {
     /// # Returns
     /// 
     /// The encrypted and signed message package, or an error
+    ///
+    /// # Security Properties
+    ///
+    /// 1. Uses post-quantum key encapsulation for forward secrecy
+    /// 2. Applies authenticated encryption for message confidentiality and integrity
+    /// 3. Signs the encrypted message to provide sender authentication
+    /// 4. Protects against both classical and quantum attacks
     pub fn create_secure_message(
         message: &[u8],
         recipient_public_key: &crate::kyber::KyberPublicKey,
@@ -165,6 +193,13 @@ pub mod prelude {
     /// # Returns
     /// 
     /// The decrypted plaintext message, or an error
+    ///
+    /// # Security Properties
+    ///
+    /// 1. Verifies the sender's signature before attempting decryption
+    /// 2. Fails immediately if signature verification fails, preventing oracle attacks
+    /// 3. Uses post-quantum secure algorithms for all cryptographic operations
+    /// 4. Provides authentication, integrity and confidentiality
     pub fn open_secure_message(
         encrypted_message: &[u8],
         recipient_private_key: &crate::kyber::KyberKeyPair,
@@ -274,19 +309,34 @@ mod tests {
     }
 }
 
-/// Function to encrypt a message for a specific recipient
+/// Encrypt a message for a specific recipient using hybrid encryption
 /// 
-/// This is a convenience function that combines Kyber KEM for key exchange
-/// and AES-GCM for encryption to simplify the encryption process.
+/// This function combines Kyber KEM (Key Encapsulation Mechanism) for key exchange
+/// and AES-GCM for symmetric encryption to provide post-quantum secure message encryption.
+/// First, a shared secret is established using the recipient's public key, then
+/// the message is encrypted using AES-GCM with that shared secret.
 ///
 /// # Arguments
 ///
-/// * `message` - The message to encrypt
+/// * `message` - The plaintext message to encrypt
 /// * `recipient_public_key` - The recipient's Kyber public key
 ///
 /// # Returns
 ///
-/// A tuple containing (ciphertext, encapsulated_key, nonce) or an error
+/// A tuple containing:
+/// * `encrypted_message` - The AES-encrypted message
+/// * `encapsulated_key` - The Kyber-encapsulated key that must be sent alongside the message
+/// * `nonce` - The nonce used for AES-GCM encryption
+///
+/// # Errors
+///
+/// Returns an error if key encapsulation fails or if encryption fails
+///
+/// # Security Properties
+///
+/// 1. Post-quantum secure key encapsulation using Kyber
+/// 2. Authenticated encryption via AES-GCM
+/// 3. Unique key for each message (forward secrecy)
 pub fn encrypt_message(
     message: &[u8],
     recipient_public_key: &kyber::KyberPublicKey,
@@ -300,21 +350,32 @@ pub fn encrypt_message(
     Ok((encrypted_message, encapsulated_key, nonce))
 }
 
-/// Function to decrypt a message received from a sender
+/// Decrypt a message received from a sender using hybrid decryption
 ///
-/// This is a convenience function that combines Kyber KEM for key recovery
-/// and AES-GCM for decryption to simplify the decryption process.
+/// This function recovers the shared secret from the encapsulated key using the
+/// recipient's private key, then uses that shared secret to decrypt the message
+/// with AES-GCM.
 ///
 /// # Arguments
 ///
-/// * `encrypted_message` - The encrypted message
-/// * `encapsulated_key` - The encapsulated key from the sender
-/// * `nonce` - The nonce used for encryption
-/// * `my_keypair` - Your Kyber key pair
+/// * `encrypted_message` - The AES-encrypted message
+/// * `encapsulated_key` - The Kyber-encapsulated key received from the sender
+/// * `nonce` - The nonce used for AES-GCM encryption
+/// * `my_keypair` - The recipient's Kyber key pair containing the private key
 ///
 /// # Returns
 ///
-/// The decrypted message or an error
+/// The decrypted plaintext message if successful
+///
+/// # Errors
+///
+/// Returns an error if key decapsulation fails or if decryption fails
+/// (which can happen if the message was tampered with or corrupted)
+///
+/// # Security Properties
+///
+/// 1. Authenticated decryption that verifies message integrity and authenticity
+/// 2. Post-quantum secure key recovery
 pub fn decrypt_message(
     encrypted_message: &[u8],
     encapsulated_key: &[u8],
@@ -330,16 +391,30 @@ pub fn decrypt_message(
     Ok(plaintext)
 }
 
-/// Function to sign a message
+/// Sign a message using post-quantum digital signature
+///
+/// This function creates a Dilithium digital signature for a message using the
+/// provided private key. The signature can later be verified to ensure the message
+/// came from the owner of the private key and was not modified.
 ///
 /// # Arguments
 ///
 /// * `message` - The message to sign
-/// * `signing_key` - Your Dilithium key pair
+/// * `signing_key` - The Dilithium key pair containing the private key
 ///
 /// # Returns
 ///
-/// The signature or an error
+/// The Dilithium signature for the message
+///
+/// # Errors
+///
+/// Returns an error if signature generation fails
+///
+/// # Security Properties
+///
+/// 1. Post-quantum secure digital signature using Dilithium
+/// 2. Provides authenticity and integrity verification
+/// 3. Non-repudiation (signer cannot deny having signed the message)
 pub fn sign_message(
     message: &[u8],
     signing_key: &dilithium::DilithiumKeyPair,
@@ -347,7 +422,11 @@ pub fn sign_message(
     signing_key.sign(message)
 }
 
-/// Function to verify a signed message
+/// Verify a signed message using post-quantum digital signature
+///
+/// This function verifies a Dilithium digital signature against a message and
+/// public key to confirm that the message was signed by the owner of the 
+/// corresponding private key and has not been modified.
 ///
 /// # Arguments
 ///
@@ -357,7 +436,14 @@ pub fn sign_message(
 ///
 /// # Returns
 ///
-/// `true` if the signature is valid, `false` otherwise, or an error
+/// * `Ok(true)` if the signature is valid for the message and public key
+/// * `Ok(false)` if the signature is invalid
+/// * `Err(CryptoError)` if an error occurs during verification
+///
+/// # Security Properties
+///
+/// 1. Post-quantum secure signature verification using Dilithium
+/// 2. Verifies both authenticity (who created the message) and integrity (message not modified)
 pub fn verify_message(
     message: &[u8],
     signature: &[u8],
@@ -366,17 +452,36 @@ pub fn verify_message(
     sender_verify_key.verify(message, signature)
 }
 
-/// Function to encrypt and sign a message in one operation
+/// Encrypt and sign a message in one operation for secure communication
+///
+/// This function combines encryption and signing to provide a complete secure
+/// messaging solution with confidentiality, integrity, and authenticity. It first
+/// encrypts the message for the recipient, then signs the encrypted package to
+/// prove the sender's identity.
 ///
 /// # Arguments
 ///
-/// * `message` - The message to encrypt and sign
-/// * `recipient_public_key` - The recipient's Kyber public key
-/// * `signing_key` - Your Dilithium key pair
+/// * `message` - The plaintext message to encrypt and sign
+/// * `recipient_public_key` - The recipient's Kyber public key for encryption
+/// * `signing_key` - The sender's Dilithium key pair for signing
 ///
 /// # Returns
 ///
-/// A tuple containing (encrypted_message, encapsulated_key, nonce, signature) or an error
+/// A tuple containing:
+/// * `encrypted_message` - The AES-encrypted message
+/// * `encapsulated_key` - The Kyber-encapsulated key
+/// * `nonce` - The nonce used for AES-GCM encryption
+/// * `signature` - The Dilithium signature of the combined encrypted data
+///
+/// # Errors
+///
+/// Returns an error if encryption or signing fails
+///
+/// # Security Properties
+///
+/// 1. Combines confidentiality (encryption) with authenticity and integrity (signing)
+/// 2. Signs the encrypted message rather than the plaintext, preventing signature-based oracles
+/// 3. Uses post-quantum secure algorithms for all cryptographic operations
 pub fn encrypt_and_sign_message(
     message: &[u8],
     recipient_public_key: &kyber::KyberPublicKey,
@@ -396,20 +501,37 @@ pub fn encrypt_and_sign_message(
     Ok((encrypted_message, encapsulated_key, nonce, signature))
 }
 
-/// Function to decrypt and verify a signed and encrypted message
+/// Decrypt and verify a signed and encrypted message
+///
+/// This function verifies the signature on an encrypted message package and, if valid,
+/// decrypts the message. This ensures the message came from the expected sender and
+/// has not been tampered with before decryption.
 ///
 /// # Arguments
 ///
-/// * `encrypted_message` - The encrypted message
-/// * `encapsulated_key` - The encapsulated key
-/// * `nonce` - The nonce used for encryption
-/// * `signature` - The signature to verify
-/// * `my_keypair` - Your Kyber key pair
-/// * `sender_verify_key` - The sender's Dilithium public key
+/// * `encrypted_message` - The AES-encrypted message
+/// * `encapsulated_key` - The Kyber-encapsulated key
+/// * `nonce` - The nonce used for AES-GCM encryption
+/// * `signature` - The Dilithium signature to verify
+/// * `my_keypair` - The recipient's Kyber key pair for decryption
+/// * `sender_verify_key` - The sender's Dilithium public key for verification
 ///
 /// # Returns
 ///
-/// The decrypted message if the signature is valid, or an error
+/// The decrypted plaintext message if the signature is valid
+///
+/// # Errors
+///
+/// Returns an error if:
+/// * The signature is invalid (message may be tampered with or from an impostor)
+/// * Decryption fails (malformed message)
+/// * Any cryptographic operation fails
+///
+/// # Security Properties
+///
+/// 1. Verifies the message's integrity and authenticity before attempting decryption
+/// 2. Prevents attacks that might use decryption as an oracle
+/// 3. Provides complete end-to-end security with post-quantum algorithms
 pub fn decrypt_and_verify_message(
     encrypted_message: &[u8],
     encapsulated_key: &[u8],

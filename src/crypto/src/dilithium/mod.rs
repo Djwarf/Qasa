@@ -5,10 +5,10 @@
  * as standardized by NIST for post-quantum cryptography.
  */
 
-mod impl_dilithium;
+mod dilithium;
 mod optimizations;
 
-pub use impl_dilithium::*;
+pub use dilithium::*;
 pub use optimizations::LeanDilithium;
 
 #[cfg(test)]

@@ -5,9 +5,9 @@
  * as standardized by NIST for post-quantum cryptography.
  */
 
-mod impl_kyber;
+mod kyber;
 
-pub use impl_kyber::*;
+pub use kyber::*;
 
 #[cfg(test)]
 mod tests;

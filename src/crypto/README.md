@@ -7,14 +7,14 @@ This module implements post-quantum cryptographic primitives for the QaSa secure
 The cryptography module is organised into the following sub-modules:
 
 - **kyber**: CRYSTALS-Kyber implementation for quantum-resistant key encapsulation
-  - `impl_kyber.rs`: Core implementation of the Kyber algorithm
+  - `kyber.rs`: Core implementation of the Kyber algorithm
 
 - **dilithium**: CRYSTALS-Dilithium implementation for quantum-resistant digital signatures
-  - `impl_dilithium.rs`: Core implementation of the Dilithium algorithm
+  - `dilithium.rs`: Core implementation of the Dilithium algorithm
   - `optimizations.rs`: Performance optimisations for resource-constrained environments
 
 - **aes**: AES-GCM implementation for symmetric encryption
-  - `impl_aes.rs`: Core implementation of AES-GCM encryption/decryption
+  - `aes.rs`: Core implementation of AES-GCM encryption/decryption
 
 - **key_management**: Key management system for storing and loading keys
   - `storage.rs`: Functions for securely storing and loading keys

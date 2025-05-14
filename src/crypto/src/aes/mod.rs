@@ -5,9 +5,9 @@
  * used alongside the post-quantum algorithms.
  */
 
-mod impl_aes;
+mod aes;
 
-pub use impl_aes::*;
+pub use aes::*;
 
 #[cfg(test)]
 mod tests;

@@ -12,6 +12,16 @@ use crate::utils;
 use crate::secure_memory::SecureBytes;
 
 /// Derived key data, including the key itself and the salt used to generate it
+///
+/// This structure contains the output of a password-based key derivation function
+/// along with the salt that was used to derive it. Both pieces are needed to 
+/// verify passwords and to derive the same key again.
+///
+/// # Security Properties
+///
+/// 1. Implements secure memory handling through Zeroize and ZeroizeOnDrop
+/// 2. Automatically zeroes memory when dropped to prevent key material leakage
+/// 3. Can be safely cloned with independent zeroization of each instance
 #[derive(Debug, Clone, Zeroize, ZeroizeOnDrop)]
 pub struct DerivedKey {
     /// The derived key
@@ -21,6 +31,17 @@ pub struct DerivedKey {
 }
 
 /// Parameters for key derivation
+///
+/// This structure defines the computational parameters for the Argon2id
+/// password hashing algorithm. These parameters control the security/performance
+/// tradeoff of the key derivation process.
+///
+/// # Security Considerations
+///
+/// 1. Higher memory and time costs provide better security against brute force attacks
+/// 2. Parameters should be tuned based on the security requirements and hardware constraints
+/// 3. For sensitive keys, use the high_security_params() preset
+/// 4. For resource-constrained environments, use low_resource_params() preset
 #[derive(Debug, Clone)]
 pub struct KeyDerivationParams {
     /// Memory cost (in KB)
@@ -45,7 +66,22 @@ impl Default for KeyDerivationParams {
     }
 }
 
-/// Low-resource mode for constrained environments
+/// Get key derivation parameters optimized for constrained environments
+///
+/// This function returns parameters suitable for resource-constrained environments
+/// such as embedded devices, mobile phones, or systems with limited memory.
+/// These parameters provide a reasonable security margin while minimizing
+/// resource usage.
+///
+/// # Returns
+///
+/// KeyDerivationParams with reduced memory and CPU requirements
+///
+/// # Security Considerations
+///
+/// While these parameters provide acceptable security for most uses, they
+/// offer less protection against brute force attacks compared to the default
+/// or high-security parameters. Use only when resource constraints are significant.
 pub fn low_resource_params() -> KeyDerivationParams {
     KeyDerivationParams {
         memory_cost: 19456, // 19 MB
@@ -55,7 +91,21 @@ pub fn low_resource_params() -> KeyDerivationParams {
     }
 }
 
-/// High-security mode for sensitive keys
+/// Get key derivation parameters optimized for high-security applications
+///
+/// This function returns parameters suitable for high-security environments
+/// where protection of sensitive keys is paramount and computational resources
+/// are abundant.
+///
+/// # Returns
+///
+/// KeyDerivationParams with increased memory and CPU requirements for maximum security
+///
+/// # Security Considerations
+///
+/// These parameters are designed to make brute-force attacks computationally
+/// expensive, but will require more system resources during key derivation.
+/// Suitable for deriving master keys or keys protecting highly sensitive data.
 pub fn high_security_params() -> KeyDerivationParams {
     KeyDerivationParams {
         memory_cost: 262144, // 256 MB
@@ -65,7 +115,21 @@ pub fn high_security_params() -> KeyDerivationParams {
     }
 }
 
-/// Helper function to derive a key using common parameters
+/// Internal helper function to derive a key using common parameters
+///
+/// This is an internal function that implements the core key derivation logic
+/// using Argon2id. It is used by the public key derivation functions and
+/// should not be called directly by most users.
+///
+/// # Arguments
+///
+/// * `password` - The password bytes to derive a key from
+/// * `salt` - The salt bytes to use in derivation
+/// * `params` - The parameters controlling the derivation process
+///
+/// # Returns
+///
+/// The derived key bytes or an error
 fn derive_key_internal(
     password: &[u8],
     salt: &[u8],
@@ -110,17 +174,41 @@ fn derive_key_internal(
     Ok(key_buffer)
 }
 
-/// Derives a key from a password
+/// Derives a cryptographic key from a password using Argon2id
+///
+/// This function performs secure password-based key derivation using the
+/// Argon2id algorithm, which is designed to be resistant to both side-channel
+/// attacks and specialized hardware attacks. The resulting key can be used
+/// for encryption, authentication, or other cryptographic purposes.
 ///
 /// # Arguments
 ///
-/// * `password` - The password to derive a key from
-/// * `salt` - Optional salt to use (generates a new one if None)
+/// * `password` - The user password to derive a key from
+/// * `salt` - Optional salt to use (generates a new random salt if None)
 /// * `params` - Optional parameters for key derivation (uses defaults if None)
 ///
 /// # Returns
 ///
-/// A DerivedKey containing the derived key and salt used
+/// A DerivedKey containing the derived key and salt used, or an error
+///
+/// # Security Considerations
+///
+/// 1. The password is handled securely using SecureBytes to prevent memory leaks
+/// 2. Uses Argon2id, a memory-hard function resistant to GPU/ASIC acceleration
+/// 3. Generates a cryptographically secure random salt if none is provided
+/// 4. The default parameters provide a good balance of security and performance
+///
+/// # Example
+///
+/// ```
+/// use qasa_crypto::key_management::derive_key_from_password;
+///
+/// // Derive a key with default parameters and a new random salt
+/// let derived_key = derive_key_from_password("secure_user_password", None, None).unwrap();
+///
+/// // The derived key can now be used for encryption or other purposes
+/// // The salt should be stored alongside the key for password verification
+/// ```
 pub fn derive_key_from_password(
     password: &str,
     salt: Option<&[u8]>,
@@ -155,7 +243,12 @@ pub fn derive_key_from_password(
     })
 }
 
-/// Verifies a password against a derived key
+/// Verifies a password against a previously derived key
+///
+/// This function checks if a provided password matches the one that was used
+/// to create a derived key. It does this by performing the same key derivation
+/// process with the provided password and stored salt, then comparing the result
+/// with the stored key using a constant-time comparison to prevent timing attacks.
 ///
 /// # Arguments
 ///
@@ -165,7 +258,31 @@ pub fn derive_key_from_password(
 ///
 /// # Returns
 ///
-/// `Ok(true)` if the password matches, `Ok(false)` if not, or an error
+/// * `Ok(true)` if the password matches
+/// * `Ok(false)` if the password does not match
+/// * `Err(CryptoError)` if an error occurs during verification
+///
+/// # Security Considerations
+///
+/// 1. Uses constant-time comparison to prevent timing attacks
+/// 2. Handles the password securely using SecureBytes
+/// 3. Uses the same parameters and salt as the original key derivation
+///
+/// # Example
+///
+/// ```
+/// use qasa_crypto::key_management::{derive_key_from_password, verify_password};
+///
+/// // First derive a key from a password
+/// let original_key = derive_key_from_password("user_password", None, None).unwrap();
+///
+/// // Later, verify a password against the stored key
+/// let is_valid = verify_password("user_password", &original_key, None).unwrap();
+/// assert!(is_valid); // Password matches
+///
+/// let is_valid = verify_password("wrong_password", &original_key, None).unwrap();
+/// assert!(!is_valid); // Password doesn't match
+/// ```
 pub fn verify_password(
     password: &str,
     derived_key: &DerivedKey,
@@ -191,20 +308,35 @@ pub fn verify_password(
     Ok(result)
 }
 
-/// Generates a cryptographically secure random salt
+/// Generates a cryptographically secure random salt for key derivation
+///
+/// Salts are critical for password-based key derivation to prevent
+/// precomputation attacks like rainbow tables. This function generates
+/// a secure random salt of the specified length.
 ///
 /// # Arguments
 ///
-/// * `length` - Length of the salt in bytes
+/// * `length` - Length of the salt in bytes (recommended: at least 16 bytes)
 ///
 /// # Returns
 ///
-/// A vector containing the random salt
+/// A vector containing the random salt, or an error
+///
+/// # Security Considerations
+///
+/// 1. Uses a cryptographically secure random number generator
+/// 2. Salt should be stored alongside the derived key
+/// 3. Each user should have a unique salt
+/// 4. Each key derivation should use a fresh salt when possible
 pub fn generate_salt(length: usize) -> Result<Vec<u8>, CryptoError> {
     utils::random_bytes(length)
 }
 
-/// Changes the password for a derived key
+/// Changes the password for an existing derived key
+///
+/// This function allows securely changing the password for an existing key
+/// by first verifying the old password, then deriving a new key with the
+/// new password and a fresh salt.
 ///
 /// # Arguments
 ///
@@ -216,6 +348,33 @@ pub fn generate_salt(length: usize) -> Result<Vec<u8>, CryptoError> {
 /// # Returns
 ///
 /// A new DerivedKey if successful, or an error if the old password is incorrect
+///
+/// # Security Considerations
+///
+/// 1. Verifies the old password before allowing the change
+/// 2. Generates a new random salt for the new key
+/// 3. The new key is derived with the same security parameters as the old one
+/// 4. Passwords are handled securely in memory
+///
+/// # Example
+///
+/// ```
+/// use qasa_crypto::key_management::{derive_key_from_password, change_password};
+///
+/// // First derive a key from the original password
+/// let original_key = derive_key_from_password("old_password", None, None).unwrap();
+///
+/// // Change the password
+/// let new_key = change_password(
+///     "old_password",
+///     "new_stronger_password",
+///     &original_key,
+///     None
+/// ).unwrap();
+///
+/// // The new_key now contains the same cryptographic material but protected by
+/// // the new password and a fresh salt
+/// ```
 pub fn change_password(
     old_password: &str,
     new_password: &str,
