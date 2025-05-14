@@ -13,6 +13,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
 	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
+	"github.com/multiformats/go-multiaddr"
 
 	"github.com/qasa/network/discovery"
 	"github.com/qasa/network/reputation"
@@ -456,4 +457,73 @@ func (n *Node) GetPeerLocation(peerID peer.ID) (*discovery.GeoLocation, error) {
 // GetConfigDir returns the configuration directory path used by the node
 func (n *Node) GetConfigDir() string {
 	return n.configDir
+}
+
+// EnableMDNS enables the mDNS discovery service
+func (n *Node) EnableMDNS() error {
+	if n.mdnsService != nil {
+		return nil // Already enabled
+	}
+
+	mdnsService, err := discovery.NewMDNSService(n.ctx, n.host)
+	if err != nil {
+		return fmt.Errorf("failed to create mDNS discovery service: %w", err)
+	}
+
+	n.mdnsService = mdnsService
+	mdnsService.Start()
+	return nil
+}
+
+// DisableMDNS disables the mDNS discovery service
+func (n *Node) DisableMDNS() {
+	if n.mdnsService != nil {
+		n.mdnsService.Stop()
+		n.mdnsService = nil
+	}
+}
+
+// EnableDHT enables the DHT discovery service
+func (n *Node) EnableDHT() error {
+	if n.dhtService != nil {
+		return nil // Already enabled
+	}
+
+	// Get bootstrap multiaddresses
+	var bootstrapAddrs []multiaddr.Multiaddr
+	if n.bootstrapList != nil {
+		var err error
+		bootstrapAddrs, err = n.bootstrapList.GetNodes()
+		if err != nil {
+			fmt.Printf("Warning: Failed to get bootstrap nodes: %s\n", err)
+		}
+	}
+
+	// Create the DHT service
+	dhtService, err := discovery.NewDHTService(n.ctx, n.host, bootstrapAddrs)
+	if err != nil {
+		return fmt.Errorf("failed to create DHT discovery service: %w", err)
+	}
+
+	n.dhtService = dhtService
+
+	// Start the DHT service
+	if err := dhtService.Start(); err != nil {
+		n.dhtService = nil
+		return fmt.Errorf("failed to start DHT discovery service: %w", err)
+	}
+
+	// Start a goroutine to handle discovered peers
+	go n.handleDHTDiscoveredPeers()
+	return nil
+}
+
+// DisableDHT disables the DHT discovery service
+func (n *Node) DisableDHT() {
+	if n.dhtService != nil {
+		if err := n.dhtService.Stop(); err != nil {
+			fmt.Printf("Error stopping DHT service: %s\n", err)
+		}
+		n.dhtService = nil
+	}
 }

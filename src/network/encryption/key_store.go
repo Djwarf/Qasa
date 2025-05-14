@@ -330,3 +330,204 @@ func (ks *KeyStore) AddLocalKey(peerID, algorithm string, publicKey, privateKey 
 	// Save the keys to disk
 	return ks.Save()
 }
+
+// ListKeys returns a list of all keys in the store
+func (ks *KeyStore) ListKeys() ([]*KeyInfo, error) {
+	ks.mutex.RLock()
+	defer ks.mutex.RUnlock()
+
+	var keys []*KeyInfo
+	for _, peerKeys := range ks.Keys {
+		for _, key := range peerKeys {
+			keys = append(keys, key)
+		}
+	}
+	return keys, nil
+}
+
+// GenerateKey generates a new key pair for the specified algorithm
+func (ks *KeyStore) GenerateKey(algorithm string) (*KeyInfo, error) {
+	// Get the crypto provider
+	provider, err := GetCryptoProvider()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get crypto provider: %w", err)
+	}
+
+	// Generate the key pair
+	keyPair, err := provider.GenerateKeyPair(algorithm)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate key pair: %w", err)
+	}
+
+	// Get local peer ID
+	peerID, err := ks.GetMyPeerID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get local peer ID: %w", err)
+	}
+
+	// Create the key info
+	keyInfo := &KeyInfo{
+		Algorithm:  algorithm,
+		PublicKey:  keyPair.PublicKey,
+		PrivateKey: keyPair.PrivateKey,
+		PeerID:     peerID,
+		CreatedAt:  time.Now(),
+		IsLocal:    true,
+	}
+
+	// Store the key
+	ks.mutex.Lock()
+	if _, exists := ks.Keys[peerID]; !exists {
+		ks.Keys[peerID] = make(map[string]*KeyInfo)
+	}
+	ks.Keys[peerID][algorithm] = keyInfo
+	ks.mutex.Unlock()
+
+	// Save to disk
+	if err := ks.Save(); err != nil {
+		return nil, fmt.Errorf("failed to save key: %w", err)
+	}
+
+	return keyInfo, nil
+}
+
+// ExportKey exports a key to a JSON format
+func (ks *KeyStore) ExportKey(keyID string) ([]byte, error) {
+	ks.mutex.RLock()
+	defer ks.mutex.RUnlock()
+
+	// Find the key
+	var keyInfo *KeyInfo
+	for _, peerKeys := range ks.Keys {
+		for _, key := range peerKeys {
+			if key.PeerID == keyID {
+				keyInfo = key
+				break
+			}
+		}
+		if keyInfo != nil {
+			break
+		}
+	}
+
+	if keyInfo == nil {
+		return nil, fmt.Errorf("key not found: %s", keyID)
+	}
+
+	// Export the key
+	return json.MarshalIndent(keyInfo, "", "  ")
+}
+
+// ImportKey imports a key from JSON format
+func (ks *KeyStore) ImportKey(data []byte) (*KeyInfo, error) {
+	var keyInfo KeyInfo
+	if err := json.Unmarshal(data, &keyInfo); err != nil {
+		return nil, fmt.Errorf("failed to parse key data: %w", err)
+	}
+
+	// Store the key
+	ks.mutex.Lock()
+	if _, exists := ks.Keys[keyInfo.PeerID]; !exists {
+		ks.Keys[keyInfo.PeerID] = make(map[string]*KeyInfo)
+	}
+	ks.Keys[keyInfo.PeerID][keyInfo.Algorithm] = &keyInfo
+	ks.mutex.Unlock()
+
+	// Save to disk
+	if err := ks.Save(); err != nil {
+		return nil, fmt.Errorf("failed to save imported key: %w", err)
+	}
+
+	return &keyInfo, nil
+}
+
+// DeleteKey deletes a key from the store
+func (ks *KeyStore) DeleteKey(keyID string) error {
+	ks.mutex.Lock()
+	defer ks.mutex.Unlock()
+
+	// Find and delete the key
+	for peerID, peerKeys := range ks.Keys {
+		for algorithm, key := range peerKeys {
+			if key.PeerID == keyID {
+				delete(peerKeys, algorithm)
+				if len(peerKeys) == 0 {
+					delete(ks.Keys, peerID)
+				}
+				return ks.Save()
+			}
+		}
+	}
+
+	return fmt.Errorf("key not found: %s", keyID)
+}
+
+// RotateKey rotates a key by generating a new one
+func (ks *KeyStore) RotateKey(keyID string) (*KeyInfo, error) {
+	// Find the old key
+	ks.mutex.RLock()
+	var oldKey *KeyInfo
+	for _, peerKeys := range ks.Keys {
+		for _, key := range peerKeys {
+			if key.PeerID == keyID {
+				oldKey = key
+				break
+			}
+		}
+		if oldKey != nil {
+			break
+		}
+	}
+	ks.mutex.RUnlock()
+
+	if oldKey == nil {
+		return nil, fmt.Errorf("key not found: %s", keyID)
+	}
+
+	// Generate a new key
+	newKey, err := ks.GenerateKey(oldKey.Algorithm)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate new key: %w", err)
+	}
+
+	// Delete the old key
+	if err := ks.DeleteKey(keyID); err != nil {
+		return nil, fmt.Errorf("failed to delete old key: %w", err)
+	}
+
+	return newKey, nil
+}
+
+// BackupKeys exports all keys to a JSON format
+func (ks *KeyStore) BackupKeys() ([]byte, error) {
+	ks.mutex.RLock()
+	defer ks.mutex.RUnlock()
+
+	return json.MarshalIndent(ks.Keys, "", "  ")
+}
+
+// RestoreKeys imports all keys from a JSON format
+func (ks *KeyStore) RestoreKeys(data []byte) ([]*KeyInfo, error) {
+	var keys map[string]map[string]*KeyInfo
+	if err := json.Unmarshal(data, &keys); err != nil {
+		return nil, fmt.Errorf("failed to parse backup data: %w", err)
+	}
+
+	ks.mutex.Lock()
+	ks.Keys = keys
+	ks.mutex.Unlock()
+
+	if err := ks.Save(); err != nil {
+		return nil, fmt.Errorf("failed to save restored keys: %w", err)
+	}
+
+	// Return list of restored keys
+	var keyList []*KeyInfo
+	for _, peerKeys := range keys {
+		for _, key := range peerKeys {
+			keyList = append(keyList, key)
+		}
+	}
+
+	return keyList, nil
+}

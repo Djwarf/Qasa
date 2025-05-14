@@ -1168,3 +1168,21 @@ func (cp *ChatProtocol) sendPlaintextMessageToPeer(message Message, stream netwo
 
 	return nil
 }
+
+// EnableOfflineQueue enables the offline message queue
+func (cp *ChatProtocol) EnableOfflineQueue() error {
+	if cp.offlineQueue == nil {
+		queue, err := NewOfflineMessageQueue(cp.configDir)
+		if err != nil {
+			return fmt.Errorf("failed to create offline message queue: %w", err)
+		}
+		cp.offlineQueue = queue
+	}
+	cp.isOfflineQueueEnabled = true
+	return nil
+}
+
+// DisableOfflineQueue disables the offline message queue
+func (cp *ChatProtocol) DisableOfflineQueue() {
+	cp.isOfflineQueueEnabled = false
+}
