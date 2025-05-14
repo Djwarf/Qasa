@@ -452,3 +452,8 @@ func (n *Node) GetPeerLocation(peerID peer.ID) (*discovery.GeoLocation, error) {
 
 	return n.geoOptimizer.GetPeerLocation(peerID)
 }
+
+// GetConfigDir returns the configuration directory path used by the node
+func (n *Node) GetConfigDir() string {
+	return n.configDir
+}

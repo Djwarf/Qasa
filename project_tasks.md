@@ -102,8 +102,8 @@
 - [x] Develop configuration file handling
 - [ ] Write user acceptance tests
 
-### (Future) Graphical User Interface
-- [ ] Research cross-platform GUI frameworks
+### Graphical User Interface
+- [ ] Vanilla html, css and js web page
 - [ ] Design user interface wireframes
 - [ ] Implement chat view components
 - [ ] Create contact management interface

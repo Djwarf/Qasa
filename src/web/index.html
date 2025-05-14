@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QaSa Secure Chat</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <div class="sidebar">
+            <div class="user-profile">
+                <div class="profile-pic"></div>
+                <div class="user-info">
+                    <h3 id="peer-id">Not Connected</h3>
+                    <span class="status-indicator offline"></span>
+                </div>
+            </div>
+            <div class="contacts-section">
+                <h2>Contacts</h2>
+                <div class="contact-list" id="contact-list">
+                    <!-- Contacts will be dynamically added here -->
+                </div>
+            </div>
+            <div class="settings-section">
+                <button id="settings-btn" class="icon-button">⚙️</button>
+                <button id="key-management-btn" class="icon-button">🔑</button>
+            </div>
+        </div>
+        <div class="main-content">
+            <div class="chat-header">
+                <h2 id="current-chat">Select a contact</h2>
+                <div class="chat-status">
+                    <span id="encryption-status">🔒</span>
+                    <span id="connection-status">Offline</span>
+                </div>
+            </div>
+            <div class="chat-messages" id="chat-messages">
+                <!-- Messages will be dynamically added here -->
+            </div>
+            <div class="message-input">
+                <textarea id="message-text" placeholder="Type a message..."></textarea>
+                <button id="send-btn">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div id="settings-modal" class="modal">
+        <div class="modal-content">
+            <h2>Settings</h2>
+            <div class="settings-section">
+                <h3>Network</h3>
+                <div class="setting-item">
+                    <label for="port">Port:</label>
+                    <input type="number" id="port" value="0">
+                </div>
+                <div class="setting-item">
+                    <label for="mdns">Enable mDNS:</label>
+                    <input type="checkbox" id="mdns" checked>
+                </div>
+                <div class="setting-item">
+                    <label for="dht">Enable DHT:</label>
+                    <input type="checkbox" id="dht">
+                </div>
+            </div>
+            <div class="settings-section">
+                <h3>Security</h3>
+                <div class="setting-item">
+                    <label for="require-auth">Require Authentication:</label>
+                    <input type="checkbox" id="require-auth">
+                </div>
+                <div class="setting-item">
+                    <label for="offline-queue">Enable Offline Queue:</label>
+                    <input type="checkbox" id="offline-queue" checked>
+                </div>
+            </div>
+            <div class="modal-buttons">
+                <button id="save-settings">Save</button>
+                <button id="cancel-settings">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="key-management-modal" class="modal">
+        <div class="modal-content">
+            <h2>Key Management</h2>
+            <div class="key-management-section">
+                <h3>Current Keys</h3>
+                <div id="key-list">
+                    <!-- Keys will be dynamically added here -->
+                </div>
+            </div>
+            <div class="key-actions">
+                <button id="generate-keys">Generate New Keys</button>
+                <button id="import-keys">Import Keys</button>
+                <button id="export-keys">Export Keys</button>
+                <button id="delete-keys">Delete Keys</button>
+            </div>
+            <div class="modal-buttons">
+                <button id="close-key-management">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html> 

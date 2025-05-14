@@ -27,6 +27,13 @@ func main() {
 	}
 	defer os.RemoveAll(tempDir)
 
+	// Get the crypto provider first for use throughout the example
+	provider, err := encryption.GetCryptoProvider()
+	if err != nil {
+		fmt.Printf("Failed to get crypto provider: %v\n", err)
+		os.Exit(1)
+	}
+
 	// Setup Alice's directory
 	aliceDir := filepath.Join(tempDir, "alice")
 	if err := os.MkdirAll(aliceDir, 0755); err != nil {
@@ -62,13 +69,6 @@ func main() {
 
 	fmt.Printf("Alice's peer ID: %s\n", aliceHost.ID())
 	fmt.Printf("Bob's peer ID: %s\n", bobHost.ID())
-
-	// Get the crypto provider first for use throughout the example
-	provider, err := encryption.GetCryptoProvider()
-	if err != nil {
-		fmt.Printf("Failed to get crypto provider: %v\n", err)
-		os.Exit(1)
-	}
 
 	// Create message crypto instances for the example
 	aliceMsgCrypto, err := encryption.NewMessageCrypto(provider, aliceDir)

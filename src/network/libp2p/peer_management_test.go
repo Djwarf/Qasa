@@ -86,7 +86,7 @@ func TestReputationSystem(t *testing.T) {
 
 	// Record a positive event for the second node
 	// Using a mock positive event type for testing
-	nodes[0].RecordPeerEvent(nodes[1].ID(), reputation.EventType(1))
+	nodes[0].RecordPeerEvent(nodes[1].ID(), reputation.EventType("1"))
 
 	// Get the score
 	score := nodes[0].GetPeerScore(nodes[1].ID())
