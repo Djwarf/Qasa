@@ -8,7 +8,6 @@ import (
 	"sync"
 
 	"github.com/gorilla/websocket"
-	"github.com/qasa/network/discovery"
 	"github.com/qasa/network/encryption"
 	"github.com/qasa/network/libp2p"
 	"github.com/qasa/network/message"
@@ -129,54 +128,37 @@ func (ws *WebServer) handleClientMessages(conn *websocket.Conn) {
 
 			// Update node settings
 			if data.MDNS {
-				if ws.node.mdnsService == nil {
-					mdnsService, err := discovery.NewMDNSService(ws.node.ctx, ws.node.host)
-					if err != nil {
-						ws.sendToClient(conn, "error", map[string]string{
-							"message": fmt.Sprintf("Failed to enable mDNS: %v", err),
-						})
-						continue
-					}
-					ws.node.mdnsService = mdnsService
-					mdnsService.Start()
+				if err := ws.node.EnableMDNS(); err != nil {
+					ws.sendToClient(conn, "error", map[string]string{
+						"message": fmt.Sprintf("Failed to enable mDNS: %v", err),
+					})
+					continue
 				}
-			} else if ws.node.mdnsService != nil {
-				ws.node.mdnsService.Stop()
-				ws.node.mdnsService = nil
+			} else {
+				ws.node.DisableMDNS()
 			}
 
 			if data.DHT {
-				if ws.node.dhtService == nil {
-					dhtService, err := discovery.NewDHTService(ws.node.ctx, ws.node.host, nil)
-					if err != nil {
-						ws.sendToClient(conn, "error", map[string]string{
-							"message": fmt.Sprintf("Failed to enable DHT: %v", err),
-						})
-						continue
-					}
-					ws.node.dhtService = dhtService
-					if err := dhtService.Start(); err != nil {
-						ws.sendToClient(conn, "error", map[string]string{
-							"message": fmt.Sprintf("Failed to start DHT: %v", err),
-						})
-						continue
-					}
-				}
-			} else if ws.node.dhtService != nil {
-				if err := ws.node.dhtService.Stop(); err != nil {
+				if err := ws.node.EnableDHT(); err != nil {
 					ws.sendToClient(conn, "error", map[string]string{
-						"message": fmt.Sprintf("Failed to stop DHT: %v", err),
+						"message": fmt.Sprintf("Failed to enable DHT: %v", err),
 					})
+					continue
 				}
-				ws.node.dhtService = nil
+			} else {
+				ws.node.DisableDHT()
 			}
 
 			// Update chat protocol settings
 			if data.OfflineQueue {
-				ws.chatProtocol.offlineQueue = message.NewOfflineMessageQueue(ws.node.GetConfigDir())
-				ws.chatProtocol.isOfflineQueueEnabled = true
+				if err := ws.chatProtocol.EnableOfflineQueue(); err != nil {
+					ws.sendToClient(conn, "error", map[string]string{
+						"message": fmt.Sprintf("Failed to enable offline queue: %v", err),
+					})
+					continue
+				}
 			} else {
-				ws.chatProtocol.isOfflineQueueEnabled = false
+				ws.chatProtocol.DisableOfflineQueue()
 			}
 
 		case "get_keys":
@@ -190,13 +172,7 @@ func (ws *WebServer) handleClientMessages(conn *websocket.Conn) {
 			}
 
 			// List keys
-			keys, err := keyStore.ListKeys()
-			if err != nil {
-				ws.sendToClient(conn, "error", map[string]string{
-					"message": fmt.Sprintf("Failed to list keys: %v", err),
-				})
-				continue
-			}
+			keys := keyStore.ListKeys()
 
 			ws.sendToClient(conn, "keys", map[string]interface{}{
 				"keys": keys,
@@ -295,7 +271,8 @@ func (ws *WebServer) handleClientMessages(conn *websocket.Conn) {
 
 		case "delete_keys":
 			var data struct {
-				KeyID string `json:"key_id"`
+				PeerID    string `json:"peer_id"`
+				Algorithm string `json:"algorithm"`
 			}
 			if err := json.Unmarshal(msg.Data, &data); err != nil {
 				continue
@@ -311,7 +288,7 @@ func (ws *WebServer) handleClientMessages(conn *websocket.Conn) {
 			}
 
 			// Delete key
-			if err := keyStore.DeleteKey(data.KeyID); err != nil {
+			if err := keyStore.DeleteKey(data.PeerID, data.Algorithm); err != nil {
 				ws.sendToClient(conn, "error", map[string]string{
 					"message": fmt.Sprintf("Failed to delete key: %v", err),
 				})
@@ -319,7 +296,8 @@ func (ws *WebServer) handleClientMessages(conn *websocket.Conn) {
 			}
 
 			ws.sendToClient(conn, "key_deleted", map[string]string{
-				"key_id": data.KeyID,
+				"peer_id":   data.PeerID,
+				"algorithm": data.Algorithm,
 			})
 		}
 	}

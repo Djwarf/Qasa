@@ -15,47 +15,44 @@ import (
 // KeyStoreFile is the name of the file to store keys
 const KeyStoreFile = "keys.json"
 
-// KeyInfo represents information about a stored key
+// KeyInfo represents a cryptographic key pair
 type KeyInfo struct {
-	ID         string    `json:"id"` // Unique identifier for the key
-	Algorithm  string    `json:"algorithm"`
-	PublicKey  []byte    `json:"public_key"`
-	PrivateKey []byte    `json:"private_key,omitempty"` // Only stored for local keys
-	PeerID     string    `json:"peer_id"`
-	CreatedAt  time.Time `json:"created_at"`
-	IsLocal    bool      `json:"is_local"`
+	ID         string    `json:"id"`         // Unique identifier for the key
+	Algorithm  string    `json:"algorithm"`  // Algorithm used (e.g., "kyber768", "dilithium3")
+	PublicKey  []byte    `json:"publicKey"`  // Public key data
+	PrivateKey []byte    `json:"privateKey"` // Private key data (nil for peer keys)
+	PeerID     string    `json:"peerId"`     // Peer ID associated with this key
+	CreatedAt  time.Time `json:"createdAt"`  // When the key was created
+	IsLocal    bool      `json:"isLocal"`    // Whether this is a local key
 }
 
 // KeyStore manages cryptographic keys for the node and peers
 type KeyStore struct {
-	Keys       map[string]map[string]*KeyInfo `json:"keys"` // PeerID -> Algorithm -> KeyInfo
-	configDir  string
-	configPath string
-	mutex      sync.RWMutex
+	Keys         map[string]map[string]*KeyInfo `json:"keys"` // PeerID -> Algorithm -> KeyInfo
+	keyStorePath string                         // Path to the key store file
+	mutex        sync.RWMutex                   // Protects access to the key store
 }
 
 // NewKeyStore creates a new key store
 func NewKeyStore(configDir string) (*KeyStore, error) {
-	ks := &KeyStore{
-		Keys:      make(map[string]map[string]*KeyInfo),
-		configDir: configDir,
-	}
-
 	// Ensure config directory exists
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create config directory: %w", err)
 	}
 
-	ks.configPath = filepath.Join(configDir, KeyStoreFile)
+	// Create the key store
+	ks := &KeyStore{
+		keyStorePath: filepath.Join(configDir, "keystore.json"),
+		Keys:         make(map[string]map[string]*KeyInfo),
+	}
 
-	// Try to load existing keys
+	// Load existing keys
 	if err := ks.Load(); err != nil {
-		// If file doesn't exist, initialize with defaults
-		if !os.IsNotExist(err) {
-			return nil, fmt.Errorf("failed to load key store: %w", err)
-		}
+		return nil, fmt.Errorf("failed to load key store: %w", err)
+	}
 
-		// Generate and save default keys
+	// Generate default keys if none exist
+	if len(ks.Keys) == 0 {
 		if err := ks.GenerateDefaultKeys(); err != nil {
 			return nil, fmt.Errorf("failed to generate default keys: %w", err)
 		}
@@ -64,30 +61,47 @@ func NewKeyStore(configDir string) (*KeyStore, error) {
 	return ks, nil
 }
 
-// Load loads keys from the configuration file
+// Load loads the key store from disk
 func (ks *KeyStore) Load() error {
 	ks.mutex.Lock()
 	defer ks.mutex.Unlock()
 
-	data, err := os.ReadFile(ks.configPath)
+	// Read the key store file
+	data, err := os.ReadFile(ks.keyStorePath)
 	if err != nil {
-		return err
+		if os.IsNotExist(err) {
+			// If the file doesn't exist, create an empty key store
+			ks.Keys = make(map[string]map[string]*KeyInfo)
+			return nil
+		}
+		return fmt.Errorf("failed to read key store file: %w", err)
 	}
 
-	return json.Unmarshal(data, ks)
+	// Parse the key store data
+	if err := json.Unmarshal(data, &ks.Keys); err != nil {
+		return fmt.Errorf("failed to parse key store data: %w", err)
+	}
+
+	return nil
 }
 
-// Save saves the keys to the configuration file
+// Save saves the key store to disk
 func (ks *KeyStore) Save() error {
-	ks.mutex.RLock()
-	defer ks.mutex.RUnlock()
+	ks.mutex.Lock()
+	defer ks.mutex.Unlock()
 
-	data, err := json.MarshalIndent(ks, "", "  ")
+	// Marshal the key store data
+	data, err := json.MarshalIndent(ks.Keys, "", "  ")
 	if err != nil {
-		return fmt.Errorf("failed to marshal key store: %w", err)
+		return fmt.Errorf("failed to marshal key store data: %w", err)
 	}
 
-	return os.WriteFile(ks.configPath, data, 0600) // More restrictive permissions for keys
+	// Write the key store file
+	if err := os.WriteFile(ks.keyStorePath, data, 0600); err != nil {
+		return fmt.Errorf("failed to write key store file: %w", err)
+	}
+
+	return nil
 }
 
 // GenerateDefaultKeys generates default key pairs for the local peer
@@ -319,24 +333,19 @@ func (ks *KeyStore) RemovePeer(peerID string) error {
 	return nil
 }
 
-// GetKeyInfo retrieves the full key info for a peer and algorithm
+// GetKeyInfo returns the key info for a peer and algorithm
 func (ks *KeyStore) GetKeyInfo(peerID, algorithm string) (*KeyInfo, error) {
 	ks.mutex.RLock()
 	defer ks.mutex.RUnlock()
 
-	// Check if peer exists
-	keys, exists := ks.Keys[peerID]
-	if !exists {
-		return nil, fmt.Errorf("no keys found for peer: %s", peerID)
+	// Check if we have a key for this peer and algorithm
+	if keys, exists := ks.Keys[peerID]; exists {
+		if key, exists := keys[algorithm]; exists {
+			return key, nil
+		}
 	}
 
-	// Check if algorithm exists
-	key, found := keys[algorithm]
-	if !found {
-		return nil, fmt.Errorf("no key found for algorithm: %s", algorithm)
-	}
-
-	return key, nil
+	return nil, fmt.Errorf("no key found for peer %s and algorithm %s", peerID, algorithm)
 }
 
 // AddLocalKey adds a local key to the store
@@ -375,17 +384,19 @@ func (ks *KeyStore) AddLocalKey(algorithm string, publicKey, privateKey []byte) 
 }
 
 // ListKeys returns a list of all keys in the store
-func (ks *KeyStore) ListKeys() ([]*KeyInfo, error) {
+func (ks *KeyStore) ListKeys() []*KeyInfo {
 	ks.mutex.RLock()
 	defer ks.mutex.RUnlock()
 
-	var keys []*KeyInfo
+	// Collect all keys
+	keys := make([]*KeyInfo, 0)
 	for _, peerKeys := range ks.Keys {
 		for _, key := range peerKeys {
 			keys = append(keys, key)
 		}
 	}
-	return keys, nil
+
+	return keys
 }
 
 // GenerateKey generates a new key pair for the specified algorithm
@@ -491,92 +502,88 @@ func (ks *KeyStore) ImportKey(keyData []byte) (*KeyInfo, error) {
 }
 
 // DeleteKey deletes a key from the store
-func (ks *KeyStore) DeleteKey(keyID string) error {
+func (ks *KeyStore) DeleteKey(peerID, algorithm string) error {
 	ks.mutex.Lock()
 	defer ks.mutex.Unlock()
 
-	// Find and delete the key
-	for peerID, peerKeys := range ks.Keys {
-		for algorithm, key := range peerKeys {
-			if key.PeerID == keyID {
-				delete(peerKeys, algorithm)
-				if len(peerKeys) == 0 {
-					delete(ks.Keys, peerID)
-				}
-				return ks.Save()
+	// Check if we have a key for this peer and algorithm
+	if keys, exists := ks.Keys[peerID]; exists {
+		if key, exists := keys[algorithm]; exists {
+			// Don't allow deleting local keys
+			if key.IsLocal {
+				return fmt.Errorf("cannot delete local key")
 			}
+
+			// Delete the key
+			delete(keys, algorithm)
+
+			// If no more keys for this peer, remove the peer
+			if len(keys) == 0 {
+				delete(ks.Keys, peerID)
+			}
+
+			// Save to disk
+			if err := ks.Save(); err != nil {
+				return fmt.Errorf("failed to save after deleting key: %w", err)
+			}
+
+			return nil
 		}
 	}
 
-	return fmt.Errorf("key not found: %s", keyID)
+	return fmt.Errorf("no key found for peer %s and algorithm %s", peerID, algorithm)
 }
 
-// RotateKey rotates a key by generating a new one
-func (ks *KeyStore) RotateKey(keyID string) (*KeyInfo, error) {
-	// Find the old key
-	ks.mutex.RLock()
-	var oldKey *KeyInfo
-	for _, peerKeys := range ks.Keys {
-		for _, key := range peerKeys {
-			if key.PeerID == keyID {
-				oldKey = key
-				break
-			}
-		}
-		if oldKey != nil {
-			break
-		}
-	}
-	ks.mutex.RUnlock()
-
-	if oldKey == nil {
-		return nil, fmt.Errorf("key not found: %s", keyID)
+// RotateKey generates a new key pair and deletes the old one
+func (ks *KeyStore) RotateKey(algorithm string) (*KeyInfo, error) {
+	// Get the old key
+	oldKey, err := ks.GetMyKeyPair(algorithm)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get old key: %w", err)
 	}
 
 	// Generate a new key
-	newKey, err := ks.GenerateKey(oldKey.Algorithm)
+	newKey, err := ks.GenerateKey(algorithm)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate new key: %w", err)
 	}
 
 	// Delete the old key
-	if err := ks.DeleteKey(keyID); err != nil {
+	if err := ks.DeleteKey(oldKey.PeerID, oldKey.Algorithm); err != nil {
 		return nil, fmt.Errorf("failed to delete old key: %w", err)
 	}
 
 	return newKey, nil
 }
 
-// BackupKeys exports all keys to a JSON format
+// BackupKeys exports all keys to JSON format
 func (ks *KeyStore) BackupKeys() ([]byte, error) {
 	ks.mutex.RLock()
 	defer ks.mutex.RUnlock()
 
-	return json.MarshalIndent(ks.Keys, "", "  ")
+	// Marshal the key store data
+	data, err := json.MarshalIndent(ks.Keys, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal key store data: %w", err)
+	}
+
+	return data, nil
 }
 
-// RestoreKeys imports all keys from a JSON format
-func (ks *KeyStore) RestoreKeys(data []byte) ([]*KeyInfo, error) {
-	var keys map[string]map[string]*KeyInfo
-	if err := json.Unmarshal(data, &keys); err != nil {
-		return nil, fmt.Errorf("failed to parse backup data: %w", err)
-	}
-
+// RestoreKeys imports all keys from JSON format
+func (ks *KeyStore) RestoreKeys(data []byte) error {
 	ks.mutex.Lock()
-	ks.Keys = keys
-	ks.mutex.Unlock()
+	defer ks.mutex.Unlock()
 
+	// Parse the key store data
+	if err := json.Unmarshal(data, &ks.Keys); err != nil {
+		return fmt.Errorf("failed to parse key store data: %w", err)
+	}
+
+	// Save to disk
 	if err := ks.Save(); err != nil {
-		return nil, fmt.Errorf("failed to save restored keys: %w", err)
+		return fmt.Errorf("failed to save restored keys: %w", err)
 	}
 
-	// Return list of restored keys
-	var keyList []*KeyInfo
-	for _, peerKeys := range keys {
-		for _, key := range peerKeys {
-			keyList = append(keyList, key)
-		}
-	}
-
-	return keyList, nil
+	return nil
 }

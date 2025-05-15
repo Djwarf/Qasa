@@ -488,12 +488,7 @@ func handleKeyManagementCommand(tokens []string, configDir string, reader *bufio
 	switch tokens[1] {
 	case "list":
 		// List all keys
-		keys, err := keyStore.ListKeys()
-		if err != nil {
-			fmt.Printf("Error listing keys: %s\n", err)
-			return
-		}
-
+		keys := keyStore.ListKeys()
 		if len(keys) == 0 {
 			fmt.Println("No keys found.")
 			return
@@ -511,7 +506,7 @@ func handleKeyManagementCommand(tokens []string, configDir string, reader *bufio
 	case "generate":
 		// Generate new keys
 		if len(tokens) < 3 {
-			fmt.Println("Usage: key generate <algorithm>")
+			fmt.Println("Usage: keys generate <algorithm>")
 			fmt.Println("Available algorithms: kyber512, kyber768, kyber1024, dilithium2, dilithium3, dilithium5")
 			return
 		}
@@ -532,7 +527,7 @@ func handleKeyManagementCommand(tokens []string, configDir string, reader *bufio
 	case "export":
 		// Export keys
 		if len(tokens) < 3 {
-			fmt.Println("Usage: key export <key_id> [output_file]")
+			fmt.Println("Usage: keys export <key_id> [output_file]")
 			return
 		}
 
@@ -561,7 +556,7 @@ func handleKeyManagementCommand(tokens []string, configDir string, reader *bufio
 	case "import":
 		// Import keys
 		if len(tokens) < 3 {
-			fmt.Println("Usage: key import <input_file>")
+			fmt.Println("Usage: keys import <input_file>")
 			return
 		}
 
@@ -586,13 +581,14 @@ func handleKeyManagementCommand(tokens []string, configDir string, reader *bufio
 
 	case "delete":
 		// Delete keys
-		if len(tokens) < 3 {
-			fmt.Println("Usage: key delete <key_id>")
+		if len(tokens) < 4 {
+			fmt.Println("Usage: keys delete <peer_id> <algorithm>")
 			return
 		}
 
-		keyID := tokens[2]
-		fmt.Printf("Are you sure you want to delete key %s? (y/N) ", keyID)
+		peerID := tokens[2]
+		algorithm := tokens[3]
+		fmt.Printf("Are you sure you want to delete key for peer %s with algorithm %s? (y/N) ", peerID, algorithm)
 
 		response, err := reader.ReadString('\n')
 		if err != nil {
@@ -606,18 +602,18 @@ func handleKeyManagementCommand(tokens []string, configDir string, reader *bufio
 			return
 		}
 
-		err = keyStore.DeleteKey(keyID)
+		err = keyStore.DeleteKey(peerID, algorithm)
 		if err != nil {
 			fmt.Printf("Error deleting key: %s\n", err)
 			return
 		}
 
-		fmt.Printf("Successfully deleted key %s\n", keyID)
+		fmt.Printf("Successfully deleted key for peer %s with algorithm %s\n", peerID, algorithm)
 
 	case "rotate":
 		// Rotate keys
 		if len(tokens) < 3 {
-			fmt.Println("Usage: key rotate <key_id>")
+			fmt.Println("Usage: keys rotate <key_id>")
 			return
 		}
 
@@ -660,7 +656,7 @@ func handleKeyManagementCommand(tokens []string, configDir string, reader *bufio
 	case "restore":
 		// Restore keys from backup
 		if len(tokens) < 3 {
-			fmt.Println("Usage: key restore <backup_file>")
+			fmt.Println("Usage: keys restore <backup_file>")
 			return
 		}
 
@@ -673,16 +669,13 @@ func handleKeyManagementCommand(tokens []string, configDir string, reader *bufio
 			return
 		}
 
-		keys, err := keyStore.RestoreKeys(data)
+		err = keyStore.RestoreKeys(data)
 		if err != nil {
 			fmt.Printf("Error restoring keys: %s\n", err)
 			return
 		}
 
-		fmt.Printf("Successfully restored %d keys\n", len(keys))
-		for _, key := range keys {
-			fmt.Printf("- %s (%s)\n", key.ID, key.Algorithm)
-		}
+		fmt.Printf("Successfully restored keys from %s\n", backupFile)
 
 	default:
 		printKeyManagementHelp()
@@ -691,14 +684,14 @@ func handleKeyManagementCommand(tokens []string, configDir string, reader *bufio
 
 func printKeyManagementHelp() {
 	fmt.Println("Key Management Commands:")
-	fmt.Println("  key list                    - List all available keys")
-	fmt.Println("  key generate <algorithm>    - Generate new keys")
-	fmt.Println("  key export <key_id> [file]  - Export a key to a file")
-	fmt.Println("  key import <file>           - Import a key from a file")
-	fmt.Println("  key delete <key_id>         - Delete a key")
-	fmt.Println("  key rotate <key_id>         - Rotate a key")
-	fmt.Println("  key backup [file]           - Backup all keys")
-	fmt.Println("  key restore <file>          - Restore keys from backup")
+	fmt.Println("  keys list                    - List all available keys")
+	fmt.Println("  keys generate <algorithm>    - Generate new keys")
+	fmt.Println("  keys export <key_id> [file]  - Export a key to a file")
+	fmt.Println("  keys import <file>           - Import a key from a file")
+	fmt.Println("  keys delete <peer_id> <algo>  - Delete a key")
+	fmt.Println("  keys rotate <key_id>         - Rotate a key")
+	fmt.Println("  keys backup [file]           - Backup all keys")
+	fmt.Println("  keys restore <file>          - Restore keys from backup")
 	fmt.Println("\nAvailable algorithms:")
 	fmt.Println("  - kyber512, kyber768, kyber1024")
 	fmt.Println("  - dilithium2, dilithium3, dilithium5")

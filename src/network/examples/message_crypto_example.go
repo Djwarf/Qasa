@@ -219,11 +219,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	err = bobKeyStore.AddPeerKey(alicePeerID, "kyber768", aliceKeyPair.PublicKey)
+	keyInfo, err := bobKeyStore.AddPeerKey(alicePeerID, "kyber768", aliceKeyPair.PublicKey)
 	if err != nil {
 		fmt.Printf("Failed to add Alice's public key to Bob's key store: %v\n", err)
 		os.Exit(1)
 	}
+	fmt.Printf("Added Alice's public key to Bob's key store (ID: %s)\n", keyInfo.ID)
 
 	// Get Bob's public key and add it to Alice's key store
 	bobKeyPair, err := bobKeyStore.GetMyKeyPair("kyber768")
@@ -232,11 +233,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	err = aliceKeyStore.AddPeerKey(bobPeerID, "kyber768", bobKeyPair.PublicKey)
+	keyInfo, err = aliceKeyStore.AddPeerKey(bobPeerID, "kyber768", bobKeyPair.PublicKey)
 	if err != nil {
 		fmt.Printf("Failed to add Bob's public key to Alice's key store: %v\n", err)
 		os.Exit(1)
 	}
+	fmt.Printf("Added Bob's public key to Alice's key store (ID: %s)\n", keyInfo.ID)
 
 	// Test direct encryption/decryption
 	plaintext := []byte("This is a test message for direct encryption.")
