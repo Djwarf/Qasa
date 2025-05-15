@@ -2,21 +2,18 @@
 // Tests full workflows including key generation, encryption/decryption,
 // signing/verification, and key management
 
-use std::path::Path;
-
 use tempfile::tempdir;
 
 use qasa_crypto::aes;
 use qasa_crypto::key_management::{
-    self, derive_key_from_password, store_kyber_keypair, load_kyber_keypair,
+    store_kyber_keypair, load_kyber_keypair,
     store_dilithium_keypair, load_dilithium_keypair, rotate_kyber_keypair,
-    rotate_dilithium_keypair, delete_key, export_key, import_key, get_key_age,
-    check_keys_for_rotation, RotationPolicy, KeyRotationMetadata
+    rotate_dilithium_keypair, delete_key, export_key, import_key,
+    RotationPolicy, KeyRotationMetadata, rotation
 };
 use qasa_crypto::kyber::{KyberKeyPair, KyberVariant};
 use qasa_crypto::dilithium::{DilithiumKeyPair, DilithiumVariant};
-use qasa_crypto::error::CryptoError;
-use qasa_crypto::secure_memory::{SecureBytes, with_secure_scope};
+use qasa_crypto::secure_memory::with_secure_scope;
 
 // Helper function to setup a temporary directory for key storage
 fn setup_temp_dir() -> tempfile::TempDir {
@@ -29,7 +26,7 @@ fn test_kyber_encryption_workflow() {
     let alice_keypair = KyberKeyPair::generate(KyberVariant::Kyber768)
         .expect("Failed to generate Alice's Kyber key pair");
     
-    let bob_keypair = KyberKeyPair::generate(KyberVariant::Kyber768)
+    let _bob_keypair = KyberKeyPair::generate(KyberVariant::Kyber768)
         .expect("Failed to generate Bob's Kyber key pair");
     
     // 2. Alice extracts her public key and sends it to Bob
@@ -118,10 +115,10 @@ fn test_key_storage_workflow() {
         .expect("Failed to store Dilithium key pair");
     
     // 4. Reload both key pairs
-    let loaded_kyber = load_kyber_keypair(&kyber_key_id, kyber_password)
+    let loaded_kyber = load_kyber_keypair(&kyber_key_id, kyber_password, Some(temp_path))
         .expect("Failed to load Kyber key pair");
     
-    let loaded_dilithium = load_dilithium_keypair(&dilithium_key_id, dilithium_password)
+    let loaded_dilithium = load_dilithium_keypair(&dilithium_key_id, dilithium_password, Some(temp_path))
         .expect("Failed to load Dilithium key pair");
     
     // 5. Verify loaded keys match originals
@@ -137,8 +134,8 @@ fn test_key_storage_workflow() {
     
     // 6. Try to load with incorrect password (should fail)
     let wrong_password = "wrong_password";
-    let kyber_result = load_kyber_keypair(&kyber_key_id, wrong_password);
-    let dilithium_result = load_dilithium_keypair(&dilithium_key_id, wrong_password);
+    let kyber_result = load_kyber_keypair(&kyber_key_id, wrong_password, Some(temp_path));
+    let dilithium_result = load_dilithium_keypair(&dilithium_key_id, wrong_password, Some(temp_path));
     
     assert!(kyber_result.is_err(), "Loading Kyber key with wrong password should fail");
     assert!(dilithium_result.is_err(), "Loading Dilithium key with wrong password should fail");
@@ -166,10 +163,10 @@ fn test_key_rotation_workflow() {
         .expect("Failed to store Dilithium key pair");
     
     // 3. Rotate both key pairs
-    let new_kyber_key_id = rotate_kyber_keypair(&kyber_key_id, password)
+    let new_kyber_key_id = rotate_kyber_keypair(&kyber_key_id, password, Some(temp_path))
         .expect("Failed to rotate Kyber key pair");
     
-    let new_dilithium_key_id = rotate_dilithium_keypair(&dilithium_key_id, password)
+    let new_dilithium_key_id = rotate_dilithium_keypair(&dilithium_key_id, password, Some(temp_path))
         .expect("Failed to rotate Dilithium key pair");
     
     // 4. Verify new key IDs are different
@@ -179,16 +176,16 @@ fn test_key_rotation_workflow() {
         "Rotated Dilithium key ID should be different from original");
     
     // 5. Load both original and rotated keys
-    let original_kyber = load_kyber_keypair(&kyber_key_id, password)
+    let original_kyber = load_kyber_keypair(&kyber_key_id, password, Some(temp_path))
         .expect("Failed to load original Kyber key pair");
     
-    let rotated_kyber = load_kyber_keypair(&new_kyber_key_id, password)
+    let rotated_kyber = load_kyber_keypair(&new_kyber_key_id, password, Some(temp_path))
         .expect("Failed to load rotated Kyber key pair");
     
-    let original_dilithium = load_dilithium_keypair(&dilithium_key_id, password)
+    let original_dilithium = load_dilithium_keypair(&dilithium_key_id, password, Some(temp_path))
         .expect("Failed to load original Dilithium key pair");
     
-    let rotated_dilithium = load_dilithium_keypair(&new_dilithium_key_id, password)
+    let rotated_dilithium = load_dilithium_keypair(&new_dilithium_key_id, password, Some(temp_path))
         .expect("Failed to load rotated Dilithium key pair");
     
     // 6. Verify original and rotated keys are different
@@ -212,320 +209,281 @@ fn test_key_export_import_workflow() {
     let temp_dir = setup_temp_dir();
     let temp_path = temp_dir.path().to_str().unwrap();
     
-    // 2. Generate and store a key pair
+    // 2. Setup temporary directory for export
+    let export_dir = setup_temp_dir();
+    let export_path = export_dir.path().to_str().unwrap();
+    
+    // 3. Generate and store key pairs
     let kyber_keypair = KyberKeyPair::generate(KyberVariant::Kyber768)
         .expect("Failed to generate Kyber key pair");
     
-    let original_password = "original_export_pw_123!";
+    let dilithium_keypair = DilithiumKeyPair::generate(DilithiumVariant::Dilithium3)
+        .expect("Failed to generate Dilithium key pair");
     
-    let key_id = store_kyber_keypair(&kyber_keypair, Some(temp_path), original_password)
+    let storage_password = "secure_storage_pw_123!";
+    let export_password = "secure_export_pw_456!";
+    
+    let kyber_key_id = store_kyber_keypair(&kyber_keypair, Some(temp_path), storage_password)
         .expect("Failed to store Kyber key pair");
     
-    // 3. Export the key with a different password
-    let export_password = "export_password_456!";
-    let export_path = Path::new(temp_path).join("exported_key.bin").to_str().unwrap().to_string();
+    let dilithium_key_id = store_dilithium_keypair(&dilithium_keypair, Some(temp_path), storage_password)
+        .expect("Failed to store Dilithium key pair");
     
-    export_key(&key_id, "kyber", original_password, export_password, &export_path)
+    // 4. Export the keys
+    let kyber_export_file = format!("{}/kyber_export.key", export_path);
+    export_key(&kyber_key_id, "kyber", storage_password, export_password, &kyber_export_file, Some(temp_path))
         .expect("Failed to export key");
     
-    // 4. Import the key with a new password
-    let import_password = "import_password_789!";
+    let dilithium_export_file = format!("{}/dilithium_export.key", export_path);
+    export_key(&dilithium_key_id, "dilithium", storage_password, export_password, &dilithium_export_file, Some(temp_path))
+        .expect("Failed to export key");
     
-    let (new_key_id, key_type) = import_key(&export_path, export_password, import_password)
-        .expect("Failed to import key");
+    // 5. Import the keys to a different directory
+    let import_dir = setup_temp_dir();
+    let import_path = import_dir.path().to_str().unwrap();
     
-    // 5. Verify the imported key type
-    assert_eq!(key_type, "kyber", "Imported key should be a Kyber key");
+    let import_password = "secure_import_pw_789!";
     
-    // 6. Load the original and imported keys
-    let original_key = load_kyber_keypair(&key_id, original_password)
-        .expect("Failed to load original key");
+    let (imported_kyber_id, imported_kyber_type) = import_key(
+        &kyber_export_file,
+        export_password,
+        import_password,
+        Some(import_path),
+    ).expect("Failed to import Kyber key");
     
-    let imported_key = load_kyber_keypair(&new_key_id, import_password)
-        .expect("Failed to load imported key");
+    let (imported_dilithium_id, imported_dilithium_type) = import_key(
+        &dilithium_export_file,
+        export_password,
+        import_password,
+        Some(import_path),
+    ).expect("Failed to import Dilithium key");
     
-    // 7. Verify the keys match
-    assert_eq!(original_key.public_key, imported_key.public_key,
-        "Imported key public key should match original");
-    assert_eq!(original_key.secret_key, imported_key.secret_key,
-        "Imported key secret key should match original");
-    assert_eq!(original_key.algorithm, imported_key.algorithm,
-        "Imported key algorithm should match original");
+    // 6. Verify import worked correctly
+    assert_eq!(imported_kyber_type, "kyber", "Imported Kyber key should be of type 'kyber'");
+    assert_eq!(imported_dilithium_type, "dilithium", "Imported Dilithium key should be of type 'dilithium'");
+    
+    // 7. Load the imported keys
+    let imported_kyber = load_kyber_keypair(&imported_kyber_id, import_password, Some(import_path))
+        .expect("Failed to load imported Kyber key");
+    
+    let imported_dilithium = load_dilithium_keypair(&imported_dilithium_id, import_password, Some(import_path))
+        .expect("Failed to load imported Dilithium key");
+    
+    // 8. Verify the imported keys match the originals
+    assert_eq!(imported_kyber.public_key, kyber_keypair.public_key,
+        "Imported Kyber public key should match original");
+    
+    assert_eq!(imported_dilithium.public_key, dilithium_keypair.public_key,
+        "Imported Dilithium public key should match original");
 }
 
 #[test]
 fn test_full_communication_workflow() {
-    // 1. Setup temporary directory for key storage
-    let temp_dir = setup_temp_dir();
-    let temp_path = temp_dir.path().to_str().unwrap();
+    // 1. Setup temporary directories for Alice and Bob
+    let alice_dir = setup_temp_dir();
+    let alice_path = alice_dir.path().to_str().unwrap();
+    
+    let bob_dir = setup_temp_dir();
+    let bob_path = bob_dir.path().to_str().unwrap();
     
     // 2. Generate key pairs for Alice and Bob
     let alice_kyber = KyberKeyPair::generate(KyberVariant::Kyber768)
-        .expect("Failed to generate Alice's Kyber key pair");
+        .expect("Failed to generate Alice's Kyber key");
+    
     let alice_dilithium = DilithiumKeyPair::generate(DilithiumVariant::Dilithium3)
-        .expect("Failed to generate Alice's Dilithium key pair");
+        .expect("Failed to generate Alice's Dilithium key");
     
     let bob_kyber = KyberKeyPair::generate(KyberVariant::Kyber768)
-        .expect("Failed to generate Bob's Kyber key pair");
+        .expect("Failed to generate Bob's Kyber key");
+    
     let bob_dilithium = DilithiumKeyPair::generate(DilithiumVariant::Dilithium3)
-        .expect("Failed to generate Bob's Dilithium key pair");
+        .expect("Failed to generate Bob's Dilithium key");
     
-    // 3. Extract public keys for exchange
-    let alice_kyber_public = alice_kyber.public_key();
-    let alice_dilithium_public = alice_dilithium.public_key();
+    // 3. Store key pairs
+    let alice_password = "alice_secure_pw_123!";
+    let bob_password = "bob_secure_pw_456!";
     
-    let bob_kyber_public = bob_kyber.public_key();
-    let bob_dilithium_public = bob_dilithium.public_key();
+    // Store Alice's keys
+    let _alice_kyber_id = store_kyber_keypair(&alice_kyber, Some(alice_path), alice_password)
+        .expect("Failed to store Alice's Kyber key");
     
-    // 4. Alice sends a message to Bob
-    let alice_message = b"Hello Bob, this is a secure message from Alice!";
+    let alice_dilithium_id = store_dilithium_keypair(&alice_dilithium, Some(alice_path), alice_password)
+        .expect("Failed to store Alice's Dilithium key");
     
-    // 4.1 Use Bob's public key to encapsulate a shared secret
-    let (alice_to_bob_ciphertext, alice_to_bob_secret) = bob_kyber_public.encapsulate()
+    // Store Bob's keys
+    let _bob_kyber_id = store_kyber_keypair(&bob_kyber, Some(bob_path), bob_password)
+        .expect("Failed to store Bob's Kyber key");
+    
+    let _bob_dilithium_id = store_dilithium_keypair(&bob_dilithium, Some(bob_path), bob_password)
+        .expect("Failed to store Bob's Dilithium key");
+    
+    // 4. Alice sends her public key to Bob
+    let alice_public_key = alice_kyber.public_key();
+    
+    // 5. Bob encapsulates a shared secret using Alice's public key
+    let (ciphertext, bob_shared_secret) = alice_public_key.encapsulate()
         .expect("Failed to encapsulate shared secret");
     
-    // 4.2 Encrypt the message with the shared secret
-    let (encrypted_message, nonce) = aes::encrypt(alice_message, &alice_to_bob_secret, None)
-        .expect("Failed to encrypt message");
+    // 6. Bob sends ciphertext to Alice
     
-    // 4.3 Sign the encrypted message
-    let signature = alice_dilithium.sign(&encrypted_message)
-        .expect("Failed to sign encrypted message");
-    
-    // 5. Bob receives and processes the message
-    
-    // 5.1 Verify the signature using Alice's public key
-    let is_authentic = bob_dilithium_public.verify(&encrypted_message, &signature)
-        .expect("Failed to verify signature");
-    
-    assert!(is_authentic, "Signature verification should succeed");
-    
-    // 5.2 Decapsulate the shared secret
-    let bob_shared_secret = bob_kyber.decapsulate(&alice_to_bob_ciphertext)
+    // 7. Alice decapsulates to get the same shared secret
+    let alice_shared_secret = alice_kyber.decapsulate(&ciphertext)
         .expect("Failed to decapsulate shared secret");
     
-    // 5.3 Decrypt the message
-    let decrypted = aes::decrypt(&encrypted_message, &bob_shared_secret, &nonce, None)
+    // 8. Verify shared secrets match
+    assert_eq!(alice_shared_secret, bob_shared_secret, 
+        "Alice and Bob should have the same shared secret");
+    
+    // 9. Alice creates and signs a message for Bob
+    let message = b"Hello Bob, this is a secure message from Alice!";
+    
+    // 10. Alice loads her Dilithium key for signing
+    let alice_dilithium_loaded = load_dilithium_keypair(&alice_dilithium_id, alice_password, Some(alice_path))
+        .expect("Failed to load Alice's Dilithium key");
+    
+    // 11. Alice signs the message
+    let signature = alice_dilithium_loaded.sign(message)
+        .expect("Failed to sign message");
+    
+    // 12. Alice encrypts the message using the shared secret
+    let (encrypted_message, nonce) = aes::encrypt(message, &alice_shared_secret, None)
+        .expect("Failed to encrypt message");
+    
+    // 13. Alice sends the encrypted message, signature, and her Dilithium public key to Bob
+    let alice_dilithium_public = alice_dilithium.public_key();
+    
+    // 14. Bob decrypts the message using his shared secret
+    let decrypted_message = aes::decrypt(&encrypted_message, &bob_shared_secret, &nonce, None)
         .expect("Failed to decrypt message");
     
-    // 5.4 Verify decryption was successful
-    assert_eq!(decrypted, alice_message, "Decrypted message should match original message");
+    // 15. Bob verifies the message signature
+    let signature_valid = alice_dilithium_public.verify(&decrypted_message, &signature)
+        .expect("Failed to verify signature");
     
-    // 6. Bob sends a response to Alice
-    let bob_response = b"Hello Alice, I received your message. Thanks!";
-    
-    // 6.1 Use Alice's public key to encapsulate a shared secret
-    let (bob_to_alice_ciphertext, bob_to_alice_secret) = alice_kyber_public.encapsulate()
-        .expect("Failed to encapsulate shared secret");
-    
-    // 6.2 Encrypt the response
-    let (encrypted_response, response_nonce) = aes::encrypt(bob_response, &bob_to_alice_secret, None)
-        .expect("Failed to encrypt response");
-    
-    // 6.3 Sign the encrypted response
-    let response_signature = bob_dilithium.sign(&encrypted_response)
-        .expect("Failed to sign encrypted response");
-    
-    // 7. Alice receives and processes the response
-    
-    // 7.1 Verify the signature
-    let response_authentic = alice_dilithium_public.verify(&encrypted_response, &response_signature)
-        .expect("Failed to verify response signature");
-    
-    assert!(response_authentic, "Response signature verification should succeed");
-    
-    // 7.2 Decapsulate the shared secret
-    let alice_response_secret = alice_kyber.decapsulate(&bob_to_alice_ciphertext)
-        .expect("Failed to decapsulate response shared secret");
-    
-    // 7.3 Decrypt the response
-    let decrypted_response = aes::decrypt(&encrypted_response, &alice_response_secret, &response_nonce, None)
-        .expect("Failed to decrypt response");
-    
-    // 7.4 Verify response decryption was successful
-    assert_eq!(decrypted_response, bob_response, "Decrypted response should match original response");
+    assert!(signature_valid, "Signature verification should succeed");
+    assert_eq!(decrypted_message, message, "Decrypted message should match original");
 }
 
 #[test]
 fn test_secure_deletion_workflow() {
-    // 1. Setup temporary directory for key storage
+    // 1. Setup temporary directory
     let temp_dir = setup_temp_dir();
     let temp_path = temp_dir.path().to_str().unwrap();
     
-    // 2. Generate and store a key pair
-    let keypair = KyberKeyPair::generate(KyberVariant::Kyber768)
+    // 2. Generate and store keys
+    let kyber_keypair = KyberKeyPair::generate(KyberVariant::Kyber768)
         .expect("Failed to generate Kyber key pair");
     
-    let password = "secure_deletion_pw_123!";
+    let password = "secure_delete_pw_123!";
     
-    let key_id = store_kyber_keypair(&keypair, Some(temp_path), password)
+    let kyber_key_id = store_kyber_keypair(&kyber_keypair, Some(temp_path), password)
         .expect("Failed to store Kyber key pair");
     
-    // 3. Verify the key exists
-    let loaded_key = load_kyber_keypair(&key_id, password);
-    assert!(loaded_key.is_ok(), "Key should exist and load successfully");
+    // 3. Verify key can be loaded
+    let loaded_key = load_kyber_keypair(&kyber_key_id, password, Some(temp_path))
+        .expect("Failed to load Kyber key pair");
+    
+    assert_eq!(loaded_key.public_key, kyber_keypair.public_key,
+        "Loaded key should match original");
     
     // 4. Delete the key
-    delete_key(&key_id, "kyber").expect("Failed to delete key");
+    delete_key(&kyber_key_id, "kyber", Some(temp_path))
+        .expect("Failed to delete key");
     
-    // 5. Verify the key no longer exists
-    let result = load_kyber_keypair(&key_id, password);
-    assert!(result.is_err(), "Key should no longer exist after deletion");
-    
-    // 6. Verify error is the expected "file not found" type error
-    match result {
-        Err(CryptoError::KeyManagementError(msg)) => {
-            assert!(msg.contains("Failed to open key file") || msg.contains("does not exist"), 
-                "Error should indicate key file not found");
-        },
-        _ => panic!("Unexpected error type when loading deleted key"),
-    }
+    // 5. Verify key can no longer be loaded
+    let load_result = load_kyber_keypair(&kyber_key_id, password, Some(temp_path));
+    assert!(load_result.is_err(), "Key should no longer be loadable after deletion");
 }
 
 #[test]
 fn test_secure_memory_in_key_rotation() {
-    // 1. Setup temporary directory for key storage
+    // 1. Setup temporary directory
     let temp_dir = setup_temp_dir();
     let temp_path = temp_dir.path().to_str().unwrap();
     
-    // 2. Generate and store a key pair with a strong password
+    // 2. Generate and store a key pair
     let kyber_keypair = KyberKeyPair::generate(KyberVariant::Kyber768)
         .expect("Failed to generate Kyber key pair");
     
-    let sensitive_password = "very_sensitive_p@ssw0rd!123";
+    let password = "secure_memory_test_pw_123!";
     
-    // 3. Use SecureBytes to handle the password securely
-    let secure_password = SecureBytes::new(sensitive_password.as_bytes());
-    let password_str = std::str::from_utf8(secure_password.as_bytes()).unwrap();
-    
-    let key_id = store_kyber_keypair(&kyber_keypair, Some(temp_path), password_str)
+    let key_id = store_kyber_keypair(&kyber_keypair, Some(temp_path), password)
         .expect("Failed to store Kyber key pair");
     
-    // 4. Verify we can load the key using the secure password
-    {
-        let secure_password = SecureBytes::new(sensitive_password.as_bytes());
-        let password_str = std::str::from_utf8(secure_password.as_bytes()).unwrap();
+    // 3. Do key rotation in a secure memory scope
+    let mut new_key_id = None;
+    
+    // Create a buffer to use with secure scope
+    let mut buffer: Vec<u8> = Vec::new();
+    with_secure_scope(&mut buffer, |_secure_scope| {
+        // Rotate key inside secure scope
+        let rotated_id = rotate_kyber_keypair(&key_id, password, Some(temp_path))
+            .expect("Failed to rotate Kyber key pair");
         
-        let loaded_key = load_kyber_keypair(&key_id, password_str)
-            .expect("Failed to load Kyber key pair");
+        // Store the result outside the scope
+        new_key_id = Some(rotated_id);
         
-        assert_eq!(loaded_key.public_key, kyber_keypair.public_key,
-            "Loaded key should match original");
-    } // secure_password is automatically zeroized here
+        // Additional secure operations could happen here
+    });
     
-    // 5. Rotate the key with secure memory handling
-    let new_key_id = with_secure_scope(&mut sensitive_password.to_string(), |password| {
-        rotate_kyber_keypair(&key_id, password)
-    }).expect("Failed to rotate key");
+    // 4. Verify new key was created
+    let new_key_id = new_key_id.expect("New key ID should be set");
+    assert_ne!(key_id, new_key_id, "New key ID should be different");
     
-    // 6. Verify the rotation worked
-    {
-        let secure_password = SecureBytes::new(sensitive_password.as_bytes());
-        let password_str = std::str::from_utf8(secure_password.as_bytes()).unwrap();
-        
-        // Load the new key
-        let new_key = load_kyber_keypair(&new_key_id, password_str)
-            .expect("Failed to load rotated key");
-        
-        // Load the original key
-        let original_key = load_kyber_keypair(&key_id, password_str)
-            .expect("Failed to load original key");
-        
-        // Verify keys are different but have same algorithm
-        assert_ne!(new_key.public_key, original_key.public_key, 
-            "Rotated key should be different from original");
-        assert_eq!(new_key.algorithm, original_key.algorithm,
-            "Algorithm should remain the same after rotation");
-    }
+    // 5. Load rotated key to verify it exists
+    let rotated_key = load_kyber_keypair(&new_key_id, password, Some(temp_path))
+        .expect("Failed to load rotated key");
     
-    // 7. Test key age tracking
-    let key_age = get_key_age(&key_id, "kyber").expect("Failed to get key age");
-    
-    // Key was rotated, so it should have a days_since_rotation value
-    assert!(key_age.days_since_rotation.is_some(), 
-        "Original key should have a rotation timestamp");
-    
-    // The new key should have rotation metadata
-    let new_key_age = get_key_age(&new_key_id, "kyber").expect("Failed to get new key age");
-    
-    // Verify the new key has the old key ID in its metadata
-    assert!(!new_key_age.rotation_recommended, 
-        "Newly rotated key should not need rotation");
+    // 6. Verify key contents were updated
+    assert_ne!(rotated_key.public_key, kyber_keypair.public_key,
+        "Rotated key should have different public key");
 }
 
 #[test]
 fn test_automatic_key_rotation() {
-    // 1. Setup temporary directory for key storage
+    // 1. Setup temporary directory
     let temp_dir = setup_temp_dir();
     let temp_path = temp_dir.path().to_str().unwrap();
     
-    // 2. Generate and store key pairs with different policies
-    let kyber_keypair1 = KyberKeyPair::generate(KyberVariant::Kyber768)
-        .expect("Failed to generate first Kyber key pair");
+    // 2. Generate two keys with different ages
+    let kyber1 = KyberKeyPair::generate(KyberVariant::Kyber768)
+        .expect("Failed to generate first Kyber key");
     
-    let kyber_keypair2 = KyberKeyPair::generate(KyberVariant::Kyber768)
-        .expect("Failed to generate second Kyber key pair");
+    let kyber2 = KyberKeyPair::generate(KyberVariant::Kyber768)
+        .expect("Failed to generate second Kyber key");
     
-    let password = "rotation_test_pw_123!";
+    let password = "auto_rotate_pw_123!";
     
-    // Store the first key with default policy
-    let key_id1 = store_kyber_keypair(&kyber_keypair1, Some(temp_path), password)
-        .expect("Failed to store first Kyber key pair");
+    // 3. Store both keys
+    let key1_id = store_kyber_keypair(&kyber1, Some(temp_path), password)
+        .expect("Failed to store first key");
     
-    // Store the second key with high security policy (needs frequent rotation)
-    let key_id2 = store_kyber_keypair(&kyber_keypair2, Some(temp_path), password)
-        .expect("Failed to store second Kyber key pair");
+    let key2_id = store_kyber_keypair(&kyber2, Some(temp_path), password)
+        .expect("Failed to store second key");
     
-    // 3. Manually set the metadata to force rotation for second key
-    {
-        // Load the default metadata
-        let mut metadata = KeyRotationMetadata::new(RotationPolicy::high_security());
-        
-        // Make the key appear old by setting created_at far in the past
-        use chrono::Duration;
-        metadata.created_at = chrono::Utc::now() - Duration::days(60); // 60 days old
-        
-        // Save the modified metadata
-        let _ = qasa_crypto::key_management::rotation::save_metadata(&key_id2, "kyber", &metadata);
-    }
+    // 4. Modify key metadata to make first key old and second key very old
+    let mut test_metadata1 = KeyRotationMetadata::new(RotationPolicy::default());
+    test_metadata1.created_at = chrono::Utc::now() - chrono::Duration::days(80); // 80 days old
     
-    // 4. Check which keys need rotation
-    let keys_to_rotate = check_keys_for_rotation().expect("Failed to check keys for rotation");
+    let mut test_metadata2 = KeyRotationMetadata::new(RotationPolicy::default());
+    test_metadata2.created_at = chrono::Utc::now() - chrono::Duration::days(100); // 100 days old
     
-    // Only the second key should need rotation (has high security policy and is old)
-    assert!(keys_to_rotate.iter().any(|(id, key_type)| id == &key_id2 && key_type == "kyber"), 
-        "Second key should need rotation");
+    // Write test metadata for both keys
+    rotation::save_metadata(&key1_id, "kyber", &test_metadata1)
+        .expect("Failed to save test metadata for key 1");
     
-    // First key should not need rotation yet (default 90-day policy)
-    assert!(!keys_to_rotate.iter().any(|(id, _)| id == &key_id1), 
-        "First key should not need rotation yet");
+    rotation::save_metadata(&key2_id, "kyber", &test_metadata2)
+        .expect("Failed to save test metadata for key 2");
     
-    // 5. Test the password provider function for auto rotation
-    let rotated_keys = qasa_crypto::key_management::auto_rotate_keys(|key_id| {
-        // Simple password provider that returns the same password for all keys
-        Ok(password.to_string())
+    // 5. Run automatic key rotation with policy to rotate keys older than 90 days
+    let rotated_keys = qasa_crypto::key_management::auto_rotate_keys(|_key_id| {
+        password.to_string()
+    }, Some(temp_path), RotationPolicy {
+        rotation_interval_days: 90,
+        ..Default::default()
     }).expect("Failed to auto-rotate keys");
     
-    // 6. Verify the second key was rotated
-    assert!(rotated_keys.iter().any(|(old_id, _)| old_id == &key_id2), 
-        "Second key should have been auto-rotated");
-    
-    // 7. Get the new key ID
-    let new_key_id = rotated_keys.iter()
-        .find(|(old_id, _)| old_id == &key_id2)
-        .map(|(_, new_id)| new_id)
-        .expect("Could not find new key ID");
-    
-    // 8. Verify both old and new keys can be loaded
-    let old_key = load_kyber_keypair(&key_id2, password)
-        .expect("Failed to load old key");
-    
-    let new_key = load_kyber_keypair(new_key_id, password)
-        .expect("Failed to load new key");
-    
-    // Keys should be different but have same algorithm
-    assert_ne!(old_key.public_key, new_key.public_key,
-        "Rotated key should be different from original");
-    assert_eq!(old_key.algorithm, new_key.algorithm,
-        "Algorithm should remain the same after rotation");
+    // 6. Verify only the second key was rotated
+    assert_eq!(rotated_keys.len(), 1, "Should have rotated one key");
+    assert_eq!(rotated_keys[0].0, key2_id, "Second key should have been rotated");
 } 

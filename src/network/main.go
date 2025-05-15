@@ -28,6 +28,7 @@ func main() {
 	disableOfflineQueue := flag.Bool("no-offline-queue", false, "Disable offline message queuing")
 	bootstrapNode := flag.String("bootstrap", "", "Add a bootstrap node")
 	connectTo := flag.String("connect", "", "Peer to connect to")
+	webPort := flag.Int("web", 0, "Start web interface on specified port (0 disables web interface)")
 	flag.Parse()
 
 	// Create a context
@@ -143,6 +144,18 @@ func main() {
 		}
 	}
 
+	// Initialize web server if port is specified
+	var webServer *WebServer
+	if *webPort > 0 {
+		webServer = NewWebServer(node, chatProtocol)
+		go func() {
+			fmt.Printf("Starting web interface on port %d...\n", *webPort)
+			if err := webServer.Start(*webPort); err != nil {
+				fmt.Printf("Web server error: %s\n", err)
+			}
+		}()
+	}
+
 	// Start a goroutine to periodically print connected peers
 	var peerListMutex sync.Mutex
 	var connectedPeers []peer.ID
@@ -174,6 +187,25 @@ func main() {
 				}
 				peerListMutex.Unlock()
 
+				// Update web clients with peer list if web server is running
+				if webServer != nil && len(peers) > 0 {
+					// Create contact list for web clients
+					contacts := make([]map[string]interface{}, len(peers))
+					for i, p := range peers {
+						contacts[i] = map[string]interface{}{
+							"peer_id":         p.String(),
+							"online":          true,
+							"authenticated":   node.IsPeerAuthenticated(p),
+							"queued_messages": chatProtocol.GetOfflineQueuedMessageCount(p),
+						}
+					}
+
+					// Broadcast contact list to all web clients
+					webServer.BroadcastMessage("contact_list", map[string]interface{}{
+						"contacts": contacts,
+					})
+				}
+
 				if len(peers) > 0 {
 					fmt.Printf("\nConnected to %d peers:\n", len(peers))
 					for i, peer := range peers {
@@ -200,24 +232,15 @@ func main() {
 		}
 	}()
 
-	// Set a handler for Ctrl+C
-	signalChan := make(chan os.Signal, 1)
-	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-signalChan
-		fmt.Println("\nReceived interrupt signal, shutting down...")
-		cancel()
-		// Wait a bit to allow cleanup
-		time.Sleep(500 * time.Millisecond)
-		os.Exit(0)
-	}()
+	// Handle command-line input
+	go handleUserCommands(ctx, node, chatProtocol, metadataExchange)
 
-	// Handle user commands
-	handleUserCommands(ctx, node, chatProtocol, metadataExchange)
+	// Wait for signal to exit
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	<-sigCh
 
-	// Wait for context to be canceled
-	<-ctx.Done()
-	fmt.Println("Shutting down...")
+	fmt.Println("\nShutting down...")
 }
 
 // shortPeerID returns a shortened version of a peer ID

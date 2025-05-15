@@ -15,14 +15,23 @@ const currentChatElement = document.getElementById('current-chat');
 const connectionStatus = document.getElementById('connection-status');
 const encryptionStatus = document.getElementById('encryption-status');
 
+// Search Elements
+const searchInput = document.getElementById('search-input');
+const searchButton = document.getElementById('search-btn');
+const searchResults = document.getElementById('search-results');
+
 // Modal Elements
 const settingsModal = document.getElementById('settings-modal');
 const keyManagementModal = document.getElementById('key-management-modal');
+const connectModal = document.getElementById('connect-modal');
 const settingsButton = document.getElementById('settings-btn');
 const keyManagementButton = document.getElementById('key-management-btn');
 const saveSettingsButton = document.getElementById('save-settings');
 const cancelSettingsButton = document.getElementById('cancel-settings');
 const closeKeyManagementButton = document.getElementById('close-key-management');
+const connectBtn = document.getElementById('connect-btn');
+const cancelConnectBtn = document.getElementById('cancel-connect');
+const peerAddressInput = document.getElementById('peer-address');
 
 // Initialize WebSocket connection
 function initWebSocket() {
@@ -67,8 +76,17 @@ function handleWebSocketMessage(message) {
         case 'message':
             handleIncomingMessage(message.data);
             break;
+        case 'message_sent':
+            handleMessageSent(message.data);
+            break;
         case 'contact_status':
             handleContactStatus(message.data);
+            break;
+        case 'search_results':
+            handleSearchResults(message.data);
+            break;
+        case 'peer_connected':
+            handlePeerConnected(message.data);
             break;
         case 'key_exchange':
             handleKeyExchange(message.data);
@@ -135,6 +153,26 @@ function handleIncomingMessage(data) {
     }
 }
 
+// Handle outgoing messages that were sent successfully
+function handleMessageSent(data) {
+    const { to, content, timestamp } = data;
+    
+    if (!messages.has(to)) {
+        messages.set(to, []);
+    }
+    
+    const messageList = messages.get(to);
+    messageList.push({
+        content,
+        timestamp,
+        sent: true
+    });
+    
+    if (currentChat === to) {
+        displayMessage(to, content, timestamp, true);
+    }
+}
+
 // Display a message in the chat
 function displayMessage(peerId, content, timestamp, sent) {
     const messageElement = document.createElement('div');
@@ -169,169 +207,238 @@ function selectContact(peerId) {
     });
 }
 
-// Send a message
+// Handle search results
+function handleSearchResults(data) {
+    const { query, results } = data;
+    
+    // Display search results
+    searchResults.innerHTML = '';
+    searchResults.classList.remove('hidden');
+    
+    if (results.length === 0) {
+        searchResults.innerHTML = '<div class="search-result-item">No peers found matching your query</div>';
+        return;
+    }
+    
+    results.forEach(result => {
+        const resultElement = document.createElement('div');
+        resultElement.className = 'search-result-item';
+        
+        resultElement.innerHTML = `
+            <div class="result-peer-id">${shortPeerId(result.peer_id)}</div>
+            <div class="result-status">
+                <span class="status-indicator ${result.connected ? 'online' : 'offline'}"></span>
+                ${result.connected ? 'Connected' : 'Not Connected'}
+                ${result.authenticated ? ' (Authenticated)' : ''}
+            </div>
+        `;
+        
+        // Add click handler to connect to the peer
+        resultElement.addEventListener('click', () => {
+            // If already connected, select the peer for chat
+            if (result.connected) {
+                selectContact(result.peer_id);
+                searchResults.classList.add('hidden');
+            } else {
+                // Otherwise show connect modal
+                showConnectModal(result.peer_id);
+            }
+        });
+        
+        searchResults.appendChild(resultElement);
+    });
+}
+
+// Handle contact status updates
+function handleContactStatus(data) {
+    const { peer_id, online, authenticated } = data;
+    
+    if (contacts.has(peer_id)) {
+        const contact = contacts.get(peer_id);
+        contact.online = online;
+        contact.authenticated = authenticated;
+        
+        // Update in the DOM
+        const contactElement = document.querySelector(`.contact-item[data-peer-id="${peer_id}"]`);
+        if (contactElement) {
+            const statusIndicator = contactElement.querySelector('.status-indicator');
+            statusIndicator.classList.toggle('online', online);
+            statusIndicator.classList.toggle('offline', !online);
+        }
+    }
+}
+
+// Handle successful peer connection
+function handlePeerConnected(data) {
+    const { peer_id } = data;
+    console.log(`Connected to peer: ${peer_id}`);
+    
+    // Close the connect modal
+    connectModal.classList.remove('active');
+    
+    // Clear the input
+    peerAddressInput.value = '';
+    
+    // Send a key exchange request
+    requestKeyExchange(peer_id);
+}
+
+// Handle key exchange messages
+function handleKeyExchange(data) {
+    console.log('Key exchange completed', data);
+    
+    // Update encryption status
+    encryptionStatus.textContent = '🔒';
+    encryptionStatus.title = 'Encrypted with post-quantum cryptography';
+    encryptionStatus.style.color = 'var(--success-color)';
+}
+
+// Handle error messages
+function handleError(data) {
+    console.error('Error from server:', data.message);
+    alert(`Error: ${data.message}`);
+}
+
+// Shortens a peer ID for display
+function shortPeerId(peerId) {
+    if (!peerId || peerId.length <= 10) {
+        return peerId;
+    }
+    return `${peerId.slice(0, 5)}...${peerId.slice(-5)}`;
+}
+
+// Send a message to the current contact
 function sendMessage() {
     if (!currentChat || !messageInput.value.trim()) return;
     
     const content = messageInput.value.trim();
-    const timestamp = new Date().toISOString();
     
     ws.send(JSON.stringify({
         type: 'message',
         data: {
             to: currentChat,
-            content,
-            timestamp
+            content
         }
     }));
     
-    if (!messages.has(currentChat)) {
-        messages.set(currentChat, []);
-    }
-    
-    const messageList = messages.get(currentChat);
-    messageList.push({
-        content,
-        timestamp,
-        sent: true
-    });
-    
-    displayMessage(currentChat, content, timestamp, true);
     messageInput.value = '';
 }
 
-// Handle contact status updates
-function handleContactStatus(data) {
-    const { peer_id, online } = data;
-    const contact = contacts.get(peer_id);
-    
-    if (contact) {
-        contact.online = online;
-        const contactElement = document.querySelector(`.contact-item[data-peer-id="${peer_id}"]`);
-        if (contactElement) {
-            const statusIndicator = contactElement.querySelector('.status-indicator');
-            statusIndicator.className = `status-indicator ${online ? 'online' : 'offline'}`;
+// Connect to a peer by address
+function connectToPeer(address) {
+    ws.send(JSON.stringify({
+        type: 'connect',
+        data: {
+            peer_addr: address
         }
+    }));
+}
+
+// Search for peers
+function searchPeers() {
+    const query = searchInput.value.trim();
+    if (!query) return;
+    
+    ws.send(JSON.stringify({
+        type: 'search',
+        data: {
+            query
+        }
+    }));
+}
+
+// Request key exchange with a peer
+function requestKeyExchange(peerId) {
+    ws.send(JSON.stringify({
+        type: 'key_exchange',
+        data: {
+            peer_id: peerId,
+            algorithm: 'kyber768' // Use Kyber-768 for post-quantum security
+        }
+    }));
+}
+
+// Show the connect modal
+function showConnectModal(peerId = '') {
+    connectModal.classList.add('active');
+    if (peerId) {
+        peerAddressInput.value = `/p2p/${peerId}`;
     }
 }
 
-// Handle key exchange
-function handleKeyExchange(data) {
-    const { peer_id, status } = data;
-    if (status === 'success') {
-        encryptionStatus.textContent = '🔒';
-        encryptionStatus.title = 'End-to-end encryption enabled';
-    } else {
-        encryptionStatus.textContent = '⚠️';
-        encryptionStatus.title = 'Encryption not available';
-    }
-}
-
-// Handle errors
-function handleError(data) {
-    console.error('Error:', data.message);
-    // You might want to show this to the user in a more user-friendly way
-}
-
-// Utility function to shorten peer IDs
-function shortPeerId(peerId) {
-    return peerId.substring(0, 8) + '...' + peerId.substring(peerId.length - 8);
-}
-
-// Settings Modal
-settingsButton.addEventListener('click', () => {
-    settingsModal.classList.add('active');
-});
-
-cancelSettingsButton.addEventListener('click', () => {
-    settingsModal.classList.remove('active');
-});
-
-saveSettingsButton.addEventListener('click', () => {
-    const settings = {
-        port: document.getElementById('port').value,
-        mdns: document.getElementById('mdns').checked,
-        dht: document.getElementById('dht').checked,
-        require_auth: document.getElementById('require-auth').checked,
-        offline_queue: document.getElementById('offline-queue').checked
-    };
-    
-    ws.send(JSON.stringify({
-        type: 'settings',
-        data: settings
-    }));
-    
-    settingsModal.classList.remove('active');
-});
-
-// Key Management Modal
-keyManagementButton.addEventListener('click', () => {
-    keyManagementModal.classList.add('active');
-    // Request current keys
-    ws.send(JSON.stringify({
-        type: 'get_keys'
-    }));
-});
-
-closeKeyManagementButton.addEventListener('click', () => {
-    keyManagementModal.classList.remove('active');
-});
-
-// Key Management Actions
-document.getElementById('generate-keys').addEventListener('click', () => {
-    ws.send(JSON.stringify({
-        type: 'generate_keys'
-    }));
-});
-
-document.getElementById('import-keys').addEventListener('click', () => {
-    // Create file input
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json';
-    
-    input.onchange = (e) => {
-        const file = e.target.files[0];
-        const reader = new FileReader();
-        
-        reader.onload = (event) => {
-            ws.send(JSON.stringify({
-                type: 'import_keys',
-                data: event.target.result
-            }));
-        };
-        
-        reader.readAsText(file);
-    };
-    
-    input.click();
-});
-
-document.getElementById('export-keys').addEventListener('click', () => {
-    ws.send(JSON.stringify({
-        type: 'export_keys'
-    }));
-});
-
-document.getElementById('delete-keys').addEventListener('click', () => {
-    if (confirm('Are you sure you want to delete all keys? This action cannot be undone.')) {
-        ws.send(JSON.stringify({
-            type: 'delete_keys'
-        }));
-    }
-});
-
-// Message input handling
-messageInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        sendMessage();
-    }
-});
-
-sendButton.addEventListener('click', sendMessage);
-
-// Initialize the application
+// Event Listeners
 document.addEventListener('DOMContentLoaded', () => {
     initWebSocket();
+    
+    // Search functionality
+    searchButton.addEventListener('click', searchPeers);
+    searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            searchPeers();
+        }
+    });
+    
+    // Hide search results when clicking elsewhere
+    document.addEventListener('click', (e) => {
+        if (!searchResults.contains(e.target) && e.target !== searchButton && e.target !== searchInput) {
+            searchResults.classList.add('hidden');
+        }
+    });
+    
+    // Send message
+    sendButton.addEventListener('click', sendMessage);
+    messageInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+    
+    // Modal controls
+    settingsButton.addEventListener('click', () => {
+        settingsModal.classList.add('active');
+    });
+    
+    keyManagementButton.addEventListener('click', () => {
+        keyManagementModal.classList.add('active');
+    });
+    
+    saveSettingsButton.addEventListener('click', () => {
+        // Save settings
+        settingsModal.classList.remove('active');
+    });
+    
+    cancelSettingsButton.addEventListener('click', () => {
+        settingsModal.classList.remove('active');
+    });
+    
+    closeKeyManagementButton.addEventListener('click', () => {
+        keyManagementModal.classList.remove('active');
+    });
+    
+    // Connect modal
+    connectBtn.addEventListener('click', () => {
+        const address = peerAddressInput.value.trim();
+        if (address) {
+            connectToPeer(address);
+        }
+    });
+    
+    cancelConnectBtn.addEventListener('click', () => {
+        connectModal.classList.remove('active');
+        peerAddressInput.value = '';
+    });
+    
+    // Close modals when clicking outside
+    document.addEventListener('click', (e) => {
+        if (e.target === settingsModal) {
+            settingsModal.classList.remove('active');
+        }
+        if (e.target === keyManagementModal) {
+            keyManagementModal.classList.remove('active');
+        }
+        if (e.target === connectModal) {
+            connectModal.classList.remove('active');
+        }
+    });
 }); 

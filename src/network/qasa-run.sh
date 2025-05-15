@@ -34,6 +34,20 @@ if [ -f "$NETWORK_DIR/build_crypto.sh" ]; then
   fi
 fi
 
+# Set up web files if web interface is requested
+if [[ "$*" == *"--web"* ]]; then
+  echo "Setting up web interface..."
+  if [ -f "$NETWORK_DIR/setup_web.sh" ]; then
+    (cd "$NETWORK_DIR" && ./setup_web.sh)
+    if [ $? -ne 0 ]; then
+      echo "Failed to set up web interface."
+      exit 1
+    fi
+  else
+    echo "Web setup script not found. Web interface may not work properly."
+  fi
+fi
+
 # Check if network binary exists, if not, build it
 if [ ! -f "$MAIN_BIN" ] || [ "$NETWORK_DIR/main.go" -nt "$MAIN_BIN" ]; then
   echo "Building QaSa network module..."

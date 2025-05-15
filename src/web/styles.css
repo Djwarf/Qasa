@@ -77,6 +77,76 @@ body {
     background-color: var(--error-color);
 }
 
+/* Search Section Styles */
+.search-section {
+    padding: 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.search-container {
+    display: flex;
+    gap: 5px;
+}
+
+.search-container input {
+    flex: 1;
+    padding: 8px;
+    border: none;
+    border-radius: 5px;
+    font-size: 0.9rem;
+}
+
+.search-container button {
+    background-color: var(--secondary-color);
+    border: none;
+    border-radius: 5px;
+    color: white;
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.search-container button:hover {
+    background-color: #2980b9;
+}
+
+.search-results {
+    margin-top: 10px;
+    max-height: 200px;
+    overflow-y: auto;
+    background-color: rgba(0, 0, 0, 0.2);
+    border-radius: 5px;
+    padding: 10px;
+}
+
+.search-results.hidden {
+    display: none;
+}
+
+.search-result-item {
+    padding: 8px;
+    border-radius: 5px;
+    margin-bottom: 5px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.search-result-item:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.search-result-item .result-peer-id {
+    font-size: 0.9rem;
+    word-break: break-all;
+}
+
+.search-result-item .result-status {
+    display: flex;
+    align-items: center;
+    font-size: 0.8rem;
+    margin-top: 5px;
+}
+
 .contacts-section {
     flex: 1;
     overflow-y: auto;
@@ -198,16 +268,15 @@ body {
     border: 1px solid var(--border-color);
     border-radius: 5px;
     resize: none;
-    height: 60px;
     font-family: inherit;
 }
 
 .message-input button {
-    padding: 0 20px;
     background-color: var(--secondary-color);
     color: white;
     border: none;
     border-radius: 5px;
+    padding: 10px 20px;
     cursor: pointer;
     transition: background-color 0.2s;
 }
@@ -218,38 +287,42 @@ body {
 
 /* Modal Styles */
 .modal {
-    display: none;
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
     background-color: rgba(0, 0, 0, 0.5);
-    z-index: 1000;
-}
-
-.modal.active {
     display: flex;
     justify-content: center;
     align-items: center;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s, visibility 0.2s;
+}
+
+.modal.active {
+    opacity: 1;
+    visibility: visible;
 }
 
 .modal-content {
     background-color: white;
     padding: 30px;
     border-radius: 10px;
-    width: 90%;
-    max-width: 600px;
-    max-height: 90vh;
-    overflow-y: auto;
+    width: 100%;
+    max-width: 500px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+    color: var(--text-color);
 }
 
 .modal-content h2 {
     margin-bottom: 20px;
 }
 
-.settings-section {
-    margin-bottom: 20px;
+.settings-section h3 {
+    margin: 15px 0 10px;
 }
 
 .setting-item {
@@ -260,21 +333,21 @@ body {
 }
 
 .setting-item input[type="number"] {
-    width: 100px;
+    width: 80px;
     padding: 5px;
     border: 1px solid var(--border-color);
     border-radius: 3px;
 }
 
 .modal-buttons {
+    margin-top: 20px;
     display: flex;
     justify-content: flex-end;
     gap: 10px;
-    margin-top: 20px;
 }
 
 .modal-buttons button {
-    padding: 8px 20px;
+    padding: 8px 15px;
     border: none;
     border-radius: 5px;
     cursor: pointer;
@@ -287,19 +360,19 @@ body {
 }
 
 .modal-buttons button:last-child {
-    background-color: #e0e0e0;
+    background-color: #ecf0f1;
+    color: var(--text-color);
 }
 
-/* Key Management Styles */
 .key-management-section {
     margin-bottom: 20px;
 }
 
 .key-list {
-    margin-top: 10px;
     border: 1px solid var(--border-color);
     border-radius: 5px;
-    padding: 10px;
+    max-height: 200px;
+    overflow-y: auto;
 }
 
 .key-item {
@@ -313,13 +386,13 @@ body {
 
 .key-actions {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: 1fr 1fr;
     gap: 10px;
     margin-bottom: 20px;
 }
 
 .key-actions button {
-    padding: 10px;
+    padding: 8px 0;
     border: none;
     border-radius: 5px;
     cursor: pointer;
@@ -338,7 +411,7 @@ body {
 
 .key-actions button:nth-child(3) {
     background-color: var(--warning-color);
-    color: var(--text-color);
+    color: white;
 }
 
 .key-actions button:last-child {

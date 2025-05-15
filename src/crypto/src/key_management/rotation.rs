@@ -12,7 +12,7 @@ use crate::dilithium::DilithiumKeyPair;
 use crate::error::CryptoError;
 use crate::key_management::storage;
 use crate::kyber::KyberKeyPair;
-use crate::secure_memory::{SecureBytes, with_secure_scope};
+use crate::secure_memory::{with_secure_scope};
 
 /// Key rotation policy
 ///
@@ -296,6 +296,7 @@ pub fn load_metadata(key_id: &str, key_type: &str) -> Result<KeyRotationMetadata
 ///
 /// * `key_id` - ID of the key to rotate
 /// * `password` - Password to decrypt the key
+/// * `path` - Optional custom path for key storage
 ///
 /// # Returns
 ///
@@ -303,15 +304,16 @@ pub fn load_metadata(key_id: &str, key_type: &str) -> Result<KeyRotationMetadata
 pub fn rotate_kyber_keypair(
     key_id: &str,
     password: &str,
+    path: Option<&str>,
 ) -> Result<String, CryptoError> {
     // Load the existing key
-    let old_keypair = storage::load_kyber_keypair(key_id, password)?;
+    let old_keypair = storage::load_kyber_keypair(key_id, password, path)?;
     
     // Generate a new key with the same algorithm
     let new_keypair = KyberKeyPair::generate(old_keypair.algorithm)?;
     
     // Store the new key
-    let new_key_id = storage::store_kyber_keypair(&new_keypair, None, password)?;
+    let new_key_id = storage::store_kyber_keypair(&new_keypair, path, password)?;
     
     // Load or create metadata for the new key
     let mut metadata = load_metadata(&new_key_id, "kyber")?;
@@ -337,6 +339,7 @@ pub fn rotate_kyber_keypair(
 ///
 /// * `key_id` - ID of the key to rotate
 /// * `password` - Password to decrypt the key
+/// * `path` - Optional custom path for key storage
 ///
 /// # Returns
 ///
@@ -344,15 +347,16 @@ pub fn rotate_kyber_keypair(
 pub fn rotate_dilithium_keypair(
     key_id: &str,
     password: &str,
+    path: Option<&str>,
 ) -> Result<String, CryptoError> {
     // Load the existing key
-    let old_keypair = storage::load_dilithium_keypair(key_id, password)?;
+    let old_keypair = storage::load_dilithium_keypair(key_id, password, path)?;
     
     // Generate a new key with the same algorithm
     let new_keypair = DilithiumKeyPair::generate(old_keypair.algorithm)?;
     
     // Store the new key
-    let new_key_id = storage::store_dilithium_keypair(&new_keypair, None, password)?;
+    let new_key_id = storage::store_dilithium_keypair(&new_keypair, path, password)?;
     
     // Load or create metadata for the new key
     let mut metadata = load_metadata(&new_key_id, "dilithium")?;
@@ -426,15 +430,25 @@ pub fn check_keys_for_rotation() -> Result<Vec<(String, String)>, CryptoError> {
 /// # Arguments
 ///
 /// * `password_provider` - A function that provides the password for a given key ID
+/// * `path` - Optional path to the key storage directory
+/// * `policy` - Optional custom rotation policy to override the default
 ///
 /// # Returns
 ///
 /// A vector of tuples containing (old_key_id, new_key_id) for rotated keys
-pub fn auto_rotate_keys<F>(password_provider: F) -> Result<Vec<(String, String)>, CryptoError>
+pub fn auto_rotate_keys<F>(
+    password_provider: F,
+    path: Option<&str>,
+    policy: RotationPolicy,
+) -> Result<Vec<(String, String)>, CryptoError>
 where
-    F: Fn(&str) -> Result<String, CryptoError>,
+    F: Fn(&str) -> String,
 {
-    let dir = storage::get_key_storage_directory();
+    let dir = match path {
+        Some(p) => PathBuf::from(p),
+        None => storage::get_key_storage_directory(),
+    };
+    let path_str = path;  // Store the original string path
     let mut rotated_keys = Vec::new();
     
     if !dir.exists() {
@@ -456,7 +470,8 @@ where
             .and_then(|name| name.to_str())
             .unwrap_or("");
         
-        if !filename.ends_with(".metadata") {
+        // Look for key files, not metadata
+        if !filename.contains(".key") || filename.contains(".metadata") {
             continue;
         }
         
@@ -469,26 +484,32 @@ where
         let key_id = parts[0];
         let key_type = parts[1];
         
-        // Load metadata and check if rotation is due and auto-rotate is enabled
-        match load_metadata(key_id, key_type) {
-            Ok(metadata) => {
-                if metadata.is_rotation_due() && metadata.policy.auto_rotate {
-                    // Get password for this key
-                    let password = match password_provider(key_id) {
-                        Ok(pw) => pw,
-                        Err(_) => continue, // Skip if password not available
-                    };
+        // Get key metadata
+        match get_key_age(key_id, key_type) {
+            Ok(age_summary) => {
+                // Check if rotation is needed based on custom policy
+                let days_since_creation = age_summary.days_since_creation;
+                let days_since_rotation = age_summary.days_since_rotation.unwrap_or(days_since_creation);
+                
+                if days_since_rotation >= policy.rotation_interval_days {
+                    // Try to get password
+                    let password = password_provider(key_id);
                     
                     // Rotate the key based on its type
                     let result = match key_type {
-                        "kyber" => rotate_kyber_keypair(key_id, &password),
-                        "dilithium" => rotate_dilithium_keypair(key_id, &password),
+                        "kyber" => rotate_kyber_keypair(key_id, &password, path_str),
+                        "dilithium" => rotate_dilithium_keypair(key_id, &password, path_str),
                         _ => continue, // Skip unknown key types
                     };
                     
-                    // Record successful rotations
-                    if let Ok(new_key_id) = result {
-                        rotated_keys.push((key_id.to_string(), new_key_id));
+                    match result {
+                        Ok(new_key_id) => {
+                            rotated_keys.push((key_id.to_string(), new_key_id));
+                        },
+                        Err(e) => {
+                            eprintln!("Failed to rotate key {}: {}", key_id, e);
+                            continue;
+                        }
                     }
                 }
             },

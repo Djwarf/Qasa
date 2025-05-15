@@ -16,6 +16,15 @@
                     <span class="status-indicator offline"></span>
                 </div>
             </div>
+            <div class="search-section">
+                <div class="search-container">
+                    <input type="text" id="search-input" placeholder="Search for peers..." />
+                    <button id="search-btn">🔍</button>
+                </div>
+                <div id="search-results" class="search-results hidden">
+                    <!-- Search results will appear here -->
+                </div>
+            </div>
             <div class="contacts-section">
                 <h2>Contacts</h2>
                 <div class="contact-list" id="contact-list">
@@ -99,6 +108,20 @@
             </div>
             <div class="modal-buttons">
                 <button id="close-key-management">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="connect-modal" class="modal">
+        <div class="modal-content">
+            <h2>Connect to Peer</h2>
+            <div class="setting-item">
+                <label for="peer-address">Peer Address:</label>
+                <input type="text" id="peer-address" placeholder="Enter peer address..." />
+            </div>
+            <div class="modal-buttons">
+                <button id="connect-btn">Connect</button>
+                <button id="cancel-connect">Cancel</button>
             </div>
         </div>
     </div>
