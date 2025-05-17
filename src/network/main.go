@@ -750,18 +750,6 @@ func printKeyManagementHelp() {
 	fmt.Println("  - dilithium2, dilithium3, dilithium5")
 }
 
-// typeFromAlgorithm returns the type of a cryptographic algorithm
-func typeFromAlgorithm(algorithm string) string {
-	switch algorithm {
-	case "kyber768":
-		return "Key Encapsulation (KEM)"
-	case "dilithium3":
-		return "Digital Signature"
-	default:
-		return "Unknown"
-	}
-}
-
 // keyType returns the type of a key (local or remote)
 func keyType(keyInfo *encryption.KeyInfo) string {
 	if keyInfo.IsLocal {

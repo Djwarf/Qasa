@@ -56,22 +56,19 @@ func (ws *WebServer) monitorMessagesAndPeers() {
 	var lastPeerCount int
 	lastPeerList := make([]peer.ID, 0)
 
-	for {
-		select {
-		case <-ticker.C:
-			// Get current peers
-			currentPeers := ws.node.Peers()
+	for range ticker.C {
+		// Get current peers
+		currentPeers := ws.node.Peers()
 
-			// Check if peer list has changed
-			if len(currentPeers) != lastPeerCount || !peerListsEqual(currentPeers, lastPeerList) {
-				// Update our tracking
-				lastPeerCount = len(currentPeers)
-				lastPeerList = make([]peer.ID, len(currentPeers))
-				copy(lastPeerList, currentPeers)
+		// Check if peer list has changed
+		if len(currentPeers) != lastPeerCount || !peerListsEqual(currentPeers, lastPeerList) {
+			// Update our tracking
+			lastPeerCount = len(currentPeers)
+			lastPeerList = make([]peer.ID, len(currentPeers))
+			copy(lastPeerList, currentPeers)
 
-				// Broadcast updated peer list
-				ws.BroadcastContactList()
-			}
+			// Broadcast updated peer list
+			ws.BroadcastContactList()
 		}
 	}
 }
