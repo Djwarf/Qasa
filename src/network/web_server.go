@@ -12,6 +12,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/qasa/network/discovery"
 	"github.com/qasa/network/encryption"
 	"github.com/qasa/network/libp2p"
 	"github.com/qasa/network/message"
@@ -26,21 +27,19 @@ var upgrader = websocket.Upgrader{
 }
 
 type WebServer struct {
-	node         *libp2p.Node
-	chatProtocol *message.ChatProtocol
-	wsClients    map[*websocket.Conn]bool
-	wsMutex      sync.Mutex
-	// Message tracking
-	messageBuffer      []message.Message
-	messageBufferMutex sync.RWMutex
+	node                *libp2p.Node
+	chatProtocol        *message.ChatProtocol
+	wsClients           map[*websocket.Conn]bool
+	wsMutex             sync.Mutex
+	identifierDiscovery *discovery.IdentifierDiscoveryService
 }
 
-func NewWebServer(node *libp2p.Node, chatProtocol *message.ChatProtocol) *WebServer {
+func NewWebServer(node *libp2p.Node, chatProtocol *message.ChatProtocol, identifierDiscovery *discovery.IdentifierDiscoveryService) *WebServer {
 	ws := &WebServer{
-		node:          node,
-		chatProtocol:  chatProtocol,
-		wsClients:     make(map[*websocket.Conn]bool),
-		messageBuffer: make([]message.Message, 0, 100),
+		node:                node,
+		chatProtocol:        chatProtocol,
+		wsClients:           make(map[*websocket.Conn]bool),
+		identifierDiscovery: identifierDiscovery,
 	}
 
 	// Register a message receiver
@@ -97,29 +96,6 @@ func peerListsEqual(a, b []peer.ID) bool {
 	}
 
 	return true
-}
-
-// addMessageToBuffer adds a message to the buffer and trims if needed
-func (ws *WebServer) addMessageToBuffer(msg message.Message) {
-	ws.messageBufferMutex.Lock()
-	defer ws.messageBufferMutex.Unlock()
-
-	// Add to buffer
-	ws.messageBuffer = append(ws.messageBuffer, msg)
-
-	// Trim buffer if it gets too large
-	if len(ws.messageBuffer) > 100 {
-		ws.messageBuffer = ws.messageBuffer[len(ws.messageBuffer)-100:]
-	}
-
-	// Broadcast message to all web clients
-	webMsg := map[string]interface{}{
-		"from":      msg.From,
-		"content":   msg.Content,
-		"timestamp": msg.Time.Format(time.RFC3339),
-	}
-
-	ws.BroadcastMessage("message", webMsg)
 }
 
 func (ws *WebServer) Start(port int) error {
@@ -256,13 +232,26 @@ func (ws *WebServer) handleClientMessages(conn *websocket.Conn) {
 		case "search":
 			var data struct {
 				Query string `json:"query"`
+				Type  string `json:"type"`
 			}
 			if err := json.Unmarshal(msg.Data, &data); err != nil {
 				continue
 			}
 
-			// Perform search
-			results, err := ws.searchPeers(data.Query)
+			// Perform search based on query type
+			var results []map[string]interface{}
+			var err error
+
+			switch data.Type {
+			case "name":
+				results, err = ws.searchPeersByName(data.Query)
+			case "key":
+				results, err = ws.searchPeersByKey(data.Query)
+			default:
+				// Default to regular peer search
+				results, err = ws.searchPeers(data.Query)
+			}
+
 			if err != nil {
 				ws.sendToClient(conn, "error", map[string]string{
 					"message": fmt.Sprintf("Search failed: %v", err),
@@ -273,7 +262,36 @@ func (ws *WebServer) handleClientMessages(conn *websocket.Conn) {
 			// Send results to client
 			ws.sendToClient(conn, "search_results", map[string]interface{}{
 				"query":   data.Query,
+				"type":    data.Type,
 				"results": results,
+			})
+
+		case "set_identifier":
+			var data struct {
+				Username string `json:"username"`
+				KeyID    string `json:"key_id"`
+				Metadata string `json:"metadata"`
+			}
+			if err := json.Unmarshal(msg.Data, &data); err != nil {
+				continue
+			}
+
+			// Set username for this node
+			var metadata []byte
+			if data.Metadata != "" {
+				metadata = []byte(data.Metadata)
+			}
+
+			err := ws.identifierDiscovery.SetSelfIdentifier(data.Username, data.KeyID, metadata)
+			if err != nil {
+				ws.sendToClient(conn, "error", map[string]string{
+					"message": fmt.Sprintf("Failed to set identifier: %v", err),
+				})
+				continue
+			}
+
+			ws.sendToClient(conn, "identifier_set", map[string]string{
+				"username": data.Username,
 			})
 
 		case "key_exchange":
@@ -532,6 +550,108 @@ func (ws *WebServer) handleClientMessages(conn *websocket.Conn) {
 	}
 }
 
+// Search for peers based on username
+func (ws *WebServer) searchPeersByName(username string) ([]map[string]interface{}, error) {
+	if ws.identifierDiscovery == nil {
+		return nil, fmt.Errorf("identifier discovery service not available")
+	}
+
+	// Search for the username in the identifier discovery system
+	records, err := ws.identifierDiscovery.FindUserByName(username)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search by username: %v", err)
+	}
+
+	results := make([]map[string]interface{}, 0)
+	for _, record := range records {
+		// Try to parse peer ID
+		peerID, err := peer.Decode(record.PeerID)
+		if err != nil {
+			continue
+		}
+
+		// Check if we're connected to this peer
+		connected := false
+		for _, connPeer := range ws.node.Peers() {
+			if connPeer == peerID {
+				connected = true
+				break
+			}
+		}
+
+		result := map[string]interface{}{
+			"peer_id":       record.PeerID,
+			"username":      record.Identifier,
+			"connected":     connected,
+			"key_id":        record.KeyID,
+			"authenticated": ws.node.IsPeerAuthenticated(peerID),
+			"last_updated":  record.Timestamp.Format(time.RFC3339),
+		}
+
+		// Add metadata if available
+		if len(record.Metadata) > 0 {
+			result["metadata"] = string(record.Metadata)
+		}
+
+		results = append(results, result)
+	}
+
+	return results, nil
+}
+
+// Search for peers based on key ID
+func (ws *WebServer) searchPeersByKey(keyID string) ([]map[string]interface{}, error) {
+	if ws.identifierDiscovery == nil {
+		return nil, fmt.Errorf("identifier discovery service not available")
+	}
+
+	// Search for the key ID in the identifier discovery system
+	records, err := ws.identifierDiscovery.FindUserByKeyID(keyID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search by key ID: %v", err)
+	}
+
+	results := make([]map[string]interface{}, 0)
+	for _, record := range records {
+		// Try to parse peer ID
+		peerID, err := peer.Decode(record.PeerID)
+		if err != nil {
+			continue
+		}
+
+		// Check if we're connected to this peer
+		connected := false
+		for _, connPeer := range ws.node.Peers() {
+			if connPeer == peerID {
+				connected = true
+				break
+			}
+		}
+
+		result := map[string]interface{}{
+			"peer_id":       record.PeerID,
+			"key_id":        record.KeyID,
+			"connected":     connected,
+			"authenticated": ws.node.IsPeerAuthenticated(peerID),
+			"last_updated":  record.Timestamp.Format(time.RFC3339),
+		}
+
+		// Add username if this record has one
+		if record.Type == "username" {
+			result["username"] = record.Identifier
+		}
+
+		// Add metadata if available
+		if len(record.Metadata) > 0 {
+			result["metadata"] = string(record.Metadata)
+		}
+
+		results = append(results, result)
+	}
+
+	return results, nil
+}
+
 // Search for peers based on ID or other criteria
 func (ws *WebServer) searchPeers(query string) ([]map[string]interface{}, error) {
 	// Initialize DHT if not already enabled
@@ -558,8 +678,20 @@ func (ws *WebServer) searchPeers(query string) ([]map[string]interface{}, error)
 		}
 	}
 
-	// TODO: Implement more advanced search using bootstrap nodes or DHT
-	// This would require additional methods in the libp2p.Node implementation
+	// If we have identifier discovery and didn't find anything, try to search by identifiers
+	if len(results) == 0 && ws.identifierDiscovery != nil {
+		// Try by username
+		nameResults, err := ws.searchPeersByName(query)
+		if err == nil {
+			results = append(results, nameResults...)
+		}
+
+		// Try by key
+		keyResults, err := ws.searchPeersByKey(query)
+		if err == nil {
+			results = append(results, keyResults...)
+		}
+	}
 
 	return results, nil
 }
@@ -658,8 +790,22 @@ func (ws *WebServer) handleSearchAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Perform search
-	results, err := ws.searchPeers(query)
+	// Get search type from URL parameter
+	searchType := r.URL.Query().Get("type")
+
+	// Perform search based on type
+	var results []map[string]interface{}
+	var err error
+
+	switch searchType {
+	case "name":
+		results, err = ws.searchPeersByName(query)
+	case "key":
+		results, err = ws.searchPeersByKey(query)
+	default:
+		results, err = ws.searchPeers(query)
+	}
+
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Search failed: %v", err), http.StatusInternalServerError)
 		return
@@ -668,6 +814,7 @@ func (ws *WebServer) handleSearchAPI(w http.ResponseWriter, r *http.Request) {
 	// Return results
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"query":   query,
+		"type":    searchType,
 		"results": results,
 	})
 }

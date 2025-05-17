@@ -527,3 +527,8 @@ func (n *Node) DisableDHT() {
 		n.dhtService = nil
 	}
 }
+
+// GetDHTService returns the DHTService instance
+func (n *Node) GetDHTService() *discovery.DHTService {
+	return n.dhtService
+}

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/qasa/network/discovery"
 	"github.com/qasa/network/encryption"
 	"github.com/qasa/network/libp2p"
 	"github.com/qasa/network/message"
@@ -29,6 +30,7 @@ func main() {
 	bootstrapNode := flag.String("bootstrap", "", "Add a bootstrap node")
 	connectTo := flag.String("connect", "", "Peer to connect to")
 	webPort := flag.Int("web", 0, "Start web interface on specified port (0 disables web interface)")
+	username := flag.String("username", "", "Set a username for this node")
 	flag.Parse()
 
 	// Create a context
@@ -113,6 +115,34 @@ func main() {
 	}, chatOptions)
 	chatProtocol.Start()
 
+	// Initialize identifier discovery service
+	var identifierDiscovery *discovery.IdentifierDiscoveryService
+	if config.EnableDHT {
+		dhtService := node.GetDHTService()
+		if dhtService != nil {
+			var initErr error
+			identifierDiscovery, initErr = discovery.NewIdentifierDiscoveryService(ctx, node.Host(), dhtService.GetDHT(), *configDir)
+			if initErr != nil {
+				fmt.Printf("Warning: Failed to initialize identifier discovery: %s\n", initErr)
+			} else {
+				if startErr := identifierDiscovery.Start(); startErr != nil {
+					fmt.Printf("Warning: Failed to start identifier discovery: %s\n", startErr)
+				} else {
+					fmt.Println("Identifier-based discovery enabled")
+
+					// Set username if provided
+					if *username != "" {
+						if err := identifierDiscovery.SetSelfIdentifier(*username, "", nil); err != nil {
+							fmt.Printf("Warning: Failed to set username: %s\n", err)
+						} else {
+							fmt.Printf("Username set to: %s\n", *username)
+						}
+					}
+				}
+			}
+		}
+	}
+
 	// If a peer address was provided, connect to it
 	if *connectTo != "" {
 		fmt.Printf("Connecting to peer: %s\n", *connectTo)
@@ -147,7 +177,7 @@ func main() {
 	// Initialize web server if port is specified
 	var webServer *WebServer
 	if *webPort > 0 {
-		webServer = NewWebServer(node, chatProtocol)
+		webServer = NewWebServer(node, chatProtocol, identifierDiscovery)
 		go func() {
 			fmt.Printf("Starting web interface on port %d...\n", *webPort)
 			if err := webServer.Start(*webPort); err != nil {

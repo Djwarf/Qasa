@@ -4,6 +4,7 @@ let peerId = null;
 let currentChat = null;
 let contacts = new Map();
 let messages = new Map();
+let currentView = 'chat'; // chat or discovery
 
 // DOM Elements
 const peerIdElement = document.getElementById('peer-id');
@@ -19,6 +20,21 @@ const encryptionStatus = document.getElementById('encryption-status');
 const searchInput = document.getElementById('search-input');
 const searchButton = document.getElementById('search-btn');
 const searchResults = document.getElementById('search-results');
+const searchTypeSelect = document.getElementById('search-type');
+
+// Identity Elements
+const usernameInput = document.getElementById('username-input');
+const setUsernameButton = document.getElementById('set-username-btn');
+
+// Discovery Elements
+const discoveryTab = document.getElementById('discovery-tab');
+const chatTab = document.getElementById('chat-tab');
+const chatView = document.getElementById('chat-view');
+const discoveryView = document.getElementById('discovery-view');
+const discoverySearchInput = document.getElementById('discovery-search-input');
+const discoveryTypeSelect = document.getElementById('discovery-type');
+const discoverySearchBtn = document.getElementById('discovery-search-btn');
+const discoveryResultsContainer = document.getElementById('discovery-results');
 
 // Modal Elements
 const settingsModal = document.getElementById('settings-modal');
@@ -79,11 +95,12 @@ function handleWebSocketMessage(message) {
         case 'message_sent':
             handleMessageSent(message.data);
             break;
-        case 'contact_status':
-            handleContactStatus(message.data);
-            break;
         case 'search_results':
             handleSearchResults(message.data);
+            // Also update discovery results if in discovery view
+            if (currentView === 'discovery') {
+                updateDiscoveryResults(message.data);
+            }
             break;
         case 'peer_connected':
             handlePeerConnected(message.data);
@@ -93,6 +110,9 @@ function handleWebSocketMessage(message) {
             break;
         case 'error':
             handleError(message.data);
+            break;
+        case 'identifier_set':
+            handleIdentifierSet(message.data);
             break;
     }
 }
@@ -122,10 +142,14 @@ function addContactToList(contact) {
     
     const statusClass = contact.online ? 'online' : 'offline';
     
+    // Show username if available, otherwise show short peer ID
+    const displayName = contact.username || shortPeerId(contact.peer_id);
+    
     contactElement.innerHTML = `
         <div class="contact-info">
             <span class="status-indicator ${statusClass}"></span>
-            <span class="contact-name">${shortPeerId(contact.peer_id)}</span>
+            <span class="contact-name">${displayName}</span>
+            ${contact.username ? `<span class="contact-peer-id">${shortPeerId(contact.peer_id)}</span>` : ''}
         </div>
     `;
     
@@ -209,7 +233,7 @@ function selectContact(peerId) {
 
 // Handle search results
 function handleSearchResults(data) {
-    const { query, results } = data;
+    const { query, type, results } = data;
     
     // Display search results
     searchResults.innerHTML = '';
@@ -224,13 +248,20 @@ function handleSearchResults(data) {
         const resultElement = document.createElement('div');
         resultElement.className = 'search-result-item';
         
+        // Determine display name (username > peer ID)
+        const displayName = result.username || shortPeerId(result.peer_id);
+        
         resultElement.innerHTML = `
-            <div class="result-peer-id">${shortPeerId(result.peer_id)}</div>
+            <div class="result-peer-info">
+                <div class="result-peer-name">${displayName}</div>
+                ${result.username ? `<div class="result-peer-id">${shortPeerId(result.peer_id)}</div>` : ''}
+            </div>
             <div class="result-status">
                 <span class="status-indicator ${result.connected ? 'online' : 'offline'}"></span>
                 ${result.connected ? 'Connected' : 'Not Connected'}
                 ${result.authenticated ? ' (Authenticated)' : ''}
             </div>
+            ${result.key_id ? `<div class="result-key-id">Key: ${shortKeyId(result.key_id)}</div>` : ''}
         `;
         
         // Add click handler to connect to the peer
@@ -247,25 +278,6 @@ function handleSearchResults(data) {
         
         searchResults.appendChild(resultElement);
     });
-}
-
-// Handle contact status updates
-function handleContactStatus(data) {
-    const { peer_id, online, authenticated } = data;
-    
-    if (contacts.has(peer_id)) {
-        const contact = contacts.get(peer_id);
-        contact.online = online;
-        contact.authenticated = authenticated;
-        
-        // Update in the DOM
-        const contactElement = document.querySelector(`.contact-item[data-peer-id="${peer_id}"]`);
-        if (contactElement) {
-            const statusIndicator = contactElement.querySelector('.status-indicator');
-            statusIndicator.classList.toggle('online', online);
-            statusIndicator.classList.toggle('offline', !online);
-        }
-    }
 }
 
 // Handle successful peer connection
@@ -299,12 +311,26 @@ function handleError(data) {
     alert(`Error: ${data.message}`);
 }
 
+// Handle identifier set confirmation
+function handleIdentifierSet(data) {
+    console.log('Your username has been set:', data.username);
+    alert(`Username successfully set to: ${data.username}`);
+}
+
 // Shortens a peer ID for display
 function shortPeerId(peerId) {
     if (!peerId || peerId.length <= 10) {
         return peerId;
     }
     return `${peerId.slice(0, 5)}...${peerId.slice(-5)}`;
+}
+
+// Shortens a key ID for display
+function shortKeyId(keyId) {
+    if (!keyId || keyId.length <= 10) {
+        return keyId;
+    }
+    return `${keyId.slice(0, 5)}...${keyId.slice(-5)}`;
 }
 
 // Send a message to the current contact
@@ -339,10 +365,14 @@ function searchPeers() {
     const query = searchInput.value.trim();
     if (!query) return;
     
+    // Get the search type
+    const searchType = searchTypeSelect ? searchTypeSelect.value : 'any';
+    
     ws.send(JSON.stringify({
         type: 'search',
         data: {
-            query
+            query: query,
+            type: searchType
         }
     }));
 }
@@ -366,17 +396,218 @@ function showConnectModal(peerId = '') {
     }
 }
 
+// Set username for this node
+function setUsername() {
+    const username = usernameInput.value.trim();
+    if (!username) {
+        alert('Please enter a valid username');
+        return;
+    }
+    
+    ws.send(JSON.stringify({
+        type: 'set_identifier',
+        data: {
+            username: username,
+            key_id: '',  // Optional: could add key selection functionality
+            metadata: JSON.stringify({
+                timestamp: new Date().toISOString()
+            })
+        }
+    }));
+}
+
+// Update discovery results
+function updateDiscoveryResults(data) {
+    const { results, query, type } = data;
+    
+    discoveryResultsContainer.innerHTML = '';
+    
+    if (results.length === 0) {
+        discoveryResultsContainer.innerHTML = `
+            <div class="discovery-no-results">
+                <p>No users found matching "${query}"</p>
+                <p>Try a different search term or search type</p>
+            </div>
+        `;
+        return;
+    }
+    
+    // Create results header
+    const headerElement = document.createElement('div');
+    headerElement.className = 'discovery-results-header';
+    headerElement.innerHTML = `
+        <h3>Found ${results.length} result${results.length === 1 ? '' : 's'} for "${query}"</h3>
+        <p>Search type: ${getSearchTypeName(type)}</p>
+    `;
+    discoveryResultsContainer.appendChild(headerElement);
+    
+    // Create results container
+    const resultsGrid = document.createElement('div');
+    resultsGrid.className = 'discovery-results-grid';
+    
+    // Add each result as a card
+    results.forEach(result => {
+        const resultCard = document.createElement('div');
+        resultCard.className = 'discovery-result-card';
+        
+        // Determine name for display
+        const displayName = result.username || shortPeerId(result.peer_id);
+        
+        // Create connection status badge
+        const statusClass = result.connected ? 'connected' : 'disconnected';
+        const statusText = result.connected ? 'Connected' : 'Not Connected';
+        
+        resultCard.innerHTML = `
+            <div class="result-header">
+                <div class="result-name">${displayName}</div>
+                <div class="result-status-badge ${statusClass}">${statusText}</div>
+            </div>
+            <div class="result-details">
+                <div class="result-id">Peer ID: ${shortPeerId(result.peer_id)}</div>
+                ${result.key_id ? `<div class="result-key">Key ID: ${shortKeyId(result.key_id)}</div>` : ''}
+                ${result.authenticated ? '<div class="result-auth">Authenticated</div>' : ''}
+                ${result.last_updated ? `<div class="result-time">Last seen: ${formatTimeAgo(result.last_updated)}</div>` : ''}
+            </div>
+            <div class="result-actions">
+                ${result.connected ? 
+                    `<button class="action-btn chat-btn">Chat Now</button>` : 
+                    `<button class="action-btn connect-btn">Connect</button>`
+                }
+            </div>
+        `;
+        
+        // Add event listeners to buttons
+        const chatBtn = resultCard.querySelector('.chat-btn');
+        const connectBtn = resultCard.querySelector('.connect-btn');
+        
+        if (chatBtn) {
+            chatBtn.addEventListener('click', () => {
+                selectContact(result.peer_id);
+                switchView('chat');
+            });
+        }
+        
+        if (connectBtn) {
+            connectBtn.addEventListener('click', () => {
+                showConnectModal(result.peer_id);
+            });
+        }
+        
+        resultsGrid.appendChild(resultCard);
+    });
+    
+    discoveryResultsContainer.appendChild(resultsGrid);
+}
+
+// Format time ago
+function formatTimeAgo(timestamp) {
+    if (!timestamp) return '';
+    
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffSecs = Math.floor(diffMs / 1000);
+    const diffMins = Math.floor(diffSecs / 60);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+    
+    if (diffDays > 0) {
+        return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    } else if (diffHours > 0) {
+        return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    } else if (diffMins > 0) {
+        return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
+    } else {
+        return 'just now';
+    }
+}
+
+// Get search type name
+function getSearchTypeName(type) {
+    switch (type) {
+        case 'name':
+            return 'Username';
+        case 'key':
+            return 'Key ID';
+        case 'peer':
+            return 'Peer ID';
+        default:
+            return 'Any';
+    }
+}
+
+// Switch between chat and discovery views
+function switchView(view) {
+    currentView = view;
+    
+    if (view === 'chat') {
+        chatView.classList.remove('hidden');
+        discoveryView.classList.add('hidden');
+        chatTab.classList.add('active');
+        discoveryTab.classList.remove('active');
+    } else {
+        chatView.classList.add('hidden');
+        discoveryView.classList.remove('hidden');
+        chatTab.classList.remove('active');
+        discoveryTab.classList.add('active');
+    }
+}
+
+// Perform discovery search
+function performDiscoverySearch() {
+    const query = discoverySearchInput.value.trim();
+    if (!query) return;
+    
+    const searchType = discoveryTypeSelect.value;
+    
+    ws.send(JSON.stringify({
+        type: 'search',
+        data: {
+            query,
+            type: searchType
+        }
+    }));
+    
+    // Show loading state
+    discoveryResultsContainer.innerHTML = `
+        <div class="discovery-loading">
+            <p>Searching for "${query}"...</p>
+        </div>
+    `;
+}
+
 // Event Listeners
 document.addEventListener('DOMContentLoaded', () => {
     initWebSocket();
     
-    // Search functionality
+    // Tab switching
+    if (chatTab && discoveryTab) {
+        chatTab.addEventListener('click', () => switchView('chat'));
+        discoveryTab.addEventListener('click', () => switchView('discovery'));
+    }
+    
+    // Discovery search
+    if (discoverySearchBtn) {
+        discoverySearchBtn.addEventListener('click', performDiscoverySearch);
+        discoverySearchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                performDiscoverySearch();
+            }
+        });
+    }
+    
+    // Regular search functionality
     searchButton.addEventListener('click', searchPeers);
     searchInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
             searchPeers();
         }
     });
+    
+    // Username setting
+    if (setUsernameButton) {
+        setUsernameButton.addEventListener('click', setUsername);
+    }
     
     // Hide search results when clicking elsewhere
     document.addEventListener('click', (e) => {
@@ -393,29 +624,29 @@ document.addEventListener('DOMContentLoaded', () => {
             sendMessage();
         }
     });
-    
+
     // Modal controls
     settingsButton.addEventListener('click', () => {
         settingsModal.classList.add('active');
     });
-    
+
     keyManagementButton.addEventListener('click', () => {
         keyManagementModal.classList.add('active');
     });
-    
+
     saveSettingsButton.addEventListener('click', () => {
         // Save settings
         settingsModal.classList.remove('active');
     });
-    
+
     cancelSettingsButton.addEventListener('click', () => {
         settingsModal.classList.remove('active');
     });
-    
+
     closeKeyManagementButton.addEventListener('click', () => {
         keyManagementModal.classList.remove('active');
     });
-    
+
     // Connect modal
     connectBtn.addEventListener('click', () => {
         const address = peerAddressInput.value.trim();
@@ -428,7 +659,7 @@ document.addEventListener('DOMContentLoaded', () => {
         connectModal.classList.remove('active');
         peerAddressInput.value = '';
     });
-    
+
     // Close modals when clicking outside
     document.addEventListener('click', (e) => {
         if (e.target === settingsModal) {

@@ -6,11 +6,11 @@ import (
 	"sync"
 	"time"
 
+	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/libp2p/go-libp2p/p2p/discovery/routing"
-	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/multiformats/go-multiaddr"
 )
 
@@ -192,4 +192,9 @@ func (s *DHTService) Stop() error {
 // DiscoveredPeers returns a channel of peers found via DHT
 func (s *DHTService) DiscoveredPeers() <-chan peer.AddrInfo {
 	return s.peers
-} 
+}
+
+// GetDHT returns the underlying DHT instance
+func (s *DHTService) GetDHT() *dht.IpfsDHT {
+	return s.dht
+}
