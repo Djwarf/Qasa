@@ -15,14 +15,22 @@ const currentChatElement = document.getElementById('current-chat');
 const connectionStatus = document.getElementById('connection-status');
 const encryptionStatus = document.getElementById('encryption-status');
 
+// Navigation Elements
+const navTabs = document.querySelectorAll('.nav-tab');
+const tabContents = document.querySelectorAll('.tab-content');
+
 // Modal Elements
 const settingsModal = document.getElementById('settings-modal');
 const keyManagementModal = document.getElementById('key-management-modal');
+const profileModal = document.getElementById('profile-modal');
 const settingsButton = document.getElementById('settings-btn');
 const keyManagementButton = document.getElementById('key-management-btn');
+const profileButton = document.getElementById('profile-btn');
 const saveSettingsButton = document.getElementById('save-settings');
 const cancelSettingsButton = document.getElementById('cancel-settings');
 const closeKeyManagementButton = document.getElementById('close-key-management');
+const saveProfileButton = document.getElementById('save-profile');
+const cancelProfileButton = document.getElementById('cancel-profile');
 
 // Initialize WebSocket connection
 function initWebSocket() {
@@ -35,6 +43,11 @@ function initWebSocket() {
         console.log('WebSocket connection established');
         connectionStatus.textContent = 'Connected';
         connectionStatus.style.color = 'var(--success-color)';
+        
+        // Initialize discovery mode after WebSocket is connected
+        if (window.initDiscovery) {
+            window.initDiscovery(ws);
+        }
     };
     
     ws.onclose = () => {
@@ -73,6 +86,15 @@ function handleWebSocketMessage(message) {
         case 'key_exchange':
             handleKeyExchange(message.data);
             break;
+        case 'search_results':
+            handleSearchResults(message.data);
+            break;
+        case 'keys_list':
+            handleKeysList(message.data);
+            break;
+        case 'profile_updated':
+            handleProfileUpdated(message.data);
+            break;
         case 'error':
             handleError(message.data);
             break;
@@ -83,6 +105,11 @@ function handleWebSocketMessage(message) {
 function handlePeerId(data) {
     peerId = data.peer_id;
     peerIdElement.textContent = shortPeerId(peerId);
+    
+    // Load user profile if available
+    ws.send(JSON.stringify({
+        type: 'get_profile'
+    }));
 }
 
 // Handle contact list updates
@@ -103,11 +130,12 @@ function addContactToList(contact) {
     contactElement.dataset.peerId = contact.peer_id;
     
     const statusClass = contact.online ? 'online' : 'offline';
+    const displayName = contact.identifier || shortPeerId(contact.peer_id);
     
     contactElement.innerHTML = `
         <div class="contact-info">
             <span class="status-indicator ${statusClass}"></span>
-            <span class="contact-name">${shortPeerId(contact.peer_id)}</span>
+            <span class="contact-name">${displayName}</span>
         </div>
     `;
     
@@ -132,6 +160,9 @@ function handleIncomingMessage(data) {
     
     if (currentChat === from) {
         displayMessage(from, content, timestamp, false);
+    } else {
+        // Notify user about new message
+        showNotification(from, content);
     }
 }
 
@@ -151,10 +182,34 @@ function displayMessage(peerId, content, timestamp, sent) {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
+// Show a browser notification for new messages
+function showNotification(peerId, content) {
+    // Only show notifications if the user has granted permission
+    if (Notification.permission === "granted") {
+        const sender = contacts.get(peerId);
+        const displayName = sender?.identifier || shortPeerId(peerId);
+        
+        const notification = new Notification("QaSa Message", {
+            body: `${displayName}: ${content.substring(0, 50)}${content.length > 50 ? '...' : ''}`,
+            icon: "/favicon.ico"
+        });
+        
+        notification.onclick = () => {
+            window.focus();
+            selectContact(peerId);
+        };
+    } else if (Notification.permission !== "denied") {
+        Notification.requestPermission();
+    }
+}
+
 // Select a contact to chat with
 function selectContact(peerId) {
     currentChat = peerId;
-    currentChatElement.textContent = shortPeerId(peerId);
+    const contact = contacts.get(peerId);
+    const displayName = contact?.identifier || shortPeerId(peerId);
+    
+    currentChatElement.textContent = displayName;
     
     // Update active state in contact list
     document.querySelectorAll('.contact-item').forEach(item => {
@@ -167,6 +222,12 @@ function selectContact(peerId) {
     messageList.forEach(msg => {
         displayMessage(peerId, msg.content, msg.timestamp, msg.sent);
     });
+    
+    // Switch to contacts tab if we're in discovery mode
+    if (!document.getElementById('contacts-tab').classList.contains('active')) {
+        // Find and click the contacts tab
+        document.querySelector('.nav-tab[data-tab="contacts"]').click();
+    }
 }
 
 // Send a message
@@ -227,16 +288,90 @@ function handleKeyExchange(data) {
     }
 }
 
+// Handle search results
+function handleSearchResults(data) {
+    // Forward to the discovery mode handler
+    if (window.discoveryMode) {
+        window.discoveryMode.handleSearchResults(data);
+    }
+}
+
+// Handle list of keys
+function handleKeysList(data) {
+    const keyList = document.getElementById('key-list');
+    const keyIdSelect = document.getElementById('key-id');
+    
+    // Clear previous content
+    keyList.innerHTML = '';
+    keyIdSelect.innerHTML = '<option value="">Select a key</option>';
+    
+    // Add each key to the list
+    data.keys.forEach(key => {
+        const keyElement = document.createElement('div');
+        keyElement.className = 'key-item';
+        keyElement.innerHTML = `
+            <div class="key-info">
+                <strong>${key.type}</strong>
+                <div>${shortPeerId(key.id)}</div>
+                <div>${key.created_at}</div>
+            </div>
+        `;
+        keyList.appendChild(keyElement);
+        
+        // Also add to select dropdown for profile
+        const option = document.createElement('option');
+        option.value = key.id;
+        option.textContent = `${key.type} - ${shortPeerId(key.id)}`;
+        keyIdSelect.appendChild(option);
+    });
+}
+
+// Handle profile updated
+function handleProfileUpdated(data) {
+    // Update username if provided
+    if (data.username) {
+        document.getElementById('username').value = data.username;
+    }
+    
+    // Update selected key if provided
+    if (data.key_id) {
+        document.getElementById('key-id').value = data.key_id;
+    }
+    
+    // Update metadata if provided
+    if (data.metadata) {
+        document.getElementById('profile-metadata').value = data.metadata;
+    }
+    
+    profileModal.classList.remove('active');
+}
+
 // Handle errors
 function handleError(data) {
     console.error('Error:', data.message);
-    // You might want to show this to the user in a more user-friendly way
+    // Display error in a more user-friendly way
+    alert(`Error: ${data.message}`);
 }
 
 // Utility function to shorten peer IDs
 function shortPeerId(peerId) {
+    if (!peerId) return '';
     return peerId.substring(0, 8) + '...' + peerId.substring(peerId.length - 8);
 }
+
+// Tab navigation
+navTabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+        // Remove active class from all tabs and contents
+        navTabs.forEach(t => t.classList.remove('active'));
+        tabContents.forEach(c => c.classList.remove('active'));
+        
+        // Add active class to selected tab and content
+        tab.classList.add('active');
+        const tabName = tab.dataset.tab;
+        document.getElementById(`${tabName}-tab`).classList.add('active');
+    });
+});
 
 // Settings Modal
 settingsButton.addEventListener('click', () => {
@@ -275,6 +410,37 @@ keyManagementButton.addEventListener('click', () => {
 
 closeKeyManagementButton.addEventListener('click', () => {
     keyManagementModal.classList.remove('active');
+});
+
+// Profile Modal
+profileButton.addEventListener('click', () => {
+    profileModal.classList.add('active');
+    // Request current profile and keys
+    ws.send(JSON.stringify({
+        type: 'get_profile'
+    }));
+    ws.send(JSON.stringify({
+        type: 'get_keys'
+    }));
+});
+
+saveProfileButton.addEventListener('click', () => {
+    const username = document.getElementById('username').value;
+    const keyId = document.getElementById('key-id').value;
+    const metadata = document.getElementById('profile-metadata').value;
+    
+    ws.send(JSON.stringify({
+        type: 'set_identifier',
+        data: {
+            username: username,
+            key_id: keyId,
+            metadata: metadata
+        }
+    }));
+});
+
+cancelProfileButton.addEventListener('click', () => {
+    profileModal.classList.remove('active');
 });
 
 // Key Management Actions
@@ -331,7 +497,15 @@ messageInput.addEventListener('keypress', (e) => {
 
 sendButton.addEventListener('click', sendMessage);
 
+// Request notification permissions
+function requestNotificationPermission() {
+    if ("Notification" in window) {
+        Notification.requestPermission();
+    }
+}
+
 // Initialize the application
 document.addEventListener('DOMContentLoaded', () => {
     initWebSocket();
+    requestNotificationPermission();
 }); 

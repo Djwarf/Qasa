@@ -1,97 +1,138 @@
-# QaSa - Quantum-Safe Chat Application
+# QaSa - Quantum-Safe Secure Chat
 
-QaSa is a secure end-to-end encrypted chat application that uses post-quantum cryptography to provide protection against quantum computer attacks.
+QaSa (Quantum-Safe) is a secure end-to-end encrypted chat application that uses post-quantum cryptography to provide protection against quantum computer attacks.
 
-## Project Overview
+## Features
 
-This project implements:
+- **Quantum-Resistant Encryption** - Uses NIST-selected post-quantum algorithms CRYSTALS-Kyber and CRYSTALS-Dilithium
+- **End-to-End Encryption** - All messages are encrypted using strong cryptographic algorithms
+- **Peer-to-Peer Communication** - Direct communication without central servers
+- **Identity Management** - Associate usernames with cryptographic keys
+- **Peer Discovery** - Find other users through DHT, mDNS, and custom discovery mechanisms
+- **Web Interface** - Modern, responsive UI for easy interaction
 
-- **Post-Quantum Cryptography** using NIST-selected algorithms:
-  - CRYSTALS-Kyber for key encapsulation (replacing traditional Diffie-Hellman)
-  - CRYSTALS-Dilithium for digital signatures (replacing RSA/ECDSA)
-  - AES-GCM for symmetric encryption
-  
-- **Secure P2P Networking**:
-  - Peer-to-peer communication using libp2p
-  - End-to-end encryption for all messages
-  - Secure message exchange protocol
-  - Distributed peer discovery and management
-
-## Repository Structure
-
-```
-QaSa/
-├── docs/               # Documentation
-│   ├── api/            # API documentation
-│   ├── guides/         # User and developer guides
-│   └── protocol/       # Protocol specifications
-├── src/                # Source code
-│   ├── crypto/         # Cryptography module (Rust)
-│   │   ├── kyber/      # CRYSTALS-Kyber implementation
-│   │   ├── dilithium/  # CRYSTALS-Dilithium implementation
-│   │   ├── aes/        # AES-GCM implementation
-│   │   └── key_management/ # Key management system
-│   ├── network/        # Network module (Go)
-│   │   ├── libp2p/     # libp2p integration
-│   │   ├── encryption/ # End-to-end encryption
-│   │   ├── message/    # Secure message exchange
-│   │   └── discovery/  # Peer discovery and management
-│   └── cli/            # Command-line interface
-└── tests/              # Test suite
-    ├── crypto/         # Cryptography tests
-    ├── network/        # Network tests
-    └── integration/    # Integration tests
-```
-
-## Setup Instructions
+## Getting Started
 
 ### Prerequisites
 
-- Rust 1.60+ with Cargo
-- Go 1.18+
-- C compiler (for certain dependencies)
+- Go 1.18 or later
+- Rust 1.60 or later
+- A C compiler (GCC or Clang)
 
-### Building from Source
+### Installation
 
-1. Clone the repository:
+1. Clone the repository
    ```
-   git clone https://github.com/qasa/qasa.git
-   cd qasa
+   git clone https://github.com/djwarf/Qasa.git
+   cd Qasa
    ```
 
-2. Build the cryptography module:
+2. Build the crypto module
    ```
    cd src/crypto
    cargo build --release
    ```
 
-3. Build the network module:
+3. Build the network module
    ```
-   cd src/network
-   go build
-   ```
-
-4. Build the CLI:
-   ```
-   cd src/cli
-   cargo build --release
+   cd ../network
+   ./build_crypto.sh
+   go build -o qasa-network
    ```
 
-## Usage
+### Running the Application
 
-Basic usage instructions will be added as the project develops.
+The easiest way to run QaSa is to use the Web UI:
+
+```
+./run_web_ui.sh
+```
+
+This will start the application and web interface on port 8080. Open your browser and navigate to:
+
+```
+http://localhost:8080
+```
+
+To specify a different port:
+
+```
+./run_web_ui.sh 9000
+```
+
+For advanced usage, you can also run the command-line interface:
+
+```
+cd src/network
+./qasa-cli.sh
+```
+
+## Web Interface
+
+The web interface provides an easy-to-use way to interact with QaSa. It features:
+
+### Contacts Tab
+- View and manage your connections
+- See online/offline status
+- Chat with end-to-end encryption
+- Verify encryption status
+
+### Discovery Tab
+- Search for peers by username, key ID, or general search
+- Filter results by online status, authentication, and encryption
+- Sort by network proximity
+- Connect and chat directly from the discovery interface
+
+### Profile Management
+- Set a username for easier identification
+- Associate your profile with a specific key
+- Add additional metadata to your profile
+
+### Security Settings
+- Configure network settings (mDNS, DHT)
+- Set security preferences
+- Manage your cryptographic keys
+
+## Architecture
+
+QaSa is built on a modular architecture with two main components:
+
+1. **Crypto Module (Rust)** - Implements the post-quantum cryptographic algorithms
+   - CRYSTALS-Kyber for key encapsulation
+   - CRYSTALS-Dilithium for digital signatures
+   - AES-GCM for symmetric encryption
+   - Key management system
+
+2. **Network Module (Go)** - Handles peer-to-peer communication
+   - libp2p for P2P networking
+   - End-to-end encryption
+   - Message exchange protocol
+   - Peer discovery and management
+   - Web interface
 
 ## Security Considerations
 
-This project is in development and has not undergone security audits. Do not use it for sensitive communications until it has been thoroughly vetted by security professionals.
+QaSa implements post-quantum cryptography to protect against future quantum computer attacks. However, this is a research project and not intended for use in high-security environments without further review.
+
+Key security features:
+- Post-quantum key exchange with CRYSTALS-Kyber
+- Post-quantum signatures with CRYSTALS-Dilithium
+- AES-GCM for message encryption
+- Peer authentication
 
 ## Contributing
 
-Contributions are welcome! Please see our contributing guidelines (coming soon) for more information.
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-[MIT License](LICENSE)
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Acknowledgments
+
+- The NIST Post-Quantum Cryptography project
+- The Open Quantum Safe project
+- libp2p for the P2P networking libraries
 
 # QaSa Cryptography Module
 

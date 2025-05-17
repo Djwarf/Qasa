@@ -1,0 +1,208 @@
+// Discovery Mode Functionality
+class DiscoveryMode {
+    constructor(webSocketHandler) {
+        this.ws = webSocketHandler;
+        this.searchResults = [];
+        this.searchType = 'all'; // all, name, key
+        this.activeFilters = {
+            online: false,
+            authenticated: false,
+            encrypted: false,
+            proximity: false
+        };
+        this.initElements();
+        this.initEventListeners();
+    }
+
+    initElements() {
+        // Create DOM elements
+        this.discoveryContainer = document.getElementById('discovery-container');
+        this.searchInput = document.getElementById('discovery-search');
+        this.searchTypeSelect = document.getElementById('search-type');
+        this.searchButton = document.getElementById('discovery-search-btn');
+        this.resultsContainer = document.getElementById('discovery-results');
+        this.filtersContainer = document.getElementById('discovery-filters');
+        this.loadingIndicator = document.getElementById('discovery-loading');
+    }
+
+    initEventListeners() {
+        // Add event listeners
+        this.searchButton.addEventListener('click', () => this.performSearch());
+        this.searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                this.performSearch();
+            }
+        });
+
+        // Filter change listeners
+        document.querySelectorAll('.discovery-filter-checkbox').forEach(checkbox => {
+            checkbox.addEventListener('change', () => {
+                this.activeFilters[checkbox.dataset.filter] = checkbox.checked;
+                this.filterResults();
+            });
+        });
+
+        // Search type change
+        this.searchTypeSelect.addEventListener('change', () => {
+            this.searchType = this.searchTypeSelect.value;
+        });
+    }
+
+    performSearch() {
+        const query = this.searchInput.value.trim();
+        if (query === '') return;
+
+        // Show loading indicator
+        this.setLoading(true);
+        
+        // Clear previous results
+        this.searchResults = [];
+        this.updateResultsView();
+
+        // Send search request through websocket
+        this.ws.send(JSON.stringify({
+            type: 'search',
+            data: {
+                query: query,
+                type: this.searchType
+            }
+        }));
+    }
+
+    handleSearchResults(data) {
+        this.searchResults = data.results;
+        this.setLoading(false);
+        this.filterResults();
+    }
+
+    filterResults() {
+        let filteredResults = [...this.searchResults];
+        
+        // Apply filters
+        if (this.activeFilters.online) {
+            filteredResults = filteredResults.filter(peer => peer.online);
+        }
+        
+        if (this.activeFilters.authenticated) {
+            filteredResults = filteredResults.filter(peer => peer.authenticated);
+        }
+        
+        if (this.activeFilters.encrypted) {
+            filteredResults = filteredResults.filter(peer => peer.encryption_status === 'enabled');
+        }
+        
+        if (this.activeFilters.proximity) {
+            // Sort by proximity (if available)
+            filteredResults.sort((a, b) => {
+                if (a.proximity && b.proximity) {
+                    return a.proximity - b.proximity;
+                }
+                return 0;
+            });
+        }
+
+        this.updateResultsView(filteredResults);
+    }
+
+    updateResultsView(results = this.searchResults) {
+        this.resultsContainer.innerHTML = '';
+        
+        if (results.length === 0) {
+            this.resultsContainer.innerHTML = '<div class="no-results">No peers found</div>';
+            return;
+        }
+
+        results.forEach(peer => {
+            const peerElement = document.createElement('div');
+            peerElement.className = 'peer-result';
+            
+            // Determine status indicators
+            const onlineStatus = peer.online ? 
+                '<span class="status-indicator online" title="Online"></span>' : 
+                '<span class="status-indicator offline" title="Offline"></span>';
+                
+            const authStatus = peer.authenticated ? 
+                '<span class="auth-badge" title="Authenticated">✓</span>' : '';
+                
+            const encryptStatus = peer.encryption_status === 'enabled' ? 
+                '<span class="encrypt-badge" title="Encrypted">🔒</span>' : '';
+            
+            // Format name/ID display
+            let displayName = peer.identifier || shortPeerId(peer.peer_id);
+            
+            peerElement.innerHTML = `
+                <div class="peer-header">
+                    ${onlineStatus}
+                    <h3 class="peer-name">${displayName}</h3>
+                    ${authStatus}
+                    ${encryptStatus}
+                </div>
+                <div class="peer-details">
+                    <div class="peer-id">${shortPeerId(peer.peer_id)}</div>
+                    ${peer.key_id ? `<div class="peer-key-id">Key: ${shortPeerId(peer.key_id)}</div>` : ''}
+                </div>
+                <div class="peer-actions">
+                    <button class="connect-btn" data-peer-id="${peer.peer_id}">Connect</button>
+                    <button class="chat-btn" data-peer-id="${peer.peer_id}">Chat</button>
+                </div>
+            `;
+            
+            // Add event listeners to buttons
+            peerElement.querySelector('.connect-btn').addEventListener('click', () => {
+                this.connectToPeer(peer.peer_id);
+            });
+            
+            peerElement.querySelector('.chat-btn').addEventListener('click', () => {
+                this.startChat(peer.peer_id);
+            });
+            
+            this.resultsContainer.appendChild(peerElement);
+        });
+    }
+
+    connectToPeer(peerId) {
+        // Connect to the peer
+        this.ws.send(JSON.stringify({
+            type: 'connect',
+            data: {
+                peer_addr: peerId
+            }
+        }));
+        
+        // If needed, also initiate key exchange
+        this.ws.send(JSON.stringify({
+            type: 'key_exchange',
+            data: {
+                peer_id: peerId,
+                algorithm: 'kyber' // Default to Kyber 
+            }
+        }));
+    }
+
+    startChat(peerId) {
+        // Connect first
+        this.connectToPeer(peerId);
+        
+        // Then select for chat
+        selectContact(peerId);
+        
+        // Switch to chat view
+        document.querySelector('.discovery-toggle').click();
+    }
+
+    setLoading(isLoading) {
+        if (isLoading) {
+            this.loadingIndicator.style.display = 'block';
+        } else {
+            this.loadingIndicator.style.display = 'none';
+        }
+    }
+}
+
+// Initialize discovery mode when the main app is ready
+document.addEventListener('DOMContentLoaded', () => {
+    // This will be initialized after WebSocket is connected in app.js
+    window.initDiscovery = (ws) => {
+        window.discoveryMode = new DiscoveryMode(ws);
+    };
+}); 

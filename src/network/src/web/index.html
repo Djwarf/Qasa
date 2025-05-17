@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QaSa Secure Chat</title>
     <link rel="stylesheet" href="styles.css">
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="favicon.svg">
+    <meta name="theme-color" content="#2c3e50">
 </head>
 <body>
     <div class="app-container">
@@ -16,15 +19,70 @@
                     <span class="status-indicator offline"></span>
                 </div>
             </div>
-            <div class="contacts-section">
-                <h2>Contacts</h2>
-                <div class="contact-list" id="contact-list">
-                    <!-- Contacts will be dynamically added here -->
+            <div class="navigation-tabs">
+                <button class="nav-tab active" data-tab="contacts">Contacts</button>
+                <button class="nav-tab" data-tab="discovery">Discovery</button>
+            </div>
+            <div class="tab-content active" id="contacts-tab">
+                <div class="contacts-section">
+                    <h2>Contacts</h2>
+                    <div class="contact-list" id="contact-list">
+                        <!-- Contacts will be dynamically added here -->
+                    </div>
+                </div>
+            </div>
+            <div class="tab-content" id="discovery-tab">
+                <div class="discovery-section">
+                    <h2>Discover Peers</h2>
+                    <div class="discovery-search">
+                        <select id="search-type">
+                            <option value="all">All</option>
+                            <option value="name">Username</option>
+                            <option value="key">Key ID</option>
+                        </select>
+                        <input type="text" id="discovery-search" placeholder="Search for peers...">
+                        <button id="discovery-search-btn">Search</button>
+                    </div>
+                    <div class="discovery-filters">
+                        <h3>Filters</h3>
+                        <div class="filter-group">
+                            <label>
+                                <input type="checkbox" class="discovery-filter-checkbox" data-filter="online">
+                                Online Only
+                            </label>
+                        </div>
+                        <div class="filter-group">
+                            <label>
+                                <input type="checkbox" class="discovery-filter-checkbox" data-filter="authenticated">
+                                Authenticated
+                            </label>
+                        </div>
+                        <div class="filter-group">
+                            <label>
+                                <input type="checkbox" class="discovery-filter-checkbox" data-filter="encrypted">
+                                Encrypted
+                            </label>
+                        </div>
+                        <div class="filter-group">
+                            <label>
+                                <input type="checkbox" class="discovery-filter-checkbox" data-filter="proximity">
+                                Sort by Proximity
+                            </label>
+                        </div>
+                    </div>
+                    <div id="discovery-loading" class="loading-indicator">
+                        <div class="loader"></div>
+                        <p>Searching...</p>
+                    </div>
+                    <div id="discovery-results" class="discovery-results">
+                        <!-- Search results will appear here -->
+                    </div>
                 </div>
             </div>
             <div class="settings-section">
                 <button id="settings-btn" class="icon-button">⚙️</button>
                 <button id="key-management-btn" class="icon-button">🔑</button>
+                <button id="profile-btn" class="icon-button">👤</button>
             </div>
         </div>
         <div class="main-content">
@@ -103,6 +161,34 @@
         </div>
     </div>
 
+    <div id="profile-modal" class="modal">
+        <div class="modal-content">
+            <h2>Profile Settings</h2>
+            <div class="profile-section">
+                <h3>Your Identity</h3>
+                <div class="setting-item">
+                    <label for="username">Username:</label>
+                    <input type="text" id="username" placeholder="Enter a username">
+                </div>
+                <div class="setting-item">
+                    <label for="key-id">Key ID:</label>
+                    <select id="key-id">
+                        <!-- Keys will be added here -->
+                    </select>
+                </div>
+                <div class="setting-item">
+                    <label for="profile-metadata">Profile Information:</label>
+                    <textarea id="profile-metadata" placeholder="Optional profile information"></textarea>
+                </div>
+            </div>
+            <div class="modal-buttons">
+                <button id="save-profile">Save Profile</button>
+                <button id="cancel-profile">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <script src="app.js"></script>
+    <script src="discovery.js"></script>
 </body>
 </html> 

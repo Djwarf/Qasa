@@ -290,8 +290,36 @@ func (ws *WebServer) handleClientMessages(conn *websocket.Conn) {
 				continue
 			}
 
-			ws.sendToClient(conn, "identifier_set", map[string]string{
+			ws.sendToClient(conn, "profile_updated", map[string]string{
 				"username": data.Username,
+				"key_id":   data.KeyID,
+				"metadata": data.Metadata,
+			})
+
+		case "get_profile":
+			// Get the current profile information
+			profile, err := ws.getCurrentProfile()
+			if err != nil {
+				ws.sendToClient(conn, "error", map[string]string{
+					"message": fmt.Sprintf("Failed to get profile: %v", err),
+				})
+				continue
+			}
+
+			ws.sendToClient(conn, "profile_updated", profile)
+
+		case "get_keys":
+			// Get the list of available keys
+			keys, err := ws.getAvailableKeys()
+			if err != nil {
+				ws.sendToClient(conn, "error", map[string]string{
+					"message": fmt.Sprintf("Failed to get keys: %v", err),
+				})
+				continue
+			}
+
+			ws.sendToClient(conn, "keys_list", map[string]interface{}{
+				"keys": keys,
 			})
 
 		case "key_exchange":
@@ -407,23 +435,6 @@ func (ws *WebServer) handleClientMessages(conn *websocket.Conn) {
 
 			// Send updated status to the client
 			ws.sendToClient(conn, "settings_updated", ws.getNodeStatus())
-
-		case "get_keys":
-			// Get key store
-			keyStore, err := encryption.NewKeyStore(ws.node.GetConfigDir())
-			if err != nil {
-				ws.sendToClient(conn, "error", map[string]string{
-					"message": fmt.Sprintf("Failed to access key store: %v", err),
-				})
-				continue
-			}
-
-			// List keys
-			keys := keyStore.ListKeys()
-
-			ws.sendToClient(conn, "keys", map[string]interface{}{
-				"keys": keys,
-			})
 
 		case "generate_keys":
 			var data struct {
@@ -550,152 +561,6 @@ func (ws *WebServer) handleClientMessages(conn *websocket.Conn) {
 	}
 }
 
-// Search for peers based on username
-func (ws *WebServer) searchPeersByName(username string) ([]map[string]interface{}, error) {
-	if ws.identifierDiscovery == nil {
-		return nil, fmt.Errorf("identifier discovery service not available")
-	}
-
-	// Search for the username in the identifier discovery system
-	records, err := ws.identifierDiscovery.FindUserByName(username)
-	if err != nil {
-		return nil, fmt.Errorf("failed to search by username: %v", err)
-	}
-
-	results := make([]map[string]interface{}, 0)
-	for _, record := range records {
-		// Try to parse peer ID
-		peerID, err := peer.Decode(record.PeerID)
-		if err != nil {
-			continue
-		}
-
-		// Check if we're connected to this peer
-		connected := false
-		for _, connPeer := range ws.node.Peers() {
-			if connPeer == peerID {
-				connected = true
-				break
-			}
-		}
-
-		result := map[string]interface{}{
-			"peer_id":       record.PeerID,
-			"username":      record.Identifier,
-			"connected":     connected,
-			"key_id":        record.KeyID,
-			"authenticated": ws.node.IsPeerAuthenticated(peerID),
-			"last_updated":  record.Timestamp.Format(time.RFC3339),
-		}
-
-		// Add metadata if available
-		if len(record.Metadata) > 0 {
-			result["metadata"] = string(record.Metadata)
-		}
-
-		results = append(results, result)
-	}
-
-	return results, nil
-}
-
-// Search for peers based on key ID
-func (ws *WebServer) searchPeersByKey(keyID string) ([]map[string]interface{}, error) {
-	if ws.identifierDiscovery == nil {
-		return nil, fmt.Errorf("identifier discovery service not available")
-	}
-
-	// Search for the key ID in the identifier discovery system
-	records, err := ws.identifierDiscovery.FindUserByKeyID(keyID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to search by key ID: %v", err)
-	}
-
-	results := make([]map[string]interface{}, 0)
-	for _, record := range records {
-		// Try to parse peer ID
-		peerID, err := peer.Decode(record.PeerID)
-		if err != nil {
-			continue
-		}
-
-		// Check if we're connected to this peer
-		connected := false
-		for _, connPeer := range ws.node.Peers() {
-			if connPeer == peerID {
-				connected = true
-				break
-			}
-		}
-
-		result := map[string]interface{}{
-			"peer_id":       record.PeerID,
-			"key_id":        record.KeyID,
-			"connected":     connected,
-			"authenticated": ws.node.IsPeerAuthenticated(peerID),
-			"last_updated":  record.Timestamp.Format(time.RFC3339),
-		}
-
-		// Add username if this record has one
-		if record.Type == "username" {
-			result["username"] = record.Identifier
-		}
-
-		// Add metadata if available
-		if len(record.Metadata) > 0 {
-			result["metadata"] = string(record.Metadata)
-		}
-
-		results = append(results, result)
-	}
-
-	return results, nil
-}
-
-// Search for peers based on ID or other criteria
-func (ws *WebServer) searchPeers(query string) ([]map[string]interface{}, error) {
-	// Initialize DHT if not already enabled
-	isEnabled := false
-	if !isEnabled {
-		if err := ws.node.EnableDHT(); err != nil {
-			return nil, fmt.Errorf("failed to enable DHT for search: %v", err)
-		}
-	}
-
-	// Get current peers
-	currentPeers := ws.node.Peers()
-	results := make([]map[string]interface{}, 0)
-
-	// First check if any current peers match
-	for _, peer := range currentPeers {
-		peerStr := peer.String()
-		if strings.Contains(strings.ToLower(peerStr), strings.ToLower(query)) {
-			results = append(results, map[string]interface{}{
-				"peer_id":       peerStr,
-				"authenticated": ws.node.IsPeerAuthenticated(peer),
-				"connected":     true,
-			})
-		}
-	}
-
-	// If we have identifier discovery and didn't find anything, try to search by identifiers
-	if len(results) == 0 && ws.identifierDiscovery != nil {
-		// Try by username
-		nameResults, err := ws.searchPeersByName(query)
-		if err == nil {
-			results = append(results, nameResults...)
-		}
-
-		// Try by key
-		keyResults, err := ws.searchPeersByKey(query)
-		if err == nil {
-			results = append(results, keyResults...)
-		}
-	}
-
-	return results, nil
-}
-
 // Helper function to perform key exchange using the message protocol
 func (ws *WebServer) performKeyExchange(peerID peer.ID, algorithm string) error {
 	// Get key store for key pair generation
@@ -718,6 +583,215 @@ func (ws *WebServer) performKeyExchange(peerID peer.ID, algorithm string) error 
 	}
 
 	return nil
+}
+
+// Get current profile information
+func (ws *WebServer) getCurrentProfile() (map[string]string, error) {
+	// This is a simplified implementation - in a real system, you'd retrieve this from the identifier store
+	profile := map[string]string{
+		"username": "",
+		"key_id":   "",
+		"metadata": "",
+	}
+
+	// Try to get the current identifier from the discovery service
+	selfID := ws.node.ID().String()
+
+	// Get identifiers for this peer - this is a simplified approach
+	// In a real implementation we would use proper accessor methods
+	if ws.identifierDiscovery != nil {
+		// Get identifiers from an appropriate API
+		records, err := ws.identifierDiscovery.FindUserByName("")
+		if err == nil && len(records) > 0 {
+			for _, record := range records {
+				if record.PeerID == selfID && record.Type == "username" {
+					profile["username"] = record.Identifier
+					profile["key_id"] = record.KeyID
+					if record.Metadata != nil {
+						profile["metadata"] = string(record.Metadata)
+					}
+					break
+				}
+			}
+		}
+	}
+
+	return profile, nil
+}
+
+// Get list of available cryptographic keys
+func (ws *WebServer) getAvailableKeys() ([]map[string]interface{}, error) {
+	// Attempt to get keys from the encryption module
+	keyStore, err := encryption.NewKeyStore(ws.node.GetConfigDir())
+	if err != nil {
+		return nil, fmt.Errorf("failed to create key store: %w", err)
+	}
+
+	keyInfos := keyStore.ListKeys()
+
+	keys := make([]map[string]interface{}, len(keyInfos))
+	for i, keyInfo := range keyInfos {
+		// Get key details - in a real implementation you'd get more info
+		keyType := "Unknown"
+		keyID := keyInfo.ID // Assuming keyInfo is a struct with an ID field as string
+
+		if strings.Contains(strings.ToLower(keyID), "kyber") {
+			keyType = "CRYSTALS-Kyber"
+		} else if strings.Contains(strings.ToLower(keyID), "dilithium") {
+			keyType = "CRYSTALS-Dilithium"
+		} else if strings.Contains(strings.ToLower(keyID), "aes") {
+			keyType = "AES-GCM"
+		}
+
+		keys[i] = map[string]interface{}{
+			"id":         keyID,
+			"type":       keyType,
+			"created_at": time.Now().Format(time.RFC3339), // This would come from actual key metadata
+		}
+	}
+
+	return keys, nil
+}
+
+// Search for peers by username or identifier
+func (ws *WebServer) searchPeersByName(username string) ([]map[string]interface{}, error) {
+	results, err := ws.identifierDiscovery.FindUserByName(username)
+	if err != nil {
+		return nil, fmt.Errorf("username search failed: %w", err)
+	}
+
+	return ws.formatSearchResults(results)
+}
+
+// Search peers by their public key ID
+func (ws *WebServer) searchPeersByKey(keyID string) ([]map[string]interface{}, error) {
+	results, err := ws.identifierDiscovery.FindUserByKeyID(keyID)
+	if err != nil {
+		return nil, fmt.Errorf("key ID search failed: %w", err)
+	}
+
+	return ws.formatSearchResults(results)
+}
+
+// General peer search using DHT and other discovery mechanisms
+func (ws *WebServer) searchPeers(query string) ([]map[string]interface{}, error) {
+	// First try to search by name
+	nameResults, err := ws.searchPeersByName(query)
+	if err != nil {
+		nameResults = []map[string]interface{}{}
+	}
+
+	// Then try by key ID
+	keyResults, err := ws.searchPeersByKey(query)
+	if err != nil {
+		keyResults = []map[string]interface{}{}
+	}
+
+	// Combine results, avoiding duplicates
+	allResults := nameResults
+	seenPeers := make(map[string]bool)
+
+	for _, result := range nameResults {
+		seenPeers[result["peer_id"].(string)] = true
+	}
+
+	for _, result := range keyResults {
+		peerID := result["peer_id"].(string)
+		if !seenPeers[peerID] {
+			allResults = append(allResults, result)
+			seenPeers[peerID] = true
+		}
+	}
+
+	// Add other peers that might be visible on the network
+	for _, p := range ws.node.Peers() {
+		peerIDStr := p.String()
+		if !seenPeers[peerIDStr] {
+			// Check if this peer has a known identifier
+			// Get identifiers from an appropriate API
+			displayName := ""
+			keyID := ""
+
+			// Look for identifiers for this peer
+			records, err := ws.identifierDiscovery.FindUserByName("")
+			if err == nil {
+				for _, record := range records {
+					if record.PeerID == peerIDStr && record.Type == "username" {
+						displayName = record.Identifier
+						keyID = record.KeyID
+						break
+					}
+				}
+			}
+
+			// Add to results
+			peerResult := map[string]interface{}{
+				"peer_id":           peerIDStr,
+				"identifier":        displayName,
+				"key_id":            keyID,
+				"online":            ws.isPeerConnected(p),
+				"authenticated":     ws.isPeerAuthenticated(p),
+				"encryption_status": ws.encryptionStatus(p),
+			}
+
+			allResults = append(allResults, peerResult)
+			seenPeers[peerIDStr] = true
+		}
+	}
+
+	return allResults, nil
+}
+
+// Format search results into a consistent format
+func (ws *WebServer) formatSearchResults(records []*discovery.IdentifierRecord) ([]map[string]interface{}, error) {
+	results := make([]map[string]interface{}, len(records))
+
+	for i, record := range records {
+		peerID, err := peer.Decode(record.PeerID)
+		if err != nil {
+			return nil, fmt.Errorf("invalid peer ID in record: %w", err)
+		}
+
+		results[i] = map[string]interface{}{
+			"peer_id":           record.PeerID,
+			"identifier":        record.Identifier,
+			"key_id":            record.KeyID,
+			"online":            ws.isPeerConnected(peerID),
+			"authenticated":     ws.isPeerAuthenticated(peerID),
+			"encryption_status": ws.encryptionStatus(peerID),
+		}
+
+		if record.Metadata != nil {
+			results[i]["metadata"] = string(record.Metadata)
+		}
+	}
+
+	return results, nil
+}
+
+// Check if a peer is connected
+func (ws *WebServer) isPeerConnected(p peer.ID) bool {
+	for _, connPeer := range ws.node.Peers() {
+		if connPeer == p {
+			return true
+		}
+	}
+	return false
+}
+
+// Check if a peer is authenticated
+func (ws *WebServer) isPeerAuthenticated(p peer.ID) bool {
+	return ws.node.IsPeerAuthenticated(p)
+}
+
+// Get encryption status for a peer
+func (ws *WebServer) encryptionStatus(p peer.ID) string {
+	// Check with the encryption module if we have a secure channel with this peer
+	// This is a simplified example - we'll check if the node has authenticated the peer as a proxy
+	if ws.node.IsPeerAuthenticated(p) {
+		return "enabled"
+	}
+	return "disabled"
 }
 
 func (ws *WebServer) sendToClient(conn *websocket.Conn, msgType string, data interface{}) {

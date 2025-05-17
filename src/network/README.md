@@ -61,7 +61,7 @@ go build -o qasa-network
 ```
 
 ### Running
-The QaSa chat application can be launched using one of the provided scripts:
+ The QaSa chat application can be launched using one of the provided scripts:
 
 #### Option 1: Using the full-featured launcher
 The full-featured launcher provides advanced configuration options and can install the shared library system-wide (requires sudo):

@@ -1,6 +1,7 @@
 :root {
     --primary-color: #2c3e50;
     --secondary-color: #3498db;
+    --accent-color: #2ecc71;
     --background-color: #f5f6fa;
     --text-color: #2c3e50;
     --border-color: #dcdde1;
@@ -77,9 +78,46 @@ body {
     background-color: var(--error-color);
 }
 
-.contacts-section {
+/* Navigation Tabs */
+.navigation-tabs {
+    display: flex;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.nav-tab {
+    flex: 1;
+    padding: 10px 0;
+    text-align: center;
+    background: none;
+    border: none;
+    color: white;
+    cursor: pointer;
+    transition: background-color 0.2s, opacity 0.2s;
+    opacity: 0.7;
+}
+
+.nav-tab.active {
+    background-color: rgba(255, 255, 255, 0.1);
+    opacity: 1;
+    font-weight: bold;
+    border-bottom: 2px solid var(--accent-color);
+}
+
+.nav-tab:hover {
+    opacity: 1;
+}
+
+.tab-content {
+    display: none;
     flex: 1;
     overflow-y: auto;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+.contacts-section {
     padding: 20px;
 }
 
@@ -107,6 +145,204 @@ body {
 
 .contact-item.active {
     background-color: var(--secondary-color);
+}
+
+/* Discovery Section Styles */
+.discovery-section {
+    padding: 20px;
+}
+
+.discovery-section h2 {
+    font-size: 1.2rem;
+    margin-bottom: 15px;
+}
+
+.discovery-search {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 15px;
+}
+
+.discovery-search select {
+    padding: 8px;
+    border: none;
+    border-radius: 3px;
+    background-color: rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+.discovery-search input {
+    flex: 1;
+    padding: 8px;
+    border: none;
+    border-radius: 3px;
+    background-color: rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+.discovery-search button {
+    padding: 8px 15px;
+    border: none;
+    border-radius: 3px;
+    background-color: var(--accent-color);
+    color: white;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.discovery-search button:hover {
+    background-color: #27ae60;
+}
+
+.discovery-search ::placeholder {
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.discovery-filters {
+    margin-bottom: 15px;
+    padding: 10px;
+    background-color: rgba(255, 255, 255, 0.05);
+    border-radius: 5px;
+}
+
+.discovery-filters h3 {
+    font-size: 1rem;
+    margin-bottom: 10px;
+    opacity: 0.8;
+}
+
+.filter-group {
+    margin-bottom: 5px;
+}
+
+.filter-group label {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+.filter-group input[type="checkbox"] {
+    margin-right: 8px;
+}
+
+.loading-indicator {
+    display: none;
+    text-align: center;
+    padding: 20px;
+}
+
+.loader {
+    width: 30px;
+    height: 30px;
+    border: 3px solid rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+    border-top: 3px solid var(--accent-color);
+    animation: spin 1s linear infinite;
+    margin: 0 auto 10px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.discovery-results {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.peer-result {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-radius: 5px;
+    padding: 12px;
+    transition: transform 0.2s;
+}
+
+.peer-result:hover {
+    transform: translateY(-2px);
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.peer-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+    gap: 5px;
+}
+
+.peer-name {
+    flex: 1;
+    font-size: 1rem;
+    font-weight: 500;
+    margin: 0 5px;
+}
+
+.auth-badge, .encrypt-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    font-size: 0.8rem;
+    border-radius: 50%;
+    margin-left: 5px;
+}
+
+.auth-badge {
+    background-color: var(--success-color);
+}
+
+.encrypt-badge {
+    background-color: var(--primary-color);
+    border: 1px solid var(--accent-color);
+}
+
+.peer-details {
+    margin-bottom: 10px;
+    font-size: 0.85rem;
+    opacity: 0.8;
+}
+
+.peer-actions {
+    display: flex;
+    gap: 5px;
+}
+
+.peer-actions button {
+    flex: 1;
+    padding: 5px 10px;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: background-color 0.2s;
+}
+
+.connect-btn {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+.connect-btn:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+.chat-btn {
+    background-color: var(--accent-color);
+    color: white;
+}
+
+.chat-btn:hover {
+    background-color: #27ae60;
+}
+
+.no-results {
+    text-align: center;
+    padding: 20px;
+    color: rgba(255, 255, 255, 0.7);
+    font-style: italic;
 }
 
 .settings-section {
@@ -248,22 +484,29 @@ body {
     margin-bottom: 20px;
 }
 
-.settings-section {
-    margin-bottom: 20px;
-}
-
 .setting-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 10px;
+    margin-bottom: 15px;
 }
 
-.setting-item input[type="number"] {
-    width: 100px;
-    padding: 5px;
+.setting-item label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 500;
+}
+
+.setting-item input[type="text"],
+.setting-item input[type="number"],
+.setting-item select,
+.setting-item textarea {
+    width: 100%;
+    padding: 8px;
     border: 1px solid var(--border-color);
-    border-radius: 3px;
+    border-radius: 5px;
+}
+
+.setting-item textarea {
+    height: 100px;
+    resize: vertical;
 }
 
 .modal-buttons {
@@ -274,7 +517,7 @@ body {
 }
 
 .modal-buttons button {
-    padding: 8px 20px;
+    padding: 8px 16px;
     border: none;
     border-radius: 5px;
     cursor: pointer;
@@ -288,18 +531,17 @@ body {
 
 .modal-buttons button:last-child {
     background-color: #e0e0e0;
+    color: #333;
 }
 
-/* Key Management Styles */
 .key-management-section {
     margin-bottom: 20px;
 }
 
 .key-list {
-    margin-top: 10px;
     border: 1px solid var(--border-color);
     border-radius: 5px;
-    padding: 10px;
+    margin-top: 10px;
 }
 
 .key-item {
@@ -312,14 +554,14 @@ body {
 }
 
 .key-actions {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    display: flex;
+    flex-wrap: wrap;
     gap: 10px;
     margin-bottom: 20px;
 }
 
 .key-actions button {
-    padding: 10px;
+    padding: 8px 16px;
     border: none;
     border-radius: 5px;
     cursor: pointer;
@@ -332,16 +574,37 @@ body {
 }
 
 .key-actions button:nth-child(2) {
-    background-color: var(--secondary-color);
+    background-color: var(--warning-color);
     color: white;
 }
 
 .key-actions button:nth-child(3) {
-    background-color: var(--warning-color);
-    color: var(--text-color);
+    background-color: var(--secondary-color);
+    color: white;
 }
 
 .key-actions button:last-child {
     background-color: var(--error-color);
     color: white;
+}
+
+/* Profile modal styles */
+.profile-section {
+    margin-bottom: 20px;
+}
+
+/* Responsive styles */
+@media (max-width: 768px) {
+    .app-container {
+        flex-direction: column;
+    }
+
+    .sidebar {
+        width: 100%;
+        max-height: 40vh;
+    }
+
+    .main-content {
+        height: 60vh;
+    }
 } 
