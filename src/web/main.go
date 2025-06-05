@@ -103,7 +103,7 @@ func main() {
 	// Start the chat protocol
 	chatProtocol.Start()
 
-	// Start the web server
+	// Create and start the web server
 	webServer := web.NewWebServer(node, chatProtocol, identifierDiscovery)
 	go func() {
 		if err := webServer.Start(*webPort); err != nil {
@@ -128,4 +128,4 @@ func main() {
 
 	// Shutdown node
 	node.Close()
-}
+} 
