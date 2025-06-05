@@ -174,17 +174,8 @@ func main() {
 		}
 	}
 
-	// Initialize web server if port is specified
-	var webServer *WebServer
-	if *webPort > 0 {
-		webServer = NewWebServer(node, chatProtocol, identifierDiscovery)
-		go func() {
-			fmt.Printf("Starting web interface on port %d...\n", *webPort)
-			if err := webServer.Start(*webPort); err != nil {
-				fmt.Printf("Web server error: %s\n", err)
-			}
-		}()
-	}
+	// Note: Web server functionality has been moved to the separate web module
+	// To run the web interface, use the web module or the main src/main.go
 
 	// Start a goroutine to periodically print connected peers
 	var peerListMutex sync.Mutex
@@ -217,24 +208,7 @@ func main() {
 				}
 				peerListMutex.Unlock()
 
-				// Update web clients with peer list if web server is running
-				if webServer != nil && len(peers) > 0 {
-					// Create contact list for web clients
-					contacts := make([]map[string]interface{}, len(peers))
-					for i, p := range peers {
-						contacts[i] = map[string]interface{}{
-							"peer_id":         p.String(),
-							"online":          true,
-							"authenticated":   node.IsPeerAuthenticated(p),
-							"queued_messages": chatProtocol.GetOfflineQueuedMessageCount(p),
-						}
-					}
-
-					// Broadcast contact list to all web clients
-					webServer.BroadcastMessage("contact_list", map[string]interface{}{
-						"contacts": contacts,
-					})
-				}
+				// Note: Web UI updates are now handled by the separate web module
 
 				if len(peers) > 0 {
 					fmt.Printf("\nConnected to %d peers:\n", len(peers))
