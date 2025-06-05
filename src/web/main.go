@@ -9,11 +9,12 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/qasa/network/discovery"
 	"github.com/qasa/network/libp2p"
 	"github.com/qasa/network/message"
-	"github.com/qasa/web"
+	"github.com/qasa/web/lib"
 )
 
 func main() {
@@ -40,7 +41,13 @@ func main() {
 	defer cancel()
 
 	// Create a new libp2p node
-	node, err := libp2p.NewNode(ctx, *configDir, *port)
+	config := libp2p.DefaultNodeConfig()
+	config.ListenPort = *port
+	config.ConfigDir = *configDir
+	config.EnableMDNS = *enableMDNS
+	config.EnableDHT = *enableDHT
+	
+	node, err := libp2p.NewNodeWithConfig(ctx, config)
 	if err != nil {
 		log.Fatal("Failed to create node:", err)
 	}
@@ -51,21 +58,14 @@ func main() {
 		fmt.Printf("  %s/p2p/%s\n", addr, node.ID().String())
 	}
 
-	// Enable discovery services
+	// Discovery services are already enabled through config
 	if *enableMDNS {
-		if err := node.EnableMDNS(); err != nil {
-			log.Fatal("Failed to enable mDNS:", err)
-		}
 		fmt.Println("mDNS discovery enabled")
 	}
 
 	var dhtDiscovery *discovery.DHTService
 	if *enableDHT {
-		if err := node.EnableDHT(); err != nil {
-			log.Fatal("Failed to enable DHT:", err)
-		}
 		fmt.Println("DHT discovery enabled")
-
 		// Get the DHT service for use with the identifier discovery
 		dhtDiscovery = node.GetDHTService()
 	}
@@ -77,21 +77,24 @@ func main() {
 		if err != nil {
 			log.Printf("Warning: Failed to initialize identifier discovery: %v", err)
 		} else {
-			if err := identifierDiscovery.Start(); err != nil {
-				log.Printf("Warning: Failed to start identifier discovery: %v", err)
-			} else {
-				fmt.Println("Identifier-based discovery enabled")
+			// Start identifier discovery in a goroutine to prevent blocking
+			go func() {
+				if err := identifierDiscovery.Start(); err != nil {
+					log.Printf("Warning: Failed to start identifier discovery: %v", err)
+				} else {
+					fmt.Println("Identifier-based discovery enabled")
 
-				// Set username if provided
-				if *username != "" {
-					err := identifierDiscovery.SetSelfIdentifier(*username, "", nil)
-					if err != nil {
-						log.Printf("Warning: Failed to set username: %v", err)
-					} else {
-						fmt.Printf("Username set to: %s\n", *username)
+					// Set username if provided
+					if *username != "" {
+						err := identifierDiscovery.SetSelfIdentifier(*username, "", nil)
+						if err != nil {
+							log.Printf("Warning: Failed to set username: %v", err)
+						} else {
+							fmt.Printf("Username set to: %s\n", *username)
+						}
 					}
 				}
-			}
+			}()
 		}
 	}
 
@@ -104,12 +107,22 @@ func main() {
 	chatProtocol.Start()
 
 	// Create and start the web server
-	webServer := web.NewWebServer(node, chatProtocol, identifierDiscovery)
+	fmt.Printf("Creating web server on port %d...\n", *webPort)
+	webServer := lib.NewWebServer(node, chatProtocol, identifierDiscovery)
+	
+	// Give the node setup a moment to complete
+	time.Sleep(500 * time.Millisecond)
+	
 	go func() {
+		fmt.Printf("Starting web server...\n")
 		if err := webServer.Start(*webPort); err != nil {
-			log.Fatal("Web server error:", err)
+			log.Printf("Web server error: %v", err)
 		}
 	}()
+	
+	// Give the web server a moment to start
+	time.Sleep(1 * time.Second)
+	fmt.Printf("🌐 Web interface should be available at http://localhost:%d\n", *webPort)
 
 	// Wait for interrupt signal
 	sigChan := make(chan os.Signal, 1)

@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QaSa Usability Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .test-section {
+            margin: 30px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        .task {
+            background: #f5f5f5;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .feedback {
+            background: #e7f3ff;
+            padding: 10px;
+            margin: 10px 0;
+            border-left: 4px solid #007acc;
+        }
+        button {
+            background: #007acc;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #005a99;
+        }
+        textarea {
+            width: 100%;
+            height: 100px;
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .success { color: #28a745; }
+        .warning { color: #ffc107; }
+        .error { color: #dc3545; }
+    </style>
+</head>
+<body>
+    <h1>QaSa Web Interface Usability Test</h1>
+    
+    <div class="test-section">
+        <h2>Pre-Test Information</h2>
+        <p>Thank you for participating in the QaSa usability test. This test will help us improve the user experience of our quantum-safe messaging application.</p>
+        
+        <div class="feedback">
+            <strong>Instructions:</strong>
+            <ul>
+                <li>Complete each task in order</li>
+                <li>Think aloud as you work through the tasks</li>
+                <li>Ask questions if anything is unclear</li>
+                <li>Provide honest feedback - it helps us improve</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>Task 1: First Impressions</h2>
+        <div class="task">
+            <strong>Task:</strong> Open the QaSa web interface and spend 30 seconds exploring. What do you think this application does?
+        </div>
+        <textarea placeholder="Record your first impressions here..."></textarea>
+        <button onclick="completeTask(1)">Task Complete</button>
+    </div>
+
+    <div class="test-section">
+        <h2>Task 2: Navigation</h2>
+        <div class="task">
+            <strong>Task:</strong> Navigate between the Contacts and Discovery tabs. How intuitive is the navigation?
+        </div>
+        <textarea placeholder="Describe your experience with navigation..."></textarea>
+        <button onclick="completeTask(2)">Task Complete</button>
+    </div>
+
+    <div class="test-section">
+        <h2>Task 3: Peer Discovery</h2>
+        <div class="task">
+            <strong>Task:</strong> Try to search for peers using the Discovery tab. Test different search types and filters.
+        </div>
+        <textarea placeholder="How was the peer discovery experience?"></textarea>
+        <button onclick="completeTask(3)">Task Complete</button>
+    </div>
+
+    <div class="test-section">
+        <h2>Task 4: Settings and Configuration</h2>
+        <div class="task">
+            <strong>Task:</strong> Open the settings modal and explore the available options. Are they clear and understandable?
+        </div>
+        <textarea placeholder="Feedback on settings interface..."></textarea>
+        <button onclick="completeTask(4)">Task Complete</button>
+    </div>
+
+    <div class="test-section">
+        <h2>Task 5: Key Management</h2>
+        <div class="task">
+            <strong>Task:</strong> Access the key management interface. How would you generate new keys or manage existing ones?
+        </div>
+        <textarea placeholder="Your experience with key management..."></textarea>
+        <button onclick="completeTask(5)">Task Complete</button>
+    </div>
+
+    <div class="test-section">
+        <h2>Task 6: Profile Setup</h2>
+        <div class="task">
+            <strong>Task:</strong> Set up your profile with a username and key ID. How clear is this process?
+        </div>
+        <textarea placeholder="Profile setup feedback..."></textarea>
+        <button onclick="completeTask(6)">Task Complete</button>
+    </div>
+
+    <div class="test-section">
+        <h2>Task 7: Overall Experience</h2>
+        <div class="task">
+            <strong>Task:</strong> Rate your overall experience and provide suggestions for improvement.
+        </div>
+        
+        <h4>Overall Rating (1-5 stars):</h4>
+        <div>
+            <span onclick="setRating(1)">⭐</span>
+            <span onclick="setRating(2)">⭐</span>
+            <span onclick="setRating(3)">⭐</span>
+            <span onclick="setRating(4)">⭐</span>
+            <span onclick="setRating(5)">⭐</span>
+        </div>
+        
+        <h4>Most Confusing Aspect:</h4>
+        <textarea placeholder="What was the most confusing or difficult part?"></textarea>
+        
+        <h4>Suggested Improvements:</h4>
+        <textarea placeholder="How could we improve the interface?"></textarea>
+        
+        <h4>What You Liked Most:</h4>
+        <textarea placeholder="What aspects did you find most helpful or appealing?"></textarea>
+        
+        <button onclick="completeTest()">Complete Test</button>
+    </div>
+
+    <div id="results" class="test-section" style="display: none;">
+        <h2>Test Results</h2>
+        <div id="completion-status"></div>
+        <div class="feedback">
+            <strong>Thank you for completing the usability test!</strong><br>
+            Your feedback is valuable and will help us improve QaSa's user experience.
+        </div>
+    </div>
+
+    <script>
+        let completedTasks = new Set();
+        let rating = 0;
+
+        function completeTask(taskNumber) {
+            completedTasks.add(taskNumber);
+            event.target.textContent = '✓ Completed';
+            event.target.style.background = '#28a745';
+            updateProgress();
+        }
+
+        function setRating(stars) {
+            rating = stars;
+            const spans = document.querySelectorAll('#results').previousElementSibling.querySelectorAll('span');
+            spans.forEach((span, index) => {
+                span.style.color = index < stars ? '#ffc107' : '#ddd';
+            });
+        }
+
+        function updateProgress() {
+            const progress = (completedTasks.size / 6) * 100;
+            console.log(`Test progress: ${progress}%`);
+        }
+
+        function completeTest() {
+            const results = document.getElementById('results');
+            const status = document.getElementById('completion-status');
+            
+            const completionRate = (completedTasks.size / 6) * 100;
+            
+            let statusHtml = `
+                <p><strong>Completion Rate:</strong> ${completionRate}%</p>
+                <p><strong>Tasks Completed:</strong> ${completedTasks.size}/6</p>
+                <p><strong>Overall Rating:</strong> ${rating}/5 stars</p>
+            `;
+            
+            if (completionRate === 100) {
+                statusHtml += '<p class="success">✓ All tasks completed successfully!</p>';
+            } else {
+                statusHtml += '<p class="warning">⚠ Some tasks incomplete - feedback still valuable!</p>';
+            }
+            
+            status.innerHTML = statusHtml;
+            results.style.display = 'block';
+            
+            // Scroll to results
+            results.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Track time spent on test
+        const startTime = new Date();
+        
+        window.addEventListener('beforeunload', function() {
+            const timeSpent = Math.round((new Date() - startTime) / 1000 / 60);
+            console.log(`Usability test duration: ${timeSpent} minutes`);
+        });
+    </script>
+</body>
+</html> 

@@ -29,7 +29,6 @@ func main() {
 	disableOfflineQueue := flag.Bool("no-offline-queue", false, "Disable offline message queuing")
 	bootstrapNode := flag.String("bootstrap", "", "Add a bootstrap node")
 	connectTo := flag.String("connect", "", "Peer to connect to")
-	webPort := flag.Int("web", 0, "Start web interface on specified port (0 disables web interface)")
 	username := flag.String("username", "", "Set a username for this node")
 	flag.Parse()
 
