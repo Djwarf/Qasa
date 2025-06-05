@@ -158,7 +158,7 @@
 - [ ] Create security update mechanism
 - [x] Document operational procedures
 
-## Future Enhancements
+## Enhancements
 
 ### Group Chat Implementation
 - [ ] Design secure group chat protocol
