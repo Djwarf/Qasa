@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -114,12 +115,49 @@ func main() {
 	}, chatOptions)
 	chatProtocol.Start()
 
-	// Initialize identifier discovery service
+	// Initialize enhanced discovery service
+	var enhancedDiscovery *discovery.EnhancedDiscoveryService
 	var identifierDiscovery *discovery.IdentifierDiscoveryService
+	
 	if config.EnableDHT {
 		dhtService := node.GetDHTService()
 		if dhtService != nil {
+			// Initialize enhanced discovery
+			discoveryConfig := discovery.DefaultDiscoveryConfig()
+			discoveryConfig.EnableMDNS = config.EnableMDNS
+			discoveryConfig.EnableDHT = config.EnableDHT
+			discoveryConfig.EnableIdentifier = true
+			discoveryConfig.RequirePostQuantum = *requireAuth // Use auth flag for PQ requirement
+			
 			var initErr error
+			enhancedDiscovery, initErr = discovery.NewEnhancedDiscoveryService(ctx, node.Host(), dhtService.GetDHT(), discoveryConfig)
+			if initErr != nil {
+				fmt.Printf("Warning: Failed to initialize enhanced discovery: %s\n", initErr)
+			} else {
+				// Set up event handlers
+				enhancedDiscovery.OnPeerFound(func(metrics *discovery.PeerMetrics) {
+					fmt.Printf("🔍 Discovered peer: %s (rep: %.1f, latency: %v)\n", 
+						shortPeerID(metrics.PeerID.String()), 
+						metrics.Reputation, 
+						metrics.Latency)
+				})
+				
+				enhancedDiscovery.OnPeerLost(func(peerID peer.ID) {
+					fmt.Printf("📡 Lost peer: %s\n", shortPeerID(peerID.String()))
+				})
+				
+				if startErr := enhancedDiscovery.Start(); startErr != nil {
+					fmt.Printf("Warning: Failed to start enhanced discovery: %s\n", startErr)
+				} else {
+					fmt.Println("🚀 Enhanced discovery service started")
+					fmt.Printf("   - mDNS: %v\n", discoveryConfig.EnableMDNS)
+					fmt.Printf("   - DHT: %v\n", discoveryConfig.EnableDHT)
+					fmt.Printf("   - Identifier: %v\n", discoveryConfig.EnableIdentifier)
+					fmt.Printf("   - Post-Quantum Required: %v\n", discoveryConfig.RequirePostQuantum)
+				}
+			}
+			
+			// Also initialize basic identifier discovery for backward compatibility
 			identifierDiscovery, initErr = discovery.NewIdentifierDiscoveryService(ctx, node.Host(), dhtService.GetDHT(), *configDir)
 			if initErr != nil {
 				fmt.Printf("Warning: Failed to initialize identifier discovery: %s\n", initErr)
@@ -236,7 +274,7 @@ func main() {
 	}()
 
 	// Handle command-line input
-	go handleUserCommands(ctx, node, chatProtocol, metadataExchange)
+	go handleUserCommands(ctx, node, chatProtocol, metadataExchange, enhancedDiscovery)
 
 	// Wait for signal to exit
 	sigCh := make(chan os.Signal, 1)
@@ -271,7 +309,7 @@ func parseIndex(s string) (int, error) {
 }
 
 // Handle user commands
-func handleUserCommands(ctx context.Context, node *libp2p.Node, chatProtocol *message.ChatProtocol, metadataExchange *libp2p.MetadataExchange) {
+func handleUserCommands(ctx context.Context, node *libp2p.Node, chatProtocol *message.ChatProtocol, metadataExchange *libp2p.MetadataExchange, enhancedDiscovery *discovery.EnhancedDiscoveryService) {
 	reader := bufio.NewReader(os.Stdin)
 	configDir := node.GetConfigDir()
 
@@ -325,6 +363,20 @@ func handleUserCommands(ctx context.Context, node *libp2p.Node, chatProtocol *me
 		case "encrypt-test":
 			handleEncryptTestCommand(configDir)
 
+		// Enhanced Discovery commands
+		case "discover":
+			handleDiscoverCommand(enhancedDiscovery)
+		case "disc-stats":
+			handleDiscoveryStatsCommand(enhancedDiscovery)
+		case "disc-best":
+			handleBestPeersCommand(tokens, enhancedDiscovery)
+		case "disc-search":
+			handleDiscoverySearchCommand(tokens, enhancedDiscovery)
+		case "disc-trust":
+			handlePeerTrustCommand(tokens, enhancedDiscovery)
+		case "disc-export":
+			handleExportPeerMetricsCommand(enhancedDiscovery)
+
 		// Help and info commands
 		case "help":
 			printHelp()
@@ -358,6 +410,14 @@ func printHelp() {
 	fmt.Println("  keys delete <peer ID> <algo>    Delete a key from the key store")
 	fmt.Println("  keys info <peer ID> <algo>      Display information about a key")
 	fmt.Println("  keys rotate <algo>              Rotate a key pair")
+
+	fmt.Println("\n🔹 Enhanced Discovery")
+	fmt.Println("  discover                        Start discovery scan")
+	fmt.Println("  disc-stats                      Show discovery statistics")
+	fmt.Println("  disc-best [limit]               Show best peers")
+	fmt.Println("  disc-search <query>             Search for peers")
+	fmt.Println("  disc-trust <peer> <level>       Update peer trust level")
+	fmt.Println("  disc-export                     Export peer metrics")
 
 	fmt.Println("\n🔹 System")
 	fmt.Println("  status                          Display node status")
@@ -824,4 +884,192 @@ func printNodeStatus(node *libp2p.Node, chatProtocol *message.ChatProtocol) {
 		queuedMsgs += chatProtocol.GetOfflineQueuedMessageCount(p)
 	}
 	fmt.Printf("Queued Messages: %d\n", queuedMsgs)
+}
+
+// handleDiscoverCommand handles the discover command
+func handleDiscoverCommand(enhancedDiscovery *discovery.EnhancedDiscoveryService) {
+	if enhancedDiscovery == nil {
+		fmt.Println("Enhanced discovery service not available")
+		return
+	}
+
+	fmt.Println("Starting enhanced discovery scan...")
+	// The discovery runs in the background, so we just show current stats
+	stats := enhancedDiscovery.GetDiscoveryStats()
+	fmt.Printf("Discovery service status: %s\n", map[bool]string{true: "Running", false: "Stopped"}[stats.Running])
+	fmt.Printf("Total peers discovered: %d\n", stats.TotalPeers)
+	fmt.Printf("Online peers: %d\n", stats.OnlinePeers)
+	fmt.Printf("Trusted peers: %d\n", stats.TrustedPeers)
+}
+
+// handleDiscoveryStatsCommand handles the disc-stats command
+func handleDiscoveryStatsCommand(enhancedDiscovery *discovery.EnhancedDiscoveryService) {
+	if enhancedDiscovery == nil {
+		fmt.Println("Enhanced discovery service not available")
+		return
+	}
+
+	stats := enhancedDiscovery.GetDiscoveryStats()
+	fmt.Println("\n📈 Discovery Statistics")
+	fmt.Printf("Service Status: %s\n", map[bool]string{true: "Running", false: "Stopped"}[stats.Running])
+	fmt.Printf("Total Peers: %d\n", stats.TotalPeers)
+	fmt.Printf("Online Peers: %d\n", stats.OnlinePeers)
+	fmt.Printf("Trusted Peers: %d\n", stats.TrustedPeers)
+	fmt.Printf("Discovery Count: %d\n", stats.DiscoveryCount)
+	if !stats.LastDiscovery.IsZero() {
+		fmt.Printf("Last Discovery: %s\n", stats.LastDiscovery.Format("2006-01-02 15:04:05"))
+	}
+}
+
+// handleBestPeersCommand handles the disc-best command
+func handleBestPeersCommand(tokens []string, enhancedDiscovery *discovery.EnhancedDiscoveryService) {
+	if enhancedDiscovery == nil {
+		fmt.Println("Enhanced discovery service not available")
+		return
+	}
+
+	limit := 10 // default limit
+	if len(tokens) > 1 {
+		if parsed, err := parseIndex(tokens[1]); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+
+	peers := enhancedDiscovery.GetBestPeers(limit)
+	fmt.Printf("\n🏆 Best %d Peers\n", len(peers))
+	for i, peer := range peers {
+		fmt.Printf("%d. %s\n", i+1, shortPeerID(peer.PeerID.String()))
+		fmt.Printf("   Reputation: %.2f\n", peer.Reputation)
+		fmt.Printf("   Trust Level: %s\n", peer.TrustLevel.String())
+		if peer.Latency > 0 {
+			fmt.Printf("   Latency: %v\n", peer.Latency)
+		}
+		fmt.Printf("   Online: %t\n", peer.Online)
+		fmt.Println()
+	}
+}
+
+// handleDiscoverySearchCommand handles the disc-search command
+func handleDiscoverySearchCommand(tokens []string, enhancedDiscovery *discovery.EnhancedDiscoveryService) {
+	if enhancedDiscovery == nil {
+		fmt.Println("Enhanced discovery service not available")
+		return
+	}
+
+	if len(tokens) < 2 {
+		fmt.Println("Usage: disc-search <query>")
+		return
+	}
+
+	query := strings.Join(tokens[1:], " ")
+	searchQuery := &discovery.PeerSearchQuery{
+		Identifier: query,
+		Limit:      20,
+	}
+
+	results := enhancedDiscovery.SearchPeers(searchQuery)
+	fmt.Printf("\n🔍 Search Results for '%s'\n", query)
+	fmt.Printf("Found %d peers:\n\n", len(results))
+
+	for i, peer := range results {
+		fmt.Printf("%d. %s\n", i+1, shortPeerID(peer.PeerID.String()))
+		fmt.Printf("   Reputation: %.2f\n", peer.Reputation)
+		fmt.Printf("   Trust Level: %s\n", peer.TrustLevel.String())
+		if len(peer.Identifiers) > 0 {
+			fmt.Printf("   Identifiers: %v\n", peer.Identifiers)
+		}
+		fmt.Printf("   Online: %t\n", peer.Online)
+		fmt.Println()
+	}
+}
+
+// handlePeerTrustCommand handles the disc-trust command
+func handlePeerTrustCommand(tokens []string, enhancedDiscovery *discovery.EnhancedDiscoveryService) {
+	if enhancedDiscovery == nil {
+		fmt.Println("Enhanced discovery service not available")
+		return
+	}
+
+	if len(tokens) < 3 {
+		fmt.Println("Usage: disc-trust <peer_index> <trust_level>")
+		fmt.Println("Trust levels: unknown, low, medium, high, verified")
+		return
+	}
+
+	peerIdx, err := parseIndex(tokens[1])
+	if err != nil {
+		fmt.Printf("Invalid peer index: %s\n", err)
+		return
+	}
+
+	allMetrics := enhancedDiscovery.GetAllPeerMetrics()
+	peerList := make([]discovery.PeerMetrics, 0, len(allMetrics))
+	for _, metrics := range allMetrics {
+		peerList = append(peerList, *metrics)
+	}
+
+	if peerIdx < 0 || peerIdx >= len(peerList) {
+		fmt.Printf("Invalid peer index: must be between 0 and %d\n", len(peerList)-1)
+		return
+	}
+
+	peerMetrics := peerList[peerIdx]
+	trustLevelStr := tokens[2]
+
+	var trustLevel discovery.TrustLevel
+	switch strings.ToLower(trustLevelStr) {
+	case "unknown":
+		trustLevel = discovery.TrustUnknown
+	case "low":
+		trustLevel = discovery.TrustLow
+	case "medium":
+		trustLevel = discovery.TrustMedium
+	case "high":
+		trustLevel = discovery.TrustHigh
+	case "verified":
+		trustLevel = discovery.TrustVerified
+	default:
+		fmt.Printf("Invalid trust level: %s\n", trustLevelStr)
+		fmt.Println("Valid levels: unknown, low, medium, high, verified")
+		return
+	}
+
+	err = enhancedDiscovery.UpdatePeerTrustLevel(peerMetrics.PeerID, trustLevel)
+	if err != nil {
+		fmt.Printf("Failed to update trust level: %s\n", err)
+		return
+	}
+
+	fmt.Printf("Updated trust level for peer %s to %s\n", shortPeerID(peerMetrics.PeerID.String()), trustLevel.String())
+}
+
+// handleExportPeerMetricsCommand handles the disc-export command
+func handleExportPeerMetricsCommand(enhancedDiscovery *discovery.EnhancedDiscoveryService) {
+	if enhancedDiscovery == nil {
+		fmt.Println("Enhanced discovery service not available")
+		return
+	}
+
+	allMetrics := enhancedDiscovery.GetAllPeerMetrics()
+	if len(allMetrics) == 0 {
+		fmt.Println("No peer metrics to export")
+		return
+	}
+
+	filename := fmt.Sprintf("peer_metrics_%s.json", time.Now().Format("20060102_150405"))
+	
+	// Convert to JSON
+	data, err := json.MarshalIndent(allMetrics, "", "  ")
+	if err != nil {
+		fmt.Printf("Failed to marshal peer metrics: %s\n", err)
+		return
+	}
+
+	err = os.WriteFile(filename, data, 0644)
+	if err != nil {
+		fmt.Printf("Failed to write peer metrics to file: %s\n", err)
+		return
+	}
+
+	fmt.Printf("Successfully exported %d peer metrics to %s\n", len(allMetrics), filename)
 }
