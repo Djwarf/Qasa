@@ -165,7 +165,7 @@ metadata:
 spec:
   acme:
     server: https://acme-v02.api.letsencrypt.org/directory
-    email: your-email@example.com
+    email: djwarfqasa@proton.me
     privateKeySecretRef:
       name: letsencrypt-prod
     solvers:
