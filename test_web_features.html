@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QaSa Web Features Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .test-result {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        
+        .test-pass {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .test-fail {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .test-info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        
+        button:hover {
+            background: #0056b3;
+        }
+        
+        #notifications-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+        
+        .notification {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 10px 0;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            max-width: 300px;
+        }
+        
+        .notification-info { border-left: 4px solid #17a2b8; }
+        .notification-success { border-left: 4px solid #28a745; }
+        .notification-warning { border-left: 4px solid #ffc107; }
+        .notification-error { border-left: 4px solid #dc3545; }
+        
+        .theme-toggle {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+        }
+        
+        [data-theme="dark"] {
+            background: #1a1a1a;
+            color: #f0f0f0;
+        }
+        
+        [data-theme="dark"] .test-section {
+            background: #2d2d2d;
+            color: #f0f0f0;
+        }
+        
+        .feature-demo {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        
+        .file-drop-zone {
+            border: 2px dashed #ddd;
+            padding: 40px;
+            text-align: center;
+            border-radius: 8px;
+            margin: 20px 0;
+            transition: all 0.3s ease;
+        }
+        
+        .file-drop-zone.dragover {
+            border-color: #007bff;
+            background: #f8f9fa;
+        }
+        
+        .contact-list {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        .contact-item {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .contact-item:hover {
+            background: #f8f9fa;
+        }
+        
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        
+        .status-indicator.online { background: #28a745; }
+        .status-indicator.offline { background: #6c757d; }
+        
+        .search-box {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        
+        .message-area {
+            height: 200px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            overflow-y: auto;
+            background: #f8f9fa;
+        }
+        
+        .message {
+            margin: 10px 0;
+            padding: 8px 12px;
+            border-radius: 18px;
+            max-width: 80%;
+        }
+        
+        .message.sent {
+            background: #007bff;
+            color: white;
+            margin-left: auto;
+        }
+        
+        .message.received {
+            background: white;
+            border: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <div class="theme-toggle">
+        <button id="theme-toggle-btn" onclick="toggleTheme()">🌙 Toggle Theme</button>
+    </div>
+    
+    <h1>🛡️ QaSa Web Features Test Suite</h1>
+    <p>Comprehensive testing of all enhanced web interface features.</p>
+    
+    <div id="test-results"></div>
+    
+    <!-- Utility Functions Test -->
+    <div class="test-section">
+        <h2>🔧 Utility Functions</h2>
+        <div class="feature-demo">
+            <h3>String Utilities</h3>
+            <p>Peer ID: <code id="peer-id-demo">12D3KooWCPoCGAVdWaT9x1h2rVHPhhKDrFi77f4h7RcapjgCuq2J</code></p>
+            <p>Shortened: <code id="peer-id-short"></code></p>
+            <p>File size: <code id="file-size-demo">1048576</code> bytes = <code id="file-size-formatted"></code></p>
+            <button onclick="testStringUtils()">Test String Utils</button>
+        </div>
+    </div>
+    
+    <!-- Notification System Test -->
+    <div class="test-section">
+        <h2>🔔 Notification System</h2>
+        <div class="feature-demo">
+            <button onclick="testNotifications()">Test All Notification Types</button>
+            <button onclick="showInfo('Info Test', 'This is an info notification')">Info</button>
+            <button onclick="showSuccess('Success Test', 'Operation completed successfully')">Success</button>
+            <button onclick="showWarning('Warning Test', 'Please check your settings')">Warning</button>
+            <button onclick="showError('Error Test', 'Something went wrong')">Error</button>
+            <button onclick="clearAllNotifications()">Clear All</button>
+        </div>
+    </div>
+    
+    <!-- Theme System Test -->
+    <div class="test-section">
+        <h2>🎨 Theme System</h2>
+        <div class="feature-demo">
+            <p>Current theme: <span id="current-theme">light</span></p>
+            <button onclick="setTheme('light')">Light Theme</button>
+            <button onclick="setTheme('dark')">Dark Theme</button>
+            <button onclick="toggleTheme()">Toggle Theme</button>
+        </div>
+    </div>
+    
+    <!-- Contact Management Test -->
+    <div class="test-section">
+        <h2>👥 Contact Management</h2>
+        <div class="feature-demo">
+            <input type="text" id="contact-search" class="search-box" placeholder="Search contacts..." onkeyup="searchContacts()">
+            <div id="contact-list" class="contact-list">
+                <!-- Contacts will be populated here -->
+            </div>
+            <button onclick="addSampleContacts()">Add Sample Contacts</button>
+            <button onclick="clearContacts()">Clear Contacts</button>
+        </div>
+    </div>
+    
+    <!-- File Upload Test -->
+    <div class="test-section">
+        <h2>📁 File Upload</h2>
+        <div class="feature-demo">
+            <div id="file-drop-zone" class="file-drop-zone">
+                <p>Drag and drop files here or click to select</p>
+                <input type="file" id="file-input" multiple style="display: none;">
+                <button onclick="document.getElementById('file-input').click()">Select Files</button>
+            </div>
+            <div id="file-list"></div>
+        </div>
+    </div>
+    
+    <!-- Chat Interface Test -->
+    <div class="test-section">
+        <h2>💬 Chat Interface</h2>
+        <div class="feature-demo">
+            <div id="chat-messages" class="message-area"></div>
+            <div style="display: flex; gap: 10px; margin-top: 10px;">
+                <input type="text" id="message-input" placeholder="Type a message..." style="flex: 1;" onkeypress="handleMessageKeyPress(event)">
+                <button onclick="sendTestMessage()">Send</button>
+                <button onclick="simulateTyping()">Simulate Typing</button>
+            </div>
+            <label style="display: block; margin-top: 10px;">
+                <input type="checkbox" id="encrypt-messages"> Encrypt messages
+            </label>
+        </div>
+    </div>
+    
+    <!-- Storage Test -->
+    <div class="test-section">
+        <h2>💾 Local Storage</h2>
+        <div class="feature-demo">
+            <input type="text" id="storage-key" placeholder="Storage key" value="test-key">
+            <input type="text" id="storage-value" placeholder="Storage value" value="test-value">
+            <button onclick="testStorage()">Set Item</button>
+            <button onclick="getStorageItem(document.getElementById('storage-key').value)">Get Item</button>
+            <button onclick="removeStorageItem(document.getElementById('storage-key').value)">Remove Item</button>
+            <div id="storage-result"></div>
+        </div>
+    </div>
+    
+    <!-- Performance Test -->
+    <div class="test-section">
+        <h2>⚡ Performance Utilities</h2>
+        <div class="feature-demo">
+            <button onclick="testDebounce()">Test Debounce</button>
+            <button onclick="testThrottle()">Test Throttle</button>
+            <div id="performance-result"></div>
+        </div>
+    </div>
+    
+    <div id="notifications-container"></div>
+    
+    <script>
+        // Load our utility functions (inline for testing)
+        // Shortened versions for testing
+        
+        function shortPeerId(peerId) {
+            if (!peerId) return '';
+            return peerId.length > 12 ? peerId.substring(0, 8) + '...' : peerId;
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        function formatTime(date) {
+            if (!date) return '';
+            const d = new Date(date);
+            return d.toLocaleTimeString();
+        }
+        
+        function generateId() {
+            return Date.now().toString(36) + Math.random().toString(36).substr(2);
+        }
+        
+        // Notification System
+        class NotificationManager {
+            constructor() {
+                this.notifications = [];
+                this.container = document.getElementById('notifications-container');
+            }
+            
+            show(title, message, type = 'info', duration = 5000) {
+                const id = generateId();
+                const notification = { id, title, message, type, timestamp: new Date() };
+                this.notifications.unshift(notification);
+                this.showInApp(notification, duration);
+                return id;
+            }
+            
+            showInApp(notification, duration) {
+                const element = document.createElement('div');
+                element.className = `notification notification-${notification.type}`;
+                element.innerHTML = `
+                    <div class="notification-content">
+                        <strong>${escapeHtml(notification.title)}</strong>
+                        <p>${escapeHtml(notification.message)}</p>
+                        <small>${formatTime(notification.timestamp)}</small>
+                    </div>
+                    <button onclick="this.parentElement.remove()" style="float: right;">×</button>
+                `;
+                this.container.appendChild(element);
+                
+                if (duration > 0) {
+                    setTimeout(() => {
+                        if (element.parentElement) {
+                            element.remove();
+                        }
+                    }, duration);
+                }
+            }
+            
+            clear() {
+                this.notifications = [];
+                this.container.innerHTML = '';
+            }
+        }
+        
+        const notificationManager = new NotificationManager();
+        
+        function showNotification(title, message, type = 'info', duration = 5000) {
+            return notificationManager.show(title, message, type, duration);
+        }
+        
+        function showInfo(title, message) { return showNotification(title, message, 'info'); }
+        function showSuccess(title, message) { return showNotification(title, message, 'success'); }
+        function showWarning(title, message) { return showNotification(title, message, 'warning'); }
+        function showError(title, message) { return showNotification(title, message, 'error'); }
+        function clearAllNotifications() { notificationManager.clear(); }
+        
+        // Theme System
+        class ThemeManager {
+            constructor() {
+                this.currentTheme = localStorage.getItem('theme') || 'light';
+                this.applyTheme(this.currentTheme);
+            }
+            
+            toggle() {
+                this.currentTheme = this.currentTheme === 'light' ? 'dark' : 'light';
+                this.applyTheme(this.currentTheme);
+                localStorage.setItem('theme', this.currentTheme);
+            }
+            
+            setTheme(theme) {
+                this.currentTheme = theme;
+                this.applyTheme(theme);
+                localStorage.setItem('theme', theme);
+            }
+            
+            applyTheme(theme) {
+                document.documentElement.setAttribute('data-theme', theme);
+                document.getElementById('current-theme').textContent = theme;
+                const button = document.getElementById('theme-toggle-btn');
+                if (button) {
+                    button.textContent = theme === 'dark' ? '☀️ Toggle Theme' : '🌙 Toggle Theme';
+                }
+            }
+        }
+        
+        const themeManager = new ThemeManager();
+        
+        function toggleTheme() { themeManager.toggle(); }
+        function setTheme(theme) { themeManager.setTheme(theme); }
+        
+        // Storage utilities
+        function getStorageItem(key, defaultValue = null) {
+            try {
+                const item = localStorage.getItem(key);
+                return item !== null ? JSON.parse(item) : defaultValue;
+            } catch {
+                return defaultValue;
+            }
+        }
+        
+        function setStorageItem(key, value) {
+            try {
+                localStorage.setItem(key, JSON.stringify(value));
+                return true;
+            } catch {
+                return false;
+            }
+        }
+        
+        function removeStorageItem(key) {
+            try {
+                localStorage.removeItem(key);
+                return true;
+            } catch {
+                return false;
+            }
+        }
+        
+        // Performance utilities
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+        
+        function throttle(func, limit) {
+            let inThrottle;
+            return function executedFunction(...args) {
+                if (!inThrottle) {
+                    func.apply(this, args);
+                    inThrottle = true;
+                    setTimeout(() => inThrottle = false, limit);
+                }
+            };
+        }
+        
+        // Test functions
+        function testStringUtils() {
+            const peerId = document.getElementById('peer-id-demo').textContent;
+            const fileSize = parseInt(document.getElementById('file-size-demo').textContent);
+            
+            document.getElementById('peer-id-short').textContent = shortPeerId(peerId);
+            document.getElementById('file-size-formatted').textContent = formatFileSize(fileSize);
+            
+            showSuccess('String Utils Test', 'Peer ID shortened and file size formatted successfully');
+        }
+        
+        function testNotifications() {
+            showInfo('Info Test', 'This is an informational message');
+            setTimeout(() => showSuccess('Success Test', 'Operation completed successfully'), 500);
+            setTimeout(() => showWarning('Warning Test', 'Please check your settings'), 1000);
+            setTimeout(() => showError('Error Test', 'Something went wrong'), 1500);
+        }
+        
+        let sampleContacts = [
+            { id: '12D3KooWABC', name: 'Alice Smith', online: true },
+            { id: '12D3KooWDEF', name: 'Bob Johnson', online: false },
+            { id: '12D3KooWGHI', name: 'Charlie Brown', online: true },
+            { id: '12D3KooWJKL', name: 'Diana Prince', online: true },
+        ];
+        
+        function addSampleContacts() {
+            const contactList = document.getElementById('contact-list');
+            contactList.innerHTML = '';
+            
+            sampleContacts.forEach(contact => {
+                const contactElement = document.createElement('div');
+                contactElement.className = 'contact-item';
+                contactElement.innerHTML = `
+                    <span class="status-indicator ${contact.online ? 'online' : 'offline'}"></span>
+                    <span>${contact.name}</span>
+                    <small>${shortPeerId(contact.id)}</small>
+                `;
+                contactList.appendChild(contactElement);
+            });
+            
+            showSuccess('Contacts', 'Sample contacts added');
+        }
+        
+        function clearContacts() {
+            document.getElementById('contact-list').innerHTML = '';
+            showInfo('Contacts', 'Contact list cleared');
+        }
+        
+        function searchContacts() {
+            const query = document.getElementById('contact-search').value.toLowerCase();
+            const contactItems = document.querySelectorAll('.contact-item');
+            
+            contactItems.forEach(item => {
+                const text = item.textContent.toLowerCase();
+                item.style.display = text.includes(query) ? 'flex' : 'none';
+            });
+        }
+        
+        // File upload test
+        function initFileUpload() {
+            const dropZone = document.getElementById('file-drop-zone');
+            const fileInput = document.getElementById('file-input');
+            
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('dragover');
+            });
+            
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.classList.remove('dragover');
+            });
+            
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('dragover');
+                handleFiles(e.dataTransfer.files);
+            });
+            
+            fileInput.addEventListener('change', (e) => {
+                handleFiles(e.target.files);
+            });
+        }
+        
+        function handleFiles(files) {
+            const fileList = document.getElementById('file-list');
+            fileList.innerHTML = '';
+            
+            Array.from(files).forEach(file => {
+                const fileElement = document.createElement('div');
+                fileElement.style.cssText = 'padding: 10px; border: 1px solid #ddd; margin: 5px 0; border-radius: 4px;';
+                fileElement.innerHTML = `
+                    <strong>${file.name}</strong> - ${formatFileSize(file.size)}
+                    <br><small>Type: ${file.type || 'Unknown'}</small>
+                `;
+                fileList.appendChild(fileElement);
+            });
+            
+            showSuccess('File Upload', `${files.length} file(s) processed`);
+        }
+        
+        // Chat test
+        function sendTestMessage() {
+            const input = document.getElementById('message-input');
+            const messages = document.getElementById('chat-messages');
+            const encrypted = document.getElementById('encrypt-messages').checked;
+            
+            if (input.value.trim()) {
+                const messageElement = document.createElement('div');
+                messageElement.className = 'message sent';
+                messageElement.innerHTML = `
+                    ${encrypted ? '🔒 ' : ''}${escapeHtml(input.value)}
+                    <br><small>${formatTime(new Date())}</small>
+                `;
+                messages.appendChild(messageElement);
+                messages.scrollTop = messages.scrollHeight;
+                
+                input.value = '';
+                
+                // Simulate received message
+                setTimeout(() => {
+                    const replyElement = document.createElement('div');
+                    replyElement.className = 'message received';
+                    replyElement.innerHTML = `
+                        Message received and processed
+                        <br><small>${formatTime(new Date())}</small>
+                    `;
+                    messages.appendChild(replyElement);
+                    messages.scrollTop = messages.scrollHeight;
+                }, 1000);
+            }
+        }
+        
+        function simulateTyping() {
+            showInfo('Typing', 'User is typing...');
+            setTimeout(() => {
+                showInfo('Typing', 'User stopped typing');
+            }, 3000);
+        }
+        
+        function handleMessageKeyPress(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendTestMessage();
+            }
+        }
+        
+        // Storage test
+        function testStorage() {
+            const key = document.getElementById('storage-key').value;
+            const value = document.getElementById('storage-value').value;
+            const result = document.getElementById('storage-result');
+            
+            if (setStorageItem(key, value)) {
+                result.innerHTML = `<div class="test-pass">✅ Item stored successfully</div>`;
+                showSuccess('Storage', 'Item saved to localStorage');
+            } else {
+                result.innerHTML = `<div class="test-fail">❌ Failed to store item</div>`;
+                showError('Storage', 'Failed to save item');
+            }
+        }
+        
+        // Performance test
+        function testDebounce() {
+            const result = document.getElementById('performance-result');
+            let counter = 0;
+            
+            const debouncedFunc = debounce(() => {
+                result.innerHTML += `<div class="test-info">Debounced function called: ${++counter}</div>`;
+            }, 1000);
+            
+            // Call multiple times rapidly
+            for (let i = 0; i < 5; i++) {
+                setTimeout(() => debouncedFunc(), i * 100);
+            }
+            
+            showInfo('Performance', 'Debounce test started - should see only 1 call');
+        }
+        
+        function testThrottle() {
+            const result = document.getElementById('performance-result');
+            let counter = 0;
+            
+            const throttledFunc = throttle(() => {
+                result.innerHTML += `<div class="test-info">Throttled function called: ${++counter}</div>`;
+            }, 1000);
+            
+            // Call multiple times rapidly
+            for (let i = 0; i < 5; i++) {
+                setTimeout(() => throttledFunc(), i * 100);
+            }
+            
+            showInfo('Performance', 'Throttle test started - should see limited calls');
+        }
+        
+        // Initialize tests
+        document.addEventListener('DOMContentLoaded', () => {
+            initFileUpload();
+            
+            // Show welcome message
+            setTimeout(() => {
+                showSuccess('QaSa Web Features', 'Test suite loaded successfully!');
+            }, 500);
+            
+            // Run automatic tests
+            setTimeout(() => {
+                testStringUtils();
+            }, 1000);
+        });
+    </script>
+</body>
+</html> 

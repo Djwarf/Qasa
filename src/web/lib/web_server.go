@@ -232,6 +232,12 @@ func (ws *WebServer) Start(port int) error {
 	router.Handle("/utils.js", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "/app/web/utils.js")
 	}))
+	router.Handle("/discovery.js", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "/app/web/discovery.js")
+	}))
+	router.Handle("/enhanced-discovery.js", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "/app/web/enhanced-discovery.js")
+	}))
 	router.Handle("/favicon.svg", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "/app/web/favicon.svg")
 	}))
