@@ -37,12 +37,13 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Copy go modules
-COPY src/go.mod src/go.sum ./
+# Copy module-specific go.mod and go.sum files
+COPY src/common/go.mod src/common/go.sum ./src/common/
 COPY src/network/go.mod src/network/go.sum ./src/network/
 COPY src/web/go.mod src/web/go.sum ./src/web/
 
-# Download dependencies
+# Download dependencies for each module
+RUN cd src/common && go mod download
 RUN cd src/network && go mod download
 RUN cd src/web && go mod download
 
@@ -55,11 +56,11 @@ RUN ldconfig
 
 # Build the network module
 WORKDIR /app/src/network
-RUN CGO_ENABLED=1 CGO_LDFLAGS="-L/usr/local/lib -lssl -lcrypto" go build -o qasa-network main.go
+RUN CGO_ENABLED=1 CGO_LDFLAGS="-L/usr/local/lib -lssl -lcrypto" go build -o qasa-network .
 
 # Build the web module
 WORKDIR /app/src/web
-RUN CGO_ENABLED=1 CGO_LDFLAGS="-L/usr/local/lib -lssl -lcrypto" go build -o qasa-web main.go
+RUN CGO_ENABLED=1 CGO_LDFLAGS="-L/usr/local/lib -lssl -lcrypto" go build -o qasa-web .
 
 # Stage 3: Runtime
 FROM debian:bookworm-slim
