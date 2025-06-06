@@ -1,17 +1,32 @@
-// Discovery Mode Functionality
+// Enhanced Discovery Mode Functionality
 class DiscoveryMode {
     constructor(webSocketHandler) {
         this.ws = webSocketHandler;
         this.searchResults = [];
-        this.searchType = 'all'; // all, name, key
+        this.searchType = 'all'; // all, name, key, capability, proximity
         this.activeFilters = {
             online: false,
             authenticated: false,
             encrypted: false,
-            proximity: false
+            proximity: false,
+            postQuantum: false,
+            trusted: false,
+            verified: false
         };
+        this.sortBy = 'reputation'; // reputation, latency, proximity, trust
+        this.sortOrder = 'desc'; // asc, desc
+        this.searchHistory = [];
+        this.savedSearches = [];
+        this.peerMetrics = new Map();
+        this.discoveryStats = {};
+        this.autoRefresh = true;
+        this.refreshInterval = 30000; // 30 seconds
+        this.refreshTimer = null;
+        
         this.initElements();
         this.initEventListeners();
+        this.loadSavedSearches();
+        this.startAutoRefresh();
     }
 
     initElements() {
@@ -23,6 +38,24 @@ class DiscoveryMode {
         this.resultsContainer = document.getElementById('discovery-results');
         this.filtersContainer = document.getElementById('discovery-filters');
         this.loadingIndicator = document.getElementById('discovery-loading');
+        
+        // Enhanced UI elements
+        this.sortSelect = document.getElementById('discovery-sort');
+        this.sortOrderButton = document.getElementById('sort-order-btn');
+        this.statsContainer = document.getElementById('discovery-stats');
+        this.advancedFiltersPanel = document.getElementById('advanced-filters');
+        this.searchHistoryButton = document.getElementById('search-history-btn');
+        this.saveSearchButton = document.getElementById('save-search-btn');
+        this.autoRefreshToggle = document.getElementById('auto-refresh-toggle');
+        this.refreshIntervalSelect = document.getElementById('refresh-interval');
+        this.exportButton = document.getElementById('export-results-btn');
+        this.mapViewButton = document.getElementById('map-view-btn');
+        this.listViewButton = document.getElementById('list-view-btn');
+        this.viewMode = 'list'; // list, map
+        
+        // Create enhanced filter elements if they don't exist
+        this.createEnhancedFilters();
+        this.createStatsPanel();
     }
 
     initEventListeners() {

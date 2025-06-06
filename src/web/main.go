@@ -106,9 +106,31 @@ func main() {
 	// Start the chat protocol
 	chatProtocol.Start()
 
+	// Initialize enhanced discovery if DHT is available
+	var enhancedDiscovery *discovery.EnhancedDiscoveryService
+	if dhtDiscovery != nil {
+		discoveryConfig := discovery.DefaultDiscoveryConfig()
+		discoveryConfig.EnableMDNS = *enableMDNS
+		discoveryConfig.EnableDHT = *enableDHT
+		discoveryConfig.EnableIdentifier = true
+		
+		enhancedDiscovery, err = discovery.NewEnhancedDiscoveryService(ctx, node.Host(), dhtDiscovery.GetDHT(), discoveryConfig)
+		if err != nil {
+			log.Printf("Warning: Failed to initialize enhanced discovery: %v", err)
+		} else {
+			go func() {
+				if err := enhancedDiscovery.Start(); err != nil {
+					log.Printf("Warning: Failed to start enhanced discovery: %v", err)
+				} else {
+					fmt.Println("🚀 Enhanced discovery service enabled")
+				}
+			}()
+		}
+	}
+
 	// Create and start the web server
 	fmt.Printf("Creating web server on port %d...\n", *webPort)
-	webServer := lib.NewWebServer(node, chatProtocol, identifierDiscovery)
+	webServer := lib.NewWebServer(node, chatProtocol, identifierDiscovery, enhancedDiscovery)
 	
 	// Give the node setup a moment to complete
 	time.Sleep(500 * time.Millisecond)

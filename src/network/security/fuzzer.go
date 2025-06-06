@@ -3,7 +3,7 @@ package security
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
+	cryptorand "crypto/rand"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -433,7 +433,7 @@ func (f *Fuzzer) generateNestedJSON() []byte {
 func (f *Fuzzer) generateRandomBytes() []byte {
 	size := rand.Intn(65536) + 1
 	data := make([]byte, size)
-	rand.Read(data)
+	cryptorand.Read(data)
 	return data
 }
 
@@ -441,7 +441,7 @@ func (f *Fuzzer) generateKeyExchangePayload() []byte {
 	// Generate key exchange-like payloads
 	size := 32 + rand.Intn(8192)
 	data := make([]byte, size)
-	rand.Read(data)
+	cryptorand.Read(data)
 	return data
 }
 
@@ -459,7 +459,7 @@ func (f *Fuzzer) generateMessageProtocolPayload() []byte {
 	copy(data, template)
 	
 	// Fill rest with random data
-	rand.Read(data[len(template):])
+	cryptorand.Read(data[len(template):])
 	
 	return data
 }

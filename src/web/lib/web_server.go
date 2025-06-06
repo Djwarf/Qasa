@@ -31,14 +31,16 @@ type WebServer struct {
 	wsClients           map[*websocket.Conn]bool
 	wsMutex             sync.Mutex
 	identifierDiscovery *discovery.IdentifierDiscoveryService
+	enhancedDiscovery   *discovery.EnhancedDiscoveryService
 }
 
-func NewWebServer(node *libp2p.Node, chatProtocol *message.ChatProtocol, identifierDiscovery *discovery.IdentifierDiscoveryService) *WebServer {
+func NewWebServer(node *libp2p.Node, chatProtocol *message.ChatProtocol, identifierDiscovery *discovery.IdentifierDiscoveryService, enhancedDiscovery *discovery.EnhancedDiscoveryService) *WebServer {
 	ws := &WebServer{
 		node:                node,
 		chatProtocol:        chatProtocol,
 		wsClients:           make(map[*websocket.Conn]bool),
 		identifierDiscovery: identifierDiscovery,
+		enhancedDiscovery:   enhancedDiscovery,
 	}
 
 	// Register a message receiver
@@ -562,6 +564,68 @@ func (ws *WebServer) handleClientMessages(conn *websocket.Conn) {
 				"peer_id":   data.PeerID,
 				"algorithm": data.Algorithm,
 			})
+
+		// Enhanced Discovery Cases
+		case "advanced_search":
+			var data struct {
+				Query    map[string]interface{} `json:"query"`
+				Filters  map[string]interface{} `json:"filters"`
+				Sort     map[string]string      `json:"sort"`
+				Location map[string]float64     `json:"location"`
+			}
+			if err := json.Unmarshal(msg.Data, &data); err != nil {
+				continue
+			}
+
+			results := ws.performAdvancedSearch(data)
+			ws.sendToClient(conn, "advanced_search_results", map[string]interface{}{
+				"results": results,
+			})
+
+		case "discovery_stats":
+			if ws.enhancedDiscovery != nil {
+				stats := ws.enhancedDiscovery.GetDiscoveryStats()
+				ws.sendToClient(conn, "discovery_stats", stats)
+			}
+
+		case "best_peers":
+			var data struct {
+				Limit int `json:"limit"`
+			}
+			if err := json.Unmarshal(msg.Data, &data); err != nil {
+				data.Limit = 10
+			}
+
+			if ws.enhancedDiscovery != nil {
+				bestPeers := ws.enhancedDiscovery.GetBestPeers(data.Limit)
+				results := ws.formatEnhancedPeerResults(bestPeers)
+				ws.sendToClient(conn, "best_peers", map[string]interface{}{
+					"results": results,
+				})
+			}
+
+		case "update_peer_trust":
+			var data struct {
+				PeerID     string `json:"peer_id"`
+				TrustLevel string `json:"trust_level"`
+			}
+			if err := json.Unmarshal(msg.Data, &data); err != nil {
+				continue
+			}
+
+			if ws.enhancedDiscovery != nil {
+				err := ws.updatePeerTrust(data.PeerID, data.TrustLevel)
+				if err != nil {
+					ws.sendToClient(conn, "error", map[string]string{
+						"message": fmt.Sprintf("Failed to update trust: %v", err),
+					})
+				} else {
+					ws.sendToClient(conn, "trust_updated", map[string]string{
+						"peer_id":     data.PeerID,
+						"trust_level": data.TrustLevel,
+					})
+				}
+			}
 		}
 	}
 }
@@ -937,4 +1001,140 @@ func (ws *WebServer) handlePeersAPI(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"peers": peerInfos,
 	})
+}
+
+// Enhanced Discovery Methods
+
+// performAdvancedSearch performs advanced search using enhanced discovery
+func (ws *WebServer) performAdvancedSearch(data struct {
+	Query    map[string]interface{} `json:"query"`
+	Filters  map[string]interface{} `json:"filters"`
+	Sort     map[string]string      `json:"sort"`
+	Location map[string]float64     `json:"location"`
+}) []map[string]interface{} {
+	if ws.enhancedDiscovery == nil {
+		return []map[string]interface{}{}
+	}
+
+	// Build search query from the request
+	query := &discovery.PeerSearchQuery{
+		Limit: 50, // Default limit
+	}
+
+	// Parse query conditions
+	if data.Query != nil {
+		if conditions, ok := data.Query["conditions"].([]interface{}); ok {
+			for _, cond := range conditions {
+				if condMap, ok := cond.(map[string]interface{}); ok {
+					field, _ := condMap["field"].(string)
+					value, _ := condMap["value"].(string)
+					
+					switch field {
+					case "identifier":
+						query.Identifier = value
+					case "capability":
+						query.Capabilities = append(query.Capabilities, value)
+					}
+				}
+			}
+		}
+	}
+
+	// Parse filters
+	if data.Filters != nil {
+		if postQuantum, ok := data.Filters["postQuantum"].(bool); ok {
+			query.RequirePostQuantum = postQuantum
+		}
+		if minRep, ok := data.Filters["reputation"].(float64); ok {
+			query.MinReputation = minRep
+		}
+	}
+
+	// Perform search
+	results := ws.enhancedDiscovery.SearchPeers(query)
+	return ws.formatEnhancedPeerResults(results)
+}
+
+// formatEnhancedPeerResults formats enhanced peer metrics for web display
+func (ws *WebServer) formatEnhancedPeerResults(peers []*discovery.PeerMetrics) []map[string]interface{} {
+	results := make([]map[string]interface{}, 0, len(peers))
+
+	for _, peer := range peers {
+		peerInfo := map[string]interface{}{
+			"peer_id":              peer.PeerID.String(),
+			"identifiers":          peer.Identifiers,
+			"reputation":           peer.Reputation,
+			"trust_level":          peer.TrustLevel.String(),
+			"online":               peer.Online,
+			"authenticated":        peer.Authenticated,
+			"post_quantum_support": peer.PostQuantum,
+			"capabilities":         peer.Capabilities,
+			"encryption_algorithms": peer.EncryptionAlgos,
+			"last_seen":            peer.LastSeen.Format(time.RFC3339),
+			"first_seen":           peer.FirstSeen.Format(time.RFC3339),
+			"connection_count":     peer.ConnectionCount,
+			"successful_connections": peer.SuccessfulConns,
+			"failed_connections":   peer.FailedConns,
+			"proximity":            peer.Proximity,
+			"tags":                 peer.Tags,
+			"metadata":             peer.Metadata,
+		}
+
+		// Add latency if available
+		if peer.Latency > 0 {
+			peerInfo["latency"] = peer.Latency.Milliseconds()
+		}
+
+		// Add geo location if available
+		if peer.GeoLocation != nil {
+			peerInfo["geo_location"] = map[string]interface{}{
+				"latitude":  peer.GeoLocation.Latitude,
+				"longitude": peer.GeoLocation.Longitude,
+				"country":   peer.GeoLocation.Country,
+				"city":      peer.GeoLocation.City,
+				"isp":       peer.GeoLocation.ISP,
+			}
+		}
+
+		// Add connection status
+		peerInfo["connected"] = ws.isPeerConnected(peer.PeerID)
+		peerInfo["encryption_status"] = ws.encryptionStatus(peer.PeerID)
+
+		results = append(results, peerInfo)
+	}
+
+	return results
+}
+
+// updatePeerTrust updates a peer's trust level
+func (ws *WebServer) updatePeerTrust(peerIDStr, trustLevelStr string) error {
+	if ws.enhancedDiscovery == nil {
+		return fmt.Errorf("enhanced discovery not available")
+	}
+
+	// Parse peer ID
+	peerID, err := peer.Decode(peerIDStr)
+	if err != nil {
+		return fmt.Errorf("invalid peer ID: %w", err)
+	}
+
+	// Parse trust level
+	var trustLevel discovery.TrustLevel
+	switch strings.ToLower(trustLevelStr) {
+	case "unknown":
+		trustLevel = discovery.TrustUnknown
+	case "low":
+		trustLevel = discovery.TrustLow
+	case "medium":
+		trustLevel = discovery.TrustMedium
+	case "high":
+		trustLevel = discovery.TrustHigh
+	case "verified":
+		trustLevel = discovery.TrustVerified
+	default:
+		return fmt.Errorf("invalid trust level: %s", trustLevelStr)
+	}
+
+	// Update trust level
+	return ws.enhancedDiscovery.UpdatePeerTrustLevel(peerID, trustLevel)
 }
