@@ -3,192 +3,422 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QaSa Secure Chat</title>
+    <title>QaSa - Quantum-Safe Chat</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="stylesheet" href="styles.css">
-    <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="apple-touch-icon" href="favicon.svg">
-    <meta name="theme-color" content="#2c3e50">
+    <script src="utils.js"></script>
 </head>
 <body>
     <div class="app-container">
-        <div class="sidebar">
-            <div class="user-profile">
-                <div class="profile-pic"></div>
-                <div class="user-info">
-                    <h3 id="peer-id">Not Connected</h3>
-                    <span class="status-indicator offline"></span>
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-left">
+                <h1>🛡️ QaSa</h1>
+                <span class="subtitle">Quantum-Safe Chat</span>
+            </div>
+            <div class="header-center">
+                <div class="peer-info">
+                    <span class="label">Your ID:</span>
+                    <span id="peer-id" class="peer-id">Connecting...</span>
+                </div>
+                <div class="connection-info">
+                    <span class="label">Status:</span>
+                    <span id="connection-status" class="status connecting">Connecting</span>
                 </div>
             </div>
-            <div class="navigation-tabs">
-                <button class="nav-tab active" data-tab="contacts">Contacts</button>
-                <button class="nav-tab" data-tab="discovery">Discovery</button>
+            <div class="header-right">
+                <div class="quick-actions">
+                    <button id="theme-toggle-btn" class="btn-icon" title="Toggle Dark Mode">🌙</button>
+                    <button id="notifications-btn" class="btn-icon" title="Notifications">🔔</button>
+                    <button id="search-btn" class="btn-icon" title="Search">🔍</button>
+                    <button id="settings-btn" class="btn-icon" title="Settings">⚙️</button>
+                    <button id="profile-btn" class="btn-icon" title="Profile">👤</button>
+                </div>
+                <div class="encryption-indicator">
+                    <span id="encryption-status" class="encryption-status">🔓</span>
+                </div>
             </div>
-            <div class="tab-content active" id="contacts-tab">
-                <div class="contacts-section">
-                    <h2>Contacts</h2>
-                    <div class="contact-list" id="contact-list">
-                        <!-- Contacts will be dynamically added here -->
+        </header>
+
+        <!-- Main Content -->
+        <div class="app-body">
+            <!-- Sidebar Navigation -->
+            <nav class="sidebar">
+                <div class="nav-tabs">
+                    <button class="nav-tab active" data-tab="chat">
+                        <span class="tab-icon">💬</span>
+                        <span class="tab-label">Chat</span>
+                        <span id="contact-count" class="badge">0</span>
+                    </button>
+                    <button class="nav-tab" data-tab="groups">
+                        <span class="tab-icon">👥</span>
+                        <span class="tab-label">Groups</span>
+                        <span id="group-count" class="badge">0</span>
+                    </button>
+                    <button class="nav-tab" data-tab="files">
+                        <span class="tab-icon">📁</span>
+                        <span class="tab-label">Files</span>
+                        <span id="file-count" class="badge">0</span>
+                    </button>
+                    <button class="nav-tab" data-tab="discovery">
+                        <span class="tab-icon">🔍</span>
+                        <span class="tab-label">Discovery</span>
+                    </button>
+                    <button class="nav-tab" data-tab="security">
+                        <span class="tab-icon">🔒</span>
+                        <span class="tab-label">Security</span>
+                    </button>
+                </div>
+
+                <!-- Chat Tab Content -->
+                <div id="chat-content" class="tab-content active">
+                    <div class="content-header">
+                        <h3>Contacts</h3>
+                        <button id="add-contact-btn" class="btn-small">➕ Add</button>
                     </div>
+                    <div class="search-bar">
+                        <input type="text" id="contact-search" placeholder="Search contacts..." class="search-input">
+                    </div>
+                    <div id="contact-list" class="contact-list"></div>
                 </div>
-            </div>
-            <div class="tab-content" id="discovery-tab">
-                <div class="discovery-section">
-                    <h2>Discover Peers</h2>
-                    <div class="discovery-search">
-                        <select id="search-type">
-                            <option value="all">All</option>
-                            <option value="name">Username</option>
+
+                <!-- Groups Tab Content -->
+                <div id="groups-content" class="tab-content">
+                    <div class="content-header">
+                        <h3>Group Chats</h3>
+                        <button id="create-group-btn" class="btn-small">➕ Create</button>
+                    </div>
+                    <div id="group-list" class="group-list"></div>
+                </div>
+
+                <!-- Files Tab Content -->
+                <div id="files-content" class="tab-content">
+                    <div class="content-header">
+                        <h3>File Transfers</h3>
+                        <button id="clear-completed-btn" class="btn-small">🗑️ Clear</button>
+                    </div>
+                    <div id="file-upload-area" class="file-upload-area">
+                        <div class="upload-icon">📁</div>
+                        <p>Drop files here or click to select</p>
+                        <input type="file" id="file-input" multiple hidden>
+                        <button onclick="document.getElementById('file-input').click()" class="btn-small">Choose Files</button>
+                    </div>
+                    <div id="upload-progress" class="progress-bar" style="display: none;"></div>
+                    <div id="files-list" class="files-list"></div>
+                </div>
+
+                <!-- Discovery Tab Content -->
+                <div id="discovery-content" class="tab-content">
+                    <div class="content-header">
+                        <h3>Peer Discovery</h3>
+                        <button id="refresh-discovery-btn" class="btn-small">🔄 Refresh</button>
+                    </div>
+                    <div class="search-controls">
+                        <input type="text" id="search-input" placeholder="Search peers..." class="search-input">
+                        <select id="search-type" class="search-select">
+                            <option value="name">Name</option>
                             <option value="key">Key ID</option>
+                            <option value="capability">Capability</option>
                         </select>
-                        <input type="text" id="discovery-search" placeholder="Search for peers...">
-                        <button id="discovery-search-btn">Search</button>
+                        <button onclick="performAdvancedSearch()" class="btn-small">Search</button>
                     </div>
-                    <div class="discovery-filters">
-                        <h3>Filters</h3>
-                        <div class="filter-group">
-                            <label>
-                                <input type="checkbox" class="discovery-filter-checkbox" data-filter="online">
-                                Online Only
-                            </label>
-                        </div>
-                        <div class="filter-group">
-                            <label>
-                                <input type="checkbox" class="discovery-filter-checkbox" data-filter="authenticated">
-                                Authenticated
-                            </label>
-                        </div>
-                        <div class="filter-group">
-                            <label>
-                                <input type="checkbox" class="discovery-filter-checkbox" data-filter="encrypted">
-                                Encrypted
-                            </label>
-                        </div>
-                        <div class="filter-group">
-                            <label>
-                                <input type="checkbox" class="discovery-filter-checkbox" data-filter="proximity">
-                                Sort by Proximity
-                            </label>
-                        </div>
+                    <div id="discovery-results" class="discovery-results"></div>
+                </div>
+
+                <!-- Security Tab Content -->
+                <div id="security-content" class="tab-content">
+                    <div class="content-header">
+                        <h3>Security & Encryption</h3>
+                        <button id="generate-keys-btn" class="btn-small">🔑 Generate</button>
                     </div>
-                    <div id="discovery-loading" class="loading-indicator">
-                        <div class="loader"></div>
-                        <p>Searching...</p>
-                    </div>
-                    <div id="discovery-results" class="discovery-results">
-                        <!-- Search results will appear here -->
+                    <div class="security-sections">
+                        <div class="security-section">
+                            <h4>Encryption Sessions</h4>
+                            <div id="encryption-sessions" class="encryption-sessions"></div>
+                        </div>
+                        <div class="security-section">
+                            <h4>Key Management</h4>
+                            <div id="key-list" class="key-list"></div>
+                        </div>
+                        <div class="security-section">
+                            <h4>Blocked Peers</h4>
+                            <div id="blocked-peers" class="blocked-peers"></div>
+                        </div>
                     </div>
                 </div>
-            </div>
-            <div class="settings-section">
-                <button id="settings-btn" class="icon-button">⚙️</button>
-                <button id="key-management-btn" class="icon-button">🔑</button>
-                <button id="profile-btn" class="icon-button">👤</button>
-            </div>
-        </div>
-        <div class="main-content">
-            <div class="chat-header">
-                <h2 id="current-chat">Select a contact</h2>
-                <div class="chat-status">
-                    <span id="encryption-status">🔒</span>
-                    <span id="connection-status">Offline</span>
+            </nav>
+
+            <!-- Main Chat Area -->
+            <main class="chat-main">
+                <!-- Chat Header -->
+                <div class="chat-header">
+                    <div class="chat-info">
+                        <h2 id="current-chat">Select a contact to start chatting</h2>
+                        <div class="chat-status">
+                            <span id="typing-indicator" class="typing-indicator" style="display: none;">Typing...</span>
+                            <span id="online-status" class="online-status"></span>
+                        </div>
+                    </div>
+                    <div class="chat-actions">
+                        <button id="voice-call-btn" class="btn-icon" title="Voice Call">📞</button>
+                        <button id="video-call-btn" class="btn-icon" title="Video Call">📹</button>
+                        <button id="screen-share-btn" class="btn-icon" title="Screen Share">📺</button>
+                        <button id="chat-info-btn" class="btn-icon" title="Chat Info">ℹ️</button>
+                    </div>
                 </div>
-            </div>
-            <div class="chat-messages" id="chat-messages">
-                <!-- Messages will be dynamically added here -->
-            </div>
-            <div class="message-input">
-                <textarea id="message-text" placeholder="Type a message..."></textarea>
-                <button id="send-btn">Send</button>
-            </div>
+
+                <!-- Messages Area -->
+                <div id="chat-messages" class="chat-messages"></div>
+
+                <!-- Message Input -->
+                <div class="message-input-area">
+                    <div class="input-controls">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="encrypt-checkbox">
+                            <span>🔒 Encrypt</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="encrypt-files-checkbox">
+                            <span>🔒 Encrypt Files</span>
+                        </label>
+                    </div>
+                    <div class="message-input-container">
+                        <button id="attach-btn" class="btn-icon" title="Attach File">📎</button>
+                        <textarea id="message-text" class="message-input" placeholder="Type your message..." rows="1"></textarea>
+                        <button id="send-btn" class="btn-send" disabled>
+                            <span class="send-icon">➤</span>
+                        </button>
+                    </div>
+                </div>
+            </main>
+
+            <!-- Right Panel (Chat Info/Group Info) -->
+            <aside class="right-panel" id="right-panel" style="display: none;">
+                <div class="panel-header">
+                    <h3 id="panel-title">Chat Info</h3>
+                    <button id="close-panel-btn" class="btn-icon">✕</button>
+                </div>
+                <div class="panel-content" id="panel-content">
+                    <!-- Dynamic content based on context -->
+                </div>
+            </aside>
         </div>
     </div>
 
     <!-- Modals -->
+    <!-- Settings Modal -->
     <div id="settings-modal" class="modal">
         <div class="modal-content">
-            <h2>Settings</h2>
-            <div class="settings-section">
-                <h3>Network</h3>
-                <div class="setting-item">
-                    <label for="port">Port:</label>
-                    <input type="number" id="port" value="0">
-                </div>
-                <div class="setting-item">
-                    <label for="mdns">Enable mDNS:</label>
-                    <input type="checkbox" id="mdns" checked>
-                </div>
-                <div class="setting-item">
-                    <label for="dht">Enable DHT:</label>
-                    <input type="checkbox" id="dht">
-                </div>
+            <div class="modal-header">
+                <h2>Settings</h2>
+                <button class="modal-close">&times;</button>
             </div>
-            <div class="settings-section">
-                <h3>Security</h3>
-                <div class="setting-item">
-                    <label for="require-auth">Require Authentication:</label>
-                    <input type="checkbox" id="require-auth">
-                </div>
-                <div class="setting-item">
-                    <label for="offline-queue">Enable Offline Queue:</label>
-                    <input type="checkbox" id="offline-queue" checked>
-                </div>
+            <div class="modal-body">
+                <form id="settings-form">
+                    <div class="form-section">
+                        <h3>Network Settings</h3>
+                        <div class="form-group">
+                            <label for="port">Port:</label>
+                            <input type="number" id="port" value="9000" min="1024" max="65535">
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="mdns-enabled" checked>
+                                Enable mDNS Discovery
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="dht-enabled" checked>
+                                Enable DHT Discovery
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="require-auth">
+                                Require Authentication
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3>Security Settings</h3>
+                        <div class="form-group">
+                            <label for="default-encryption">Default Encryption:</label>
+                            <select id="default-encryption">
+                                <option value="kyber">CRYSTALS-Kyber</option>
+                                <option value="dilithium">CRYSTALS-Dilithium</option>
+                                <option value="aes">AES-256-GCM</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="auto-encrypt" checked>
+                                Auto-encrypt messages
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="verify-peers" checked>
+                                Verify peer identities
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3>UI Settings</h3>
+                        <div class="form-group">
+                            <label for="theme">Theme:</label>
+                            <select id="theme">
+                                <option value="dark">Dark</option>
+                                <option value="light">Light</option>
+                                <option value="auto">Auto</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="notifications-enabled" checked>
+                                Enable notifications
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="sound-enabled" checked>
+                                Enable sounds
+                            </label>
+                        </div>
+                    </div>
+                </form>
             </div>
-            <div class="modal-buttons">
-                <button id="save-settings">Save</button>
-                <button id="cancel-settings">Cancel</button>
+            <div class="modal-footer">
+                <button id="save-settings" class="btn-primary">Save Settings</button>
+                <button id="cancel-settings" class="btn-secondary">Cancel</button>
             </div>
         </div>
     </div>
 
-    <div id="key-management-modal" class="modal">
-        <div class="modal-content">
-            <h2>Key Management</h2>
-            <div class="key-management-section">
-                <h3>Current Keys</h3>
-                <div id="key-list">
-                    <!-- Keys will be dynamically added here -->
-                </div>
-            </div>
-            <div class="key-actions">
-                <button id="generate-keys">Generate New Keys</button>
-                <button id="import-keys">Import Keys</button>
-                <button id="export-keys">Export Keys</button>
-                <button id="delete-keys">Delete Keys</button>
-            </div>
-            <div class="modal-buttons">
-                <button id="close-key-management">Close</button>
-            </div>
-        </div>
-    </div>
-
+    <!-- Profile Modal -->
     <div id="profile-modal" class="modal">
         <div class="modal-content">
-            <h2>Profile Settings</h2>
-            <div class="profile-section">
-                <h3>Your Identity</h3>
-                <div class="setting-item">
-                    <label for="username">Username:</label>
-                    <input type="text" id="username" placeholder="Enter a username">
-                </div>
-                <div class="setting-item">
-                    <label for="key-id">Key ID:</label>
-                    <select id="key-id">
-                        <!-- Keys will be added here -->
-                    </select>
-                </div>
-                <div class="setting-item">
-                    <label for="profile-metadata">Profile Information:</label>
-                    <textarea id="profile-metadata" placeholder="Optional profile information"></textarea>
-                </div>
+            <div class="modal-header">
+                <h2>User Profile</h2>
+                <button class="modal-close">&times;</button>
             </div>
-            <div class="modal-buttons">
-                <button id="save-profile">Save Profile</button>
-                <button id="cancel-profile">Cancel</button>
+            <div class="modal-body">
+                <form id="profile-form">
+                    <div class="form-group">
+                        <label for="display-name">Display Name:</label>
+                        <input type="text" id="display-name" placeholder="Enter your display name">
+                    </div>
+                    <div class="form-group">
+                        <label for="username">Username:</label>
+                        <input type="text" id="username" placeholder="Choose a unique username">
+                    </div>
+                    <div class="form-group">
+                        <label for="bio">Bio:</label>
+                        <textarea id="bio" placeholder="Tell others about yourself..." rows="3"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="status">Status:</label>
+                        <select id="status">
+                            <option value="online">🟢 Online</option>
+                            <option value="away">🟡 Away</option>
+                            <option value="busy">🔴 Busy</option>
+                            <option value="invisible">⚪ Invisible</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="location">Location (optional):</label>
+                        <input type="text" id="location" placeholder="Your location">
+                    </div>
+                    <div class="form-group">
+                        <label for="key-id">Primary Key:</label>
+                        <select id="key-id">
+                            <option value="">Select a key</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="avatar-upload">Avatar:</label>
+                        <input type="file" id="avatar-upload" accept="image/*">
+                        <div id="avatar-preview" class="avatar-preview"></div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button id="save-profile" class="btn-primary">Save Profile</button>
+                <button id="cancel-profile" class="btn-secondary">Cancel</button>
             </div>
         </div>
     </div>
 
+    <!-- Key Management Modal -->
+    <div id="key-management-modal" class="modal">
+        <div class="modal-content large">
+            <div class="modal-header">
+                <h2>🔑 Key Management</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="key-management-tabs">
+                    <button class="tab-btn active" data-tab="keys">My Keys</button>
+                    <button class="tab-btn" data-tab="generate">Generate</button>
+                    <button class="tab-btn" data-tab="import">Import</button>
+                    <button class="tab-btn" data-tab="export">Export</button>
+                </div>
+                
+                <div id="keys-tab" class="key-tab-content active">
+                    <div id="key-list" class="key-list"></div>
+                </div>
+                
+                <div id="generate-tab" class="key-tab-content">
+                    <div class="form-group">
+                        <label for="key-algorithm">Algorithm:</label>
+                        <select id="key-algorithm">
+                            <option value="kyber">CRYSTALS-Kyber (Encryption)</option>
+                            <option value="dilithium">CRYSTALS-Dilithium (Signing)</option>
+                            <option value="aes">AES-256-GCM (Symmetric)</option>
+                        </select>
+                    </div>
+                    <button id="generate-key-btn" class="btn-primary">Generate Key Pair</button>
+                </div>
+                
+                <div id="import-tab" class="key-tab-content">
+                    <div class="form-group">
+                        <label for="import-key-data">Key Data (PEM format):</label>
+                        <textarea id="import-key-data" rows="10" placeholder="Paste your key data here..."></textarea>
+                    </div>
+                    <button id="import-key-btn" class="btn-primary">Import Key</button>
+                </div>
+                
+                <div id="export-tab" class="key-tab-content">
+                    <div class="form-group">
+                        <label for="export-key-select">Select Key to Export:</label>
+                        <select id="export-key-select">
+                            <option value="">Select a key</option>
+                        </select>
+                    </div>
+                    <button id="export-key-btn" class="btn-primary">Export Key</button>
+                    <div id="export-result" class="export-result"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="close-key-management" class="btn-secondary">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notifications Container -->
+    <div id="notifications" class="notifications-container"></div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay" style="display: none;">
+        <div class="loading-spinner"></div>
+        <p>Loading...</p>
+    </div>
+
+    <!-- Scripts -->
     <script src="app.js"></script>
     <script src="discovery.js"></script>
+    <script src="enhanced-discovery.js"></script>
 </body>
 </html> 

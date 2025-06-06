@@ -3,6 +3,7 @@ module github.com/qasa/web
 go 1.23.8
 
 require (
+	github.com/gorilla/mux v1.8.1
 	github.com/gorilla/websocket v1.5.3
 	github.com/libp2p/go-libp2p v0.41.1
 	github.com/qasa/network v0.0.0
@@ -129,3 +130,7 @@ require (
 )
 
 replace github.com/qasa/network => ../network
+
+require github.com/qasa/common v0.0.0
+
+replace github.com/qasa/common => ../common

@@ -14,6 +14,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
+	"github.com/qasa/common"
 	"github.com/qasa/network/encryption"
 )
 
@@ -1019,25 +1020,12 @@ func (cp *ChatProtocol) startKeyRotationWithNotification(ctx context.Context, ro
 
 // bytesEqual compares two byte slices for equality
 func bytesEqual(a, b []byte) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := 0; i < len(a); i++ {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
+	return common.BytesEqual(a, b)
 }
 
 // generateMessageID generates a unique ID for a message
 func generateMessageID() string {
-	return fmt.Sprintf("%d-%d", time.Now().UnixNano(), randInt(1000, 9999))
-}
-
-// randInt generates a random integer in the given range
-func randInt(min, max int) int {
-	return min + time.Now().Nanosecond()%(max-min+1)
+	return common.GenerateMessageID()
 }
 
 // GetOfflineQueuedMessageCount returns the number of queued messages for a peer
