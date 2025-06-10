@@ -340,7 +340,7 @@ Regular security reviews and updates to this threat model are recommended, with 
 
 If you discover security vulnerabilities or have concerns about this threat model, please contact:
 
-- security@qasa.example.com
+- djwarfqasa@proton.me
 
 Responsible disclosure is requested - please allow time for issues to be addressed before public disclosure.
 

@@ -137,8 +137,8 @@ For detailed documentation, see:
 The `src/crypto/examples/` directory contains example usage:
 
 - `quantum_signatures.rs`: Example of using Dilithium for digital signatures
-- `optimized_signatures.rs`: Example of using optimised Dilithium implementations
 - `secure_communication.rs`: End-to-end example of quantum-safe cryptographic operations
+- `oqs_correct_api.rs`: Example demonstrating proper OQS API usage
 
 ## Security Considerations
 
