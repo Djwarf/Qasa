@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# QaSa Project Cleanup Script
+# QaSa Cryptography Module Cleanup Script
 # Removes build artifacts, temporary files, and runtime data
 
 set -e
 
-echo "🧹 Cleaning QaSa project..."
+echo "🧹 Cleaning QaSa Cryptography Module..."
 
 # Remove build artifacts
 echo "Removing build artifacts..."
@@ -14,7 +14,6 @@ find . -name "*.exe" -delete 2>/dev/null || true
 find . -name "*.so" -delete 2>/dev/null || true
 find . -name "*.dylib" -delete 2>/dev/null || true
 find . -name "*.dll" -delete 2>/dev/null || true
-find . -name "qasa-*" -type f -executable -delete 2>/dev/null || true
 
 # Remove temporary files
 echo "Removing temporary files..."
@@ -27,7 +26,6 @@ find . -name "Thumbs.db" -delete 2>/dev/null || true
 # Remove runtime data directories
 echo "Removing runtime data..."
 find . -name ".qasa" -type d -exec rm -rf {} + 2>/dev/null || true
-find . -name "node_modules" -type d -exec rm -rf {} + 2>/dev/null || true
 
 # Clean Go module cache for this project
 echo "Cleaning Go modules..."
@@ -45,7 +43,7 @@ find . -type d -empty -not -path "./.git/*" -delete 2>/dev/null || true
 
 echo "✅ Cleanup complete!"
 echo ""
-echo "To rebuild the project:"
+echo "To rebuild the crypto module:"
 echo "  1. cd src && go mod tidy"
-echo "  2. cd crypto && cargo build --release"
-echo "  3. Run ./run_web_ui.sh to start the application" 
+echo "  2. cd src/crypto && cargo build --release"
+echo "  3. cd src && go run main.go" 

@@ -1,6 +1,6 @@
-# QaSa - Quantum-Safe Secure Chat
+# QaSa - Quantum-Safe Cryptography Module
 
-QaSa (Quantum-Safe) is a secure end-to-end encrypted chat application that uses post-quantum cryptography to provide protection against quantum computer attacks.
+QaSa (Quantum-Safe) is a post-quantum cryptography implementation that provides protection against quantum computer attacks using NIST-selected algorithms.
 
 ## Table of Contents
 - [Features](#features)
@@ -15,27 +15,24 @@ QaSa (Quantum-Safe) is a secure end-to-end encrypted chat application that uses 
   - [Threat Model](#threat-model)
   - [Security Features](#security-features)
   - [Best Practices](#best-practices)
-- [Web Interface](#web-interface)
 - [Contributing](#contributing)
 - [License](#license)
 
 ## Features
 
 - **Quantum-Resistant Encryption** - Uses NIST-selected post-quantum algorithms CRYSTALS-Kyber and CRYSTALS-Dilithium
-- **End-to-End Encryption** - All messages are encrypted using strong cryptographic algorithms
-- **Peer-to-Peer Communication** - Direct communication without central servers
-- **Identity Management** - Associate usernames with cryptographic keys
-- **Peer Discovery** - Find other users through DHT, mDNS, and custom discovery mechanisms
-- **Web Interface** - Modern, responsive UI for easy interaction
+- **CRYSTALS-Kyber** - Quantum-resistant key encapsulation mechanism (KEM)
+- **CRYSTALS-Dilithium** - Quantum-resistant digital signature scheme
+- **AES-GCM** - Authenticated encryption with associated data
+- **Key Management** - Secure storage and handling of cryptographic keys
+- **Optimisations** - Special optimisations for resource-constrained environments
 
 ## Getting Started
 
 ### Prerequisites
 
-- Go 1.18 or later
 - Rust 1.60 or later
 - A C compiler (GCC or Clang)
-- CMake and Ninja (for building liboqs)
 
 ### Installation
 
@@ -51,88 +48,39 @@ QaSa (Quantum-Safe) is a secure end-to-end encrypted chat application that uses 
    cargo build --release
    ```
 
-3. Build the network module
+3. Test the module
    ```bash
-   cd ../network
-   ./build_crypto.sh
-   go build -o qasa-network
+   cargo test
+   ```
+
+4. Run benchmarks
+   ```bash
+   cargo bench
    ```
 
 ### Running the Application
 
-#### Web Interface
-The easiest way to run QaSa is to use the Web UI:
+Display crypto module information:
 
 ```bash
-./run_web_ui.sh
+cd src && go run main.go
 ```
 
-This will start the application and web interface on port 8080. Open your browser and navigate to:
-
-```
-http://localhost:8080
-```
-
-To specify a different port:
-
-```bash
-./run_web_ui.sh 9000
-```
-
-#### Command Line Interface
-
-```bash
-./target/release/qasa-cli node start
-```
-
-Connect to a peer:
-```bash
-./target/release/qasa-cli connect --peer <peer-address>
-```
-
-Send messages:
-```bash
-./target/release/qasa-cli send --peer <peer-id> --message "Hello, quantum-safe world!"
-```
+This will display information about the available cryptographic algorithms and documentation locations.
 
 ### Key Management
 
-Generate new keys:
-```bash
-./target/release/qasa-cli keys generate
-```
-
-List your keys:
-```bash
-./target/release/qasa-cli keys list
-```
-
-Backup keys:
-```bash
-./target/release/qasa-cli keys backup --output my-keys-backup.enc
-```
-
-Import keys:
-```bash
-./target/release/qasa-cli keys import --input my-keys-backup.enc
-```
+The crypto module provides secure key generation, storage, and management for all supported algorithms.
 
 ## Architecture
 
-QaSa is built on a modular architecture with two main components:
+QaSa focuses on providing a robust cryptography module:
 
-1. **Crypto Module (Rust)** - Implements the post-quantum cryptographic algorithms
-   - CRYSTALS-Kyber for key encapsulation
-   - CRYSTALS-Dilithium for digital signatures
-   - AES-GCM for symmetric encryption
-   - Key management system
-
-2. **Network Module (Go)** - Handles peer-to-peer communication
-   - libp2p for P2P networking
-   - End-to-end encryption
-   - Message exchange protocol
-   - Peer discovery and management
-   - Web interface
+**Crypto Module (Rust)** - Implements the post-quantum cryptographic algorithms
+- CRYSTALS-Kyber for key encapsulation
+- CRYSTALS-Dilithium for digital signatures
+- AES-GCM for symmetric encryption
+- Secure key management system
 
 ## Cryptography Module
 
@@ -314,10 +262,10 @@ Batch verification (3 signatures) shows significant efficiency gains compared to
 
 The QaSa cryptography module is designed to resist the following types of adversaries:
 
-1. **Network Adversaries**
-   - Can intercept, modify, and inject communications
-   - May have full control over the communication channel
-   - May perform replay, man-in-the-middle, and traffic analysis attacks
+1. **Cryptographic Adversaries**
+   - May attempt to break the cryptographic algorithms themselves
+   - May try to recover keys from cryptographic operations
+   - May attempt chosen plaintext/ciphertext attacks
 
 2. **System Adversaries**
    - May have access to persistent storage, but not the running process memory
@@ -414,32 +362,6 @@ The module implements secure memory handling to protect sensitive data:
    )?;
    ```
 
-## Web Interface
-
-The web interface provides an easy-to-use way to interact with QaSa. It features:
-
-### Contacts Tab
-- View and manage your connections
-- See online/offline status
-- Chat with end-to-end encryption
-- Verify encryption status
-
-### Discovery Tab
-- Search for peers by username, key ID, or general search
-- Filter results by online status, authentication, and encryption
-- Sort by network proximity
-- Connect and chat directly from the discovery interface
-
-### Profile Management
-- Set a username for easier identification
-- Associate your profile with a specific key
-- Add additional metadata to your profile
-
-### Security Settings
-- Configure network settings (mDNS, DHT)
-- Set security preferences
-- Manage your cryptographic keys
-
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
@@ -452,4 +374,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 - The NIST Post-Quantum Cryptography project
 - The Open Quantum Safe project
-- libp2p for the P2P networking libraries 
+- The CRYSTALS team for Kyber and Dilithium algorithms 

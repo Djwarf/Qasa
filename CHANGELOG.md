@@ -176,7 +176,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0] - 2023-10-XX - Initial Development
 
 ### Added
-- Project initialization
+- Project init
 - Research and algorithm selection
 - Development environment setup
 - Initial cryptographic bindings
