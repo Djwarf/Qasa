@@ -40,7 +40,7 @@ use crate::error::CryptoError;
 /// let decrypted = cipher.decrypt(&ciphertext, &nonce, Some(aad)).unwrap();
 /// assert_eq!(decrypted, plaintext);
 /// ```
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct AesGcm {
     cipher: Arc<Aes256Gcm>,
 }
@@ -80,7 +80,7 @@ impl AesGcm {
     /// let key = [0x42; 32];
     /// let cipher = AesGcm::new(&key).unwrap();
     /// ```
-    pub fn new(key: &[u8]) -> Result<Self, CryptoError> {
+    pub fn new(data: &[u8]) -> Result<Self, CryptoError> {
         if key.len() != 32 {
             return Err(CryptoError::invalid_parameter(
                 "key",
@@ -191,7 +191,7 @@ impl AesGcm {
         
         // Encrypt using the Aead trait
         self.cipher.encrypt(nonce, payload)
-            .map_err(|e| CryptoError::EncryptionError(format!("AES-GCM encryption failed: {}", e)))
+            .map_err(|e| CryptoError::aes_error("Encryption failed", &format!("AES-GCM encryption failed: {}", e)))
     }
 
     /// Decrypt ciphertext using AES-GCM
@@ -268,7 +268,7 @@ impl AesGcm {
         
         // Decrypt using the Aead trait
         self.cipher.decrypt(nonce, payload)
-            .map_err(|e| CryptoError::DecryptionError(format!("AES-GCM decryption failed: {}", e)))
+            .map_err(|e| CryptoError::aes_error("Decryption failed", &format!("AES-GCM decryption failed: {}", e)))
     }
 }
 

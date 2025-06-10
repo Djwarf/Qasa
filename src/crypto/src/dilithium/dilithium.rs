@@ -11,7 +11,7 @@ use crate::utils;
 /// This implementation uses the CRYSTALS-Dilithium algorithm, a lattice-based
 /// digital signature scheme that is believed to be secure against 
 /// quantum computer attacks.
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DilithiumKeyPair {
     /// Public key for signature verification
     pub public_key: Vec<u8>,
@@ -36,7 +36,7 @@ impl Zeroize for DilithiumKeyPair {
 }
 
 /// Public key only version of DilithiumKeyPair for sharing with others
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DilithiumPublicKey {
     /// Public key for signature verification
     pub public_key: Vec<u8>,
@@ -217,10 +217,10 @@ impl LeanDilithium {
         
         // Create a secret key from bytes using the Sig instance
         let sk = sig.secret_key_from_bytes(secret_key)
-            .ok_or_else(|| CryptoError::SignatureGenerationError("Failed to create secret key from bytes".to_string()))?;
+            .ok_or_else(|| CryptoError::dilithium_error("Signature generation failed", "Failed to generate digital signature")("Failed to create secret key from bytes".to_string()))?;
         
         let signature = sig.sign(message, &sk)
-            .map_err(|e| CryptoError::SignatureGenerationError(e.to_string()))?;
+            .map_err(|e| CryptoError::dilithium_error("Signature generation failed", "Failed to generate digital signature")(e.to_string()))?;
         
         Ok(signature.into_vec())
     }
@@ -241,10 +241,10 @@ impl LeanDilithium {
         
         // Create public key and signature objects from bytes
         let pk = sig.public_key_from_bytes(public_key)
-            .ok_or_else(|| CryptoError::SignatureVerificationError("Failed to create public key from bytes".to_string()))?;
+            .ok_or_else(|| CryptoError::dilithium_error("Signature verification failed", "Invalid signature or verification failed")("Failed to create public key from bytes".to_string()))?;
         
         let sig_obj = sig.signature_from_bytes(signature)
-            .ok_or_else(|| CryptoError::SignatureVerificationError("Failed to create signature from bytes".to_string()))?;
+            .ok_or_else(|| CryptoError::dilithium_error("Signature verification failed", "Invalid signature or verification failed")("Failed to create signature from bytes".to_string()))?;
         
         match sig.verify(message, &sig_obj, &pk) {
             Ok(_) => Ok(true),
@@ -417,7 +417,7 @@ impl DilithiumKeyPair {
         let dilithium = Sig::new(alg).map_err(|e| CryptoError::OqsError(e.to_string()))?;
         
         let (public_key, secret_key) = dilithium.keypair()
-            .map_err(|e| CryptoError::KeyGenerationError(e.to_string()))?;
+            .map_err(|e| CryptoError::kyber_error("Key generation failed", "Failed to generate Kyber key pair")(e.to_string()))?;
             
         Ok(Self {
             public_key: public_key.into_vec(),
@@ -441,10 +441,10 @@ impl DilithiumKeyPair {
         
         // Create a secret key from bytes using the Sig instance
         let sk = dilithium.secret_key_from_bytes(&self.secret_key)
-            .ok_or_else(|| CryptoError::SignatureGenerationError("Failed to create secret key from bytes".to_string()))?;
+            .ok_or_else(|| CryptoError::dilithium_error("Signature generation failed", "Failed to generate digital signature")("Failed to create secret key from bytes".to_string()))?;
         
         let signature = dilithium.sign(message, &sk)
-            .map_err(|e| CryptoError::SignatureGenerationError(e.to_string()))?;
+            .map_err(|e| CryptoError::dilithium_error("Signature generation failed", "Failed to generate digital signature")(e.to_string()))?;
         
         Ok(signature.into_vec())
     }
@@ -465,11 +465,11 @@ impl DilithiumKeyPair {
         
         // Create a public key from bytes using the Sig instance
         let pk = dilithium.public_key_from_bytes(&self.public_key)
-            .ok_or_else(|| CryptoError::SignatureVerificationError("Failed to create public key from bytes".to_string()))?;
+            .ok_or_else(|| CryptoError::dilithium_error("Signature verification failed", "Invalid signature or verification failed")("Failed to create public key from bytes".to_string()))?;
         
         // Create a signature from bytes using the Sig instance
         let sig = dilithium.signature_from_bytes(signature)
-            .ok_or_else(|| CryptoError::SignatureVerificationError("Failed to create signature from bytes".to_string()))?;
+            .ok_or_else(|| CryptoError::dilithium_error("Signature verification failed", "Invalid signature or verification failed")("Failed to create signature from bytes".to_string()))?;
         
         match dilithium.verify(message, &sig, &pk) {
             Ok(_) => Ok(true),
@@ -511,8 +511,8 @@ impl DilithiumKeyPair {
     /// # Returns
     ///
     /// The deserialized key pair or an error
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, CryptoError> {
-        bincode::deserialize(bytes)
+    pub fn from_bytes(data: &[u8]) -> Result<Self, CryptoError> {
+        bincode::deserialize(data)
             .map_err(|e| CryptoError::SerializationError(e.to_string()))
     }
     
@@ -531,22 +531,17 @@ impl DilithiumKeyPair {
     /// # Returns
     ///
     /// Ok(true) if the signature is valid, Ok(false) if invalid, Err(CryptoError) on error
-    pub fn verify_with_public_key(
-        algorithm: DilithiumVariant,
-        public_key: &[u8],
-        message: &[u8],
-        signature: &[u8],
-    ) -> Result<bool, CryptoError> {
+    pub fn verify_with_public_key(algorithm: DilithiumVariant, public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<bool, CryptoError> {
         let alg = algorithm.oqs_algorithm();
         let dilithium = Sig::new(alg).map_err(|e| CryptoError::OqsError(e.to_string()))?;
         
         // Create a public key from bytes using the Sig instance
         let pk = dilithium.public_key_from_bytes(public_key)
-            .ok_or_else(|| CryptoError::SignatureVerificationError("Failed to create public key from bytes".to_string()))?;
+            .ok_or_else(|| CryptoError::dilithium_error("Signature verification failed", "Invalid signature or verification failed")("Failed to create public key from bytes".to_string()))?;
         
         // Create a signature from bytes using the Sig instance
         let sig = dilithium.signature_from_bytes(signature)
-            .ok_or_else(|| CryptoError::SignatureVerificationError("Failed to create signature from bytes".to_string()))?;
+            .ok_or_else(|| CryptoError::dilithium_error("Signature verification failed", "Invalid signature or verification failed")("Failed to create signature from bytes".to_string()))?;
         
         match dilithium.verify(message, &sig, &pk) {
             Ok(_) => Ok(true),
@@ -572,10 +567,10 @@ impl DilithiumPublicKey {
         
         // Create OQS objects from bytes using the Sig instance
         let pk = dilithium.public_key_from_bytes(&self.public_key)
-            .ok_or_else(|| CryptoError::SignatureVerificationError("Failed to create public key from bytes".to_string()))?;
+            .ok_or_else(|| CryptoError::dilithium_error("Signature verification failed", "Invalid signature or verification failed")("Failed to create public key from bytes".to_string()))?;
         
         let sig = dilithium.signature_from_bytes(signature)
-            .ok_or_else(|| CryptoError::SignatureVerificationError("Failed to create signature from bytes".to_string()))?;
+            .ok_or_else(|| CryptoError::dilithium_error("Signature verification failed", "Invalid signature or verification failed")("Failed to create signature from bytes".to_string()))?;
         
         match dilithium.verify(message, &sig, &pk) {
             Ok(_) => Ok(true),
@@ -602,8 +597,8 @@ impl DilithiumPublicKey {
     /// # Returns
     ///
     /// The deserialized public key or an error
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, CryptoError> {
-        bincode::deserialize(bytes)
+    pub fn from_bytes(data: &[u8]) -> Result<Self, CryptoError> {
+        bincode::deserialize(data)
             .map_err(|e| CryptoError::SerializationError(e.to_string()))
     }
     

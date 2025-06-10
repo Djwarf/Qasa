@@ -1,0 +1,290 @@
+name: QaSa Quantum-Safe Cryptography CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # Basic compilation and unit tests
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust: [stable, beta, nightly]
+        
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ matrix.rust }}
+        components: rustfmt, clippy
+        
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          cmake \
+          ninja-build \
+          libssl-dev \
+          pkg-config
+          
+    - name: Install liboqs
+      run: |
+        git clone --depth 1 https://github.com/open-quantum-safe/liboqs.git
+        cd liboqs
+        mkdir build && cd build
+        cmake -GNinja -DCMAKE_INSTALL_PREFIX=/usr/local ..
+        ninja
+        sudo ninja install
+        sudo ldconfig
+        
+    - name: Cache cargo registry
+      uses: actions/cache@v3
+      with:
+        path: ~/.cargo/registry
+        key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+        
+    - name: Cache cargo index
+      uses: actions/cache@v3
+      with:
+        path: ~/.cargo/git
+        key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+        
+    - name: Cache cargo build
+      uses: actions/cache@v3
+      with:
+        path: target
+        key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+        
+    - name: Check formatting
+      run: cargo fmt --all -- --check
+      working-directory: src/crypto
+      
+    - name: Run clippy
+      run: cargo clippy --all-features --all-targets -- -D warnings
+      working-directory: src/crypto
+      
+    - name: Build with all features
+      run: cargo build --verbose --all-features
+      working-directory: src/crypto
+      
+    - name: Run unit tests
+      run: cargo test --verbose --all-features
+      working-directory: src/crypto
+      
+    - name: Run integration tests
+      run: cargo test --verbose --all-features --test '*'
+      working-directory: src/crypto
+
+  # Constant-time verification tests
+  constant-time-verification:
+    runs-on: ubuntu-latest
+    needs: test
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust nightly
+      uses: dtolnay/rust-toolchain@nightly
+      with:
+        components: rustfmt, clippy
+        
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          cmake \
+          ninja-build \
+          libssl-dev \
+          pkg-config \
+          valgrind \
+          perf-tools-unstable
+          
+    - name: Install liboqs
+      run: |
+        git clone --depth 1 https://github.com/open-quantum-safe/liboqs.git
+        cd liboqs
+        mkdir build && cd build
+        cmake -GNinja -DCMAKE_INSTALL_PREFIX=/usr/local ..
+        ninja
+        sudo ninja install
+        sudo ldconfig
+        
+    - name: Run constant-time verification tests
+      run: |
+        cargo test --features constant-time-testing constant_time -- --test-threads=1
+      working-directory: src/crypto
+      env:
+        RUST_LOG: debug
+        
+    - name: Run timing analysis tests
+      run: |
+        # Run with relaxed constraints for CI environment
+        cargo test --features constant-time-testing timing_analysis -- --test-threads=1
+      working-directory: src/crypto
+      env:
+        QASA_CT_SAMPLES: 10000  # Reduced for CI
+        QASA_CT_ALPHA: 0.01     # Significance level
+        QASA_CT_WARMUP: 1000    # Warmup iterations
+        
+    - name: Run side-channel resistance tests
+      run: |
+        cargo test --features security-audit side_channel -- --test-threads=1
+      working-directory: src/crypto
+      
+    - name: Generate constant-time test report
+      run: |
+        cargo test --features constant-time-testing,security-audit -- --nocapture > ct_report.txt 2>&1 || true
+        echo "## Constant-Time Verification Report" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        tail -50 ct_report.txt >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+      working-directory: src/crypto
+
+  # Security analysis
+  security-analysis:
+    runs-on: ubuntu-latest
+    needs: test
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust stable
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt, clippy
+        
+    - name: Install cargo-audit
+      run: cargo install cargo-audit
+      
+    - name: Install cargo-deny
+      run: cargo install cargo-deny
+      
+    - name: Run security audit
+      run: cargo audit
+      working-directory: src/crypto
+      
+    - name: Run license check
+      run: cargo deny check licenses
+      working-directory: src/crypto
+      
+    - name: Run dependency vulnerability scan
+      run: cargo deny check advisories
+      working-directory: src/crypto
+
+  # Performance benchmarks  
+  benchmarks:
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust stable
+      uses: dtolnay/rust-toolchain@stable
+      
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          cmake \
+          ninja-build \
+          libssl-dev \
+          pkg-config
+          
+    - name: Install liboqs
+      run: |
+        git clone --depth 1 https://github.com/open-quantum-safe/liboqs.git
+        cd liboqs
+        mkdir build && cd build
+        cmake -GNinja -DCMAKE_INSTALL_PREFIX=/usr/local ..
+        ninja
+        sudo ninja install
+        sudo ldconfig
+        
+    - name: Install cargo-criterion
+      run: cargo install cargo-criterion
+      
+    - name: Run benchmarks
+      run: cargo criterion --all-features
+      working-directory: src/crypto
+      
+    - name: Store benchmark results
+      uses: benchmark-action/github-action-benchmark@v1
+      with:
+        tool: 'cargo'
+        output-file-path: src/crypto/target/criterion/reports/benchmark.json
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        auto-push: true
+
+  # Cross-platform testing
+  cross-platform:
+    runs-on: ${{ matrix.os }}
+    needs: test
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      
+    - name: Install system dependencies (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential cmake ninja-build libssl-dev pkg-config
+        
+    - name: Install system dependencies (macOS)
+      if: matrix.os == 'macos-latest' 
+      run: |
+        brew update
+        brew install cmake ninja openssl pkg-config
+        
+    - name: Install system dependencies (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        choco install cmake ninja
+        
+    - name: Build and test
+      run: cargo test --verbose --all-features
+      working-directory: src/crypto
+
+  # Documentation build
+  docs:
+    runs-on: ubuntu-latest
+    needs: test
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust stable
+      uses: dtolnay/rust-toolchain@stable
+      
+    - name: Build documentation
+      run: cargo doc --all-features --no-deps
+      working-directory: src/crypto
+      env:
+        RUSTDOCFLAGS: "-D warnings"
+        
+    - name: Deploy documentation
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: src/crypto/target/doc
+        destination_dir: docs/api 

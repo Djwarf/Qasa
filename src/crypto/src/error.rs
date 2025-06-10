@@ -298,7 +298,7 @@ impl CryptoError {
                 details.insert("cause".to_string(), cause.clone());
                 details.extend(context.clone());
             },
-            CryptoError::KeyManagementError { operation, cause, context, .. } => {
+            CryptoError::key_management_error("Key management error", "General key management failure", "unknown") => {
                 details.insert("operation".to_string(), operation.clone());
                 details.insert("cause".to_string(), cause.clone());
                 details.extend(context.clone());
@@ -379,7 +379,7 @@ impl CryptoError {
             CryptoError::KyberError { .. } => "KyberError",
             CryptoError::DilithiumError { .. } => "DilithiumError",
             CryptoError::AesError { .. } => "AesError",
-            CryptoError::KeyManagementError { .. } => "KeyManagementError",
+            CryptoError::key_management_error("Key management error", "General key management failure", "unknown") => "KeyManagementError",
             CryptoError::SecurityPolicyViolation { .. } => "SecurityPolicyViolation",
             CryptoError::MemoryError { .. } => "MemoryError",
             CryptoError::SerializationError { .. } => "SerializationError",
@@ -444,12 +444,15 @@ impl CryptoError {
         }
     }
     
-    pub fn key_management_error(operation: &str, cause: &str, error_code: u32) -> Self {
+    pub fn key_management_error(operation: &str, cause: &str, key_type: &str) -> Self {
+        let mut context = HashMap::new();
+        context.insert("key_type".to_string(), key_type.to_string());
+        
         CryptoError::KeyManagementError {
             operation: operation.to_string(),
             cause: cause.to_string(),
-            error_code,
-            context: HashMap::new(),
+            error_code: error_codes::KEY_STORAGE_FAILED,
+            context,
         }
     }
     

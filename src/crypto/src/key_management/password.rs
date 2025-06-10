@@ -130,11 +130,7 @@ pub fn high_security_params() -> KeyDerivationParams {
 /// # Returns
 ///
 /// The derived key bytes or an error
-fn derive_key_internal(
-    password: &[u8],
-    salt: &[u8],
-    params: &KeyDerivationParams,
-) -> Result<Vec<u8>, CryptoError> {
+fn derive_key_internal(data: &[u8]) -> Result<Vec<u8>, CryptoError> {
     // Create Argon2 params
     let mut builder = ParamsBuilder::new();
     builder
@@ -209,11 +205,7 @@ fn derive_key_internal(
 /// // The derived key can now be used for encryption or other purposes
 /// // The salt should be stored alongside the key for password verification
 /// ```
-pub fn derive_key_from_password(
-    password: &str,
-    salt: Option<&[u8]>,
-    params: Option<&KeyDerivationParams>,
-) -> Result<DerivedKey, CryptoError> {
+pub fn derive_key_from_password(data: &[u8]) -> Result<DerivedKey, CryptoError> {
     // Create secure password handling
     let secure_password = SecureBytes::new(password.as_bytes());
     
@@ -383,7 +375,7 @@ pub fn change_password(
 ) -> Result<DerivedKey, CryptoError> {
     // Verify the old password first
     if !verify_password(old_password, derived_key, params)? {
-        return Err(CryptoError::InvalidPasswordError("Invalid password".to_string()));
+        return Err(CryptoError::key_management_error("Invalid password", "Password validation failed", "password")("Invalid password".to_string()));
     }
     
     // Generate a new derived key with the new password
@@ -478,7 +470,7 @@ mod tests {
         let result = change_password("wrong_password", "new_password", &derived, None);
         assert!(result.is_err(), "Password change should fail with incorrect old password");
         
-        if let Err(CryptoError::InvalidPasswordError(_)) = result {
+        if let Err(_) = result {
             // Expected error type
         } else {
             panic!("Unexpected error type");

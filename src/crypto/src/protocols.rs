@@ -250,7 +250,7 @@ impl QuantumSafeTLS {
     }
     
     /// Encrypt application data
-    pub fn encrypt_data(&self, session: &Session, data: &[u8]) -> CryptoResult<Vec<u8>> {
+    pub fn encrypt_data(data: &[u8]) -> CryptoResult<Vec<u8>> {
         if self.state != TlsState::ApplicationData {
             return Err(CryptoError::ProtocolError {
                 protocol: "TLS".to_string(),
@@ -266,7 +266,7 @@ impl QuantumSafeTLS {
     }
     
     /// Decrypt application data
-    pub fn decrypt_data(&self, session: &Session, ciphertext: &[u8]) -> CryptoResult<Vec<u8>> {
+    pub fn decrypt_data(data: &[u8]) -> CryptoResult<Vec<u8>> {
         if self.state != TlsState::ApplicationData {
             return Err(CryptoError::ProtocolError {
                 protocol: "TLS".to_string(),
@@ -312,7 +312,7 @@ impl QuantumSafeTLS {
         Ok(public_key)
     }
     
-    fn sign_handshake_data(&self, client_hello: &ClientHello, certificate: &[u8]) -> CryptoResult<Vec<u8>> {
+    fn sign_handshake_data(data: &[u8]) -> CryptoResult<Vec<u8>> {
         let mut data_to_sign = Vec::new();
         data_to_sign.extend_from_slice(&bincode::serialize(client_hello).map_err(|e| {
             CryptoError::SerializationError(e.to_string())
@@ -432,7 +432,7 @@ impl SecureMessaging {
     }
     
     /// Send an encrypted message to a recipient
-    pub fn send_message(&mut self, recipient: &ContactId, message: &[u8]) -> CryptoResult<EncryptedMessage> {
+    pub fn send_message(data: &[u8]) -> CryptoResult<EncryptedMessage> {
         // Get or create ephemeral key for this contact
         let ephemeral_key = self.get_or_create_ephemeral_key(recipient)?;
         
@@ -569,12 +569,11 @@ impl SecureMessaging {
     
     fn get_ephemeral_key(&self, contact: &ContactId) -> CryptoResult<&EphemeralKeyData> {
         self.ephemeral_keys.get(contact)
-            .ok_or_else(|| CryptoError::KeyManagementError {
-                operation: "get_ephemeral_key".to_string(),
-                cause: format!("No ephemeral key found for contact: {}", contact),
-                error_code: error_codes::KEY_RETRIEVAL_FAILED,
-                context: HashMap::new(),
-            })
+            .ok_or_else(|| CryptoError::key_management_error(
+                "Key retrieval failed", 
+                &format!("No ephemeral key found for contact: {}", contact),
+                "ephemeral"
+            ))
     }
     
     fn update_ephemeral_key_usage(&mut self, contact: &ContactId) -> CryptoResult<()> {

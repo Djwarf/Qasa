@@ -252,7 +252,7 @@ impl KyberKeyPair {
         let kyber = Kem::new(alg).map_err(|e| CryptoError::OqsError(e.to_string()))?;
         
         let (public_key, secret_key) = kyber.keypair()
-            .map_err(|e| CryptoError::KeyGenerationError(e.to_string()))?;
+            .map_err(|e| CryptoError::kyber_error("Key generation failed", "Failed to generate Kyber key pair")(e.to_string()))?;
             
         Ok(Self {
             public_key: public_key.into_vec(),
@@ -303,10 +303,10 @@ impl KyberKeyPair {
         
         // Create a public key from bytes using the Kem instance
         let pk = kyber.public_key_from_bytes(&self.public_key)
-            .ok_or_else(|| CryptoError::EncapsulationError("Failed to create public key from bytes".to_string()))?;
+            .ok_or_else(|| CryptoError::kyber_error("Encapsulation failed", "Failed to encapsulate shared secret")("Failed to create public key from bytes".to_string()))?;
         
         let (ciphertext, shared_secret) = kyber.encapsulate(&pk)
-            .map_err(|e| CryptoError::EncapsulationError(e.to_string()))?;
+            .map_err(|e| CryptoError::kyber_error("Encapsulation failed", "Failed to encapsulate shared secret")(e.to_string()))?;
             
         Ok((ciphertext.into_vec(), shared_secret.into_vec()))
     }
@@ -354,14 +354,14 @@ impl KyberKeyPair {
         
         // Create a secret key from bytes using the Kem instance
         let sk = kyber.secret_key_from_bytes(&self.secret_key)
-            .ok_or_else(|| CryptoError::DecapsulationError("Failed to create secret key from bytes".to_string()))?;
+            .ok_or_else(|| CryptoError::kyber_error("Decapsulation failed", "Failed to decapsulate shared secret")("Failed to create secret key from bytes".to_string()))?;
         
         // Create a ciphertext from bytes using the Kem instance
         let ct = kyber.ciphertext_from_bytes(ciphertext)
-            .ok_or_else(|| CryptoError::DecapsulationError("Failed to create ciphertext from bytes".to_string()))?;
+            .ok_or_else(|| CryptoError::kyber_error("Decapsulation failed", "Failed to decapsulate shared secret")("Failed to create ciphertext from bytes".to_string()))?;
         
         let shared_secret = kyber.decapsulate(&sk, &ct)
-            .map_err(|e| CryptoError::DecapsulationError(e.to_string()))?;
+            .map_err(|e| CryptoError::kyber_error("Decapsulation failed", "Failed to decapsulate shared secret")(e.to_string()))?;
         
         Ok(shared_secret.into_vec())
     }
@@ -425,25 +425,25 @@ impl KyberKeyPair {
         
         // Create a public key from bytes using the Kem instance
         let pk = kyber.public_key_from_bytes(&self.public_key)
-            .ok_or_else(|| CryptoError::KeyVerificationError("Failed to create public key from bytes".to_string()))?;
+            .ok_or_else(|| CryptoError::kyber_error("Key verification failed", "Invalid key format or corrupted key")("Failed to create public key from bytes".to_string()))?;
         
         // Create a secret key from bytes using the Kem instance
         let sk = kyber.secret_key_from_bytes(&self.secret_key)
-            .ok_or_else(|| CryptoError::KeyVerificationError("Failed to create secret key from bytes".to_string()))?;
+            .ok_or_else(|| CryptoError::kyber_error("Key verification failed", "Invalid key format or corrupted key")("Failed to create secret key from bytes".to_string()))?;
         
         // Perform a test encapsulation
         let (ct, ss1) = kyber.encapsulate(&pk)
-            .map_err(|e| CryptoError::EncapsulationError(e.to_string()))?;
+            .map_err(|e| CryptoError::kyber_error("Encapsulation failed", "Failed to encapsulate shared secret")(e.to_string()))?;
         
         // Perform a test decapsulation
         let ss2 = kyber.decapsulate(&sk, &ct)
-            .map_err(|e| CryptoError::DecapsulationError(e.to_string()))?;
+            .map_err(|e| CryptoError::kyber_error("Decapsulation failed", "Failed to decapsulate shared secret")(e.to_string()))?;
         
         // Check if the shared secrets match
         if ss1 == ss2 {
             Ok(())
         } else {
-            Err(CryptoError::KeyVerificationError("Shared secrets do not match".to_string()))
+            Err(CryptoError::kyber_error("Key verification failed", "Invalid key format or corrupted key")("Shared secrets do not match".to_string()))
         }
     }
     
@@ -466,8 +466,8 @@ impl KyberKeyPair {
     /// # Returns
     ///
     /// The deserialized key pair or an error
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, CryptoError> {
-        bincode::deserialize(bytes)
+    pub fn from_bytes(data: &[u8]) -> Result<Self, CryptoError> {
+        bincode::deserialize(data)
             .map_err(|e| CryptoError::SerializationError(e.to_string()))
     }
 }
@@ -487,10 +487,10 @@ impl KyberPublicKey {
         
         // Create a public key from the stored bytes using the Kem instance
         let pk = kyber.public_key_from_bytes(&self.public_key)
-            .ok_or_else(|| CryptoError::EncapsulationError("Failed to create public key from bytes".to_string()))?;
+            .ok_or_else(|| CryptoError::kyber_error("Encapsulation failed", "Failed to encapsulate shared secret")("Failed to create public key from bytes".to_string()))?;
         
         let (ciphertext, shared_secret) = kyber.encapsulate(&pk)
-            .map_err(|e| CryptoError::EncapsulationError(e.to_string()))?;
+            .map_err(|e| CryptoError::kyber_error("Encapsulation failed", "Failed to encapsulate shared secret")(e.to_string()))?;
             
         Ok((ciphertext.into_vec(), shared_secret.into_vec()))
     }
@@ -514,8 +514,8 @@ impl KyberPublicKey {
     /// # Returns
     ///
     /// The deserialized public key or an error
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, CryptoError> {
-        bincode::deserialize(bytes)
+    pub fn from_bytes(data: &[u8]) -> Result<Self, CryptoError> {
+        bincode::deserialize(data)
             .map_err(|e| CryptoError::SerializationError(e.to_string()))
     }
     
