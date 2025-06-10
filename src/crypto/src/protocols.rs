@@ -38,6 +38,18 @@ pub struct QuantumSafeTLS {
     state: TlsState,
 }
 
+impl std::fmt::Debug for QuantumSafeTLS {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("QuantumSafeTLS")
+            .field("session_keys_count", &self.session_keys.len())
+            .field("config", &self.config)
+            .field("state", &self.state)
+            .field("kyber_algorithm", &self.kyber_keypair.algorithm)
+            .field("dilithium_algorithm", &self.dilithium_keypair.algorithm)
+            .finish_non_exhaustive()
+    }
+}
+
 /// TLS configuration parameters
 #[derive(Debug, Clone)]
 pub struct TlsConfig {
@@ -371,6 +383,17 @@ pub struct SecureMessaging {
     
     /// Configuration
     config: MessagingConfig,
+}
+
+impl std::fmt::Debug for SecureMessaging {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SecureMessaging")
+            .field("ephemeral_keys_count", &self.ephemeral_keys.len())
+            .field("message_history_contacts", &self.message_history.len())
+            .field("config", &self.config)
+            .field("identity_algorithm", &self.identity_keypair.algorithm)
+            .finish_non_exhaustive()
+    }
 }
 
 /// Configuration for secure messaging
