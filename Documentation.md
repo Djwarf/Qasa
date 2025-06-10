@@ -58,15 +58,17 @@ QaSa (Quantum-Safe) is a post-quantum cryptography implementation that provides 
    cargo bench
    ```
 
-### Running the Application
+### Running Examples
 
-Display crypto module information:
+To explore the cryptographic functionality, run the provided examples:
 
 ```bash
-cd src && go run main.go
+cd src/crypto
+cargo run --example secure_communication
+cargo run --example quantum_signatures
 ```
 
-This will display information about the available cryptographic algorithms and documentation locations.
+This will demonstrate the available cryptographic algorithms and their usage.
 
 ### Key Management
 
