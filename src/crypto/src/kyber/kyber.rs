@@ -4,6 +4,7 @@ use std::fmt;
 use zeroize::Zeroize;
 
 use crate::error::CryptoError;
+use crate::error::error_codes;
 use crate::utils;
 
 /// CRYSTALS-Kyber key pair for key encapsulation mechanisms (KEM)

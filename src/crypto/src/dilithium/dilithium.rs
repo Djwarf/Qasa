@@ -4,6 +4,7 @@ use std::fmt;
 use zeroize::Zeroize;
 
 use crate::error::CryptoError;
+use crate::error::error_codes;
 use crate::utils;
 
 /// CRYSTALS-Dilithium key pair for digital signatures

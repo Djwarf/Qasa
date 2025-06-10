@@ -298,7 +298,7 @@ impl CryptoError {
                 details.insert("cause".to_string(), cause.clone());
                 details.extend(context.clone());
             },
-            CryptoError::key_management_error("Key management error", "General key management failure", "unknown") => {
+            CryptoError::KeyManagementError { operation, cause, context, .. } => {
                 details.insert("operation".to_string(), operation.clone());
                 details.insert("cause".to_string(), cause.clone());
                 details.extend(context.clone());
@@ -379,7 +379,7 @@ impl CryptoError {
             CryptoError::KyberError { .. } => "KyberError",
             CryptoError::DilithiumError { .. } => "DilithiumError",
             CryptoError::AesError { .. } => "AesError",
-            CryptoError::key_management_error("Key management error", "General key management failure", "unknown") => "KeyManagementError",
+            CryptoError::KeyManagementError { .. } => "KeyManagementError",
             CryptoError::SecurityPolicyViolation { .. } => "SecurityPolicyViolation",
             CryptoError::MemoryError { .. } => "MemoryError",
             CryptoError::SerializationError { .. } => "SerializationError",

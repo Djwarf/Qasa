@@ -284,7 +284,7 @@ fn count_timing_clusters(sorted_measurements: &[u64]) -> usize {
 }
 
 /// Implement ConstantTime for basic types
-impl ConstantTime for [u8] {
+impl ConstantTime for Vec<u8> {
     fn ct_eq(&self, other: &Self) -> Choice {
         if self.len() != other.len() {
             return Choice::from(0);
@@ -298,7 +298,7 @@ impl ConstantTime for [u8] {
     }
     
     fn ct_select(a: &Self, b: &Self, choice: Choice) -> Self {
-        assert_eq!(a.len(), b.len(), "Slices must have equal length for constant-time selection");
+        assert_eq!(a.len(), b.len(), "Vectors must have equal length for constant-time selection");
         
         a.iter()
             .zip(b.iter())
@@ -307,15 +307,7 @@ impl ConstantTime for [u8] {
     }
 }
 
-impl ConstantTime for Vec<u8> {
-    fn ct_eq(&self, other: &Self) -> Choice {
-        ConstantTime::ct_eq(self.as_slice(), other.as_slice())
-    }
-    
-    fn ct_select(a: &Self, b: &Self, choice: Choice) -> Self {
-        if choice.unwrap_u8() == 1 { a.clone() } else { b.clone() }
-    }
-}
+
 
 /// Macro for easy constant-time testing
 #[macro_export]

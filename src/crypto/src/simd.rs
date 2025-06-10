@@ -131,7 +131,7 @@ pub mod polynomial {
                 #[cfg(not(target_arch = "x86_64"))]
                 SimdAlgorithm::AVX2 => {
                     return Err(CryptoError::invalid_parameter(
-                        "AVX operations",
+                        "AVX operations", "x86_64",
                         std::env::consts::ARCH
                     ));
                 },
@@ -140,6 +140,7 @@ pub mod polynomial {
                 SimdAlgorithm::NEON => {
                     return Err(CryptoError::invalid_parameter(
                         "ARM NEON operations",
+                        "aarch64",
                         std::env::consts::ARCH
                     ));
                 },
@@ -206,7 +207,7 @@ pub mod polynomial {
                 #[cfg(not(target_arch = "x86_64"))]
                 SimdAlgorithm::AVX2 => {
                     Err(CryptoError::invalid_parameter(
-                        "AVX operations",
+                        "AVX operations", "x86_64",
                         std::env::consts::ARCH
                     ))
                 },
@@ -225,7 +226,7 @@ pub mod polynomial {
                 #[cfg(not(target_arch = "aarch64"))]
                 SimdAlgorithm::NEON => {
                     Err(CryptoError::invalid_parameter(
-                        "ARM NEON operations",
+                        "ARM NEON operations", "aarch64",
                         std::env::consts::ARCH
                     ))
                 },
@@ -271,7 +272,7 @@ pub mod polynomial {
                 #[cfg(not(target_arch = "x86_64"))]
                 SimdAlgorithm::AVX2 => {
                     Err(CryptoError::invalid_parameter(
-                        "AVX operations",
+                        "AVX operations", "x86_64",
                         std::env::consts::ARCH
                     ))
                 },
@@ -279,7 +280,7 @@ pub mod polynomial {
                 #[cfg(not(target_arch = "aarch64"))]
                 SimdAlgorithm::NEON => {
                     Err(CryptoError::invalid_parameter(
-                        "ARM NEON operations",
+                        "ARM NEON operations", "aarch64",
                         std::env::consts::ARCH
                     ))
                 },

@@ -399,8 +399,7 @@ pub fn delete_key(key_id: &str, key_type: &str, path: Option<&str>) -> Result<()
     let extension = match key_type.to_lowercase().as_str() {
         "kyber" => "kyber.key",
         "dilithium" => "dilithium.key",
-        _ => return Err(CryptoError::key_management_error("Operation failed", &format!("Invalid key type: {}", key_type), "unknown")
-        )),
+        _ => return Err(CryptoError::key_management_error("Operation failed", &format!("Invalid key type: {}", key_type), "unknown")),
     };
     
     let file_path = key_directory.join(format!("{}.{}", key_id, extension));

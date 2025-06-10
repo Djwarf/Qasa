@@ -256,7 +256,7 @@ impl From<Vec<u8>> for SecureBytes {
 
 impl From<&[u8]> for SecureBytes {
     fn from(data: &[u8]) -> Self {
-        Self::new(bytes)
+        Self::new(data)
     }
 }
 
