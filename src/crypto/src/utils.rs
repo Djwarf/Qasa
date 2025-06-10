@@ -158,7 +158,7 @@ pub fn secure_compare(a: &str, b: &str) -> bool {
 
 /// Efficiently concatenate multiple byte slices into a single vector
 ///
-/// This function concatenates multiple byte slices into a single Vec<u8>,
+/// This function concatenates multiple byte slices into a single `Vec<u8>`,
 /// pre-allocating the exact amount of memory needed to avoid reallocations.
 ///
 /// # Arguments
@@ -167,7 +167,7 @@ pub fn secure_compare(a: &str, b: &str) -> bool {
 ///
 /// # Returns
 ///
-/// A Vec<u8> containing all input slices concatenated in order
+/// A `Vec<u8>` containing all input slices concatenated in order
 pub fn concat_bytes(slices: &[&[u8]]) -> Vec<u8> {
     let total_len = slices.iter().map(|s| s.len()).sum();
     let mut result = Vec::with_capacity(total_len);

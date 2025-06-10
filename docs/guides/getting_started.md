@@ -133,7 +133,7 @@ The `examples/` directory contains complete usage examples:
 ```bash
 cd src/crypto
 cargo run --example quantum_signatures
-cargo run --example quantum_safe_chat
+cargo run --example secure_communication
 ```
 
 ### Optimized Operations for Constrained Environments

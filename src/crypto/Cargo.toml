@@ -60,7 +60,7 @@ name = "crypto_benchmarks"
 harness = false
 
 [[example]]
-name = "quantum_safe_chat"
+name = "secure_communication"
 doc-scrape-examples = true
 
 [[example]]

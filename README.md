@@ -136,9 +136,9 @@ For detailed documentation, see:
 
 The `src/crypto/examples/` directory contains example usage:
 
-- `quantum_safe_chat.rs`: End-to-end example of secure communication protocol
 - `quantum_signatures.rs`: Example of using Dilithium for digital signatures
 - `optimized_signatures.rs`: Example of using optimised Dilithium implementations
+- `secure_communication.rs`: End-to-end example of quantum-safe cryptographic operations
 
 ## Security Considerations
 

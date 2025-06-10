@@ -4,8 +4,8 @@ use qasa_crypto::{
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("QaSa Quantum-Safe Chat Demonstration");
-    println!("====================================");
+    println!("QaSa Quantum-Safe Cryptography Demonstration");
+    println!("===========================================");
     println!();
 
     // Step 1: Generate Mary's and Elena's Kyber key pairs
@@ -52,7 +52,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  Original message: \"{}\"", message);
 
     // Use the shared secret to encrypt the message with AES-GCM
-    let associated_data = b"QaSa-Chat-App-v1"; // Some additional authenticated data
+    let associated_data = b"QaSa-Crypto-v1"; // Some additional authenticated data
     let (encrypted_message, nonce) = aes::encrypt(
         message.as_bytes(),
         &mary_shared_secret,
@@ -126,7 +126,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  5. Use perfect forward secrecy for long conversations");
     println!();
 
-    println!("Quantum-safe chat demonstration completed successfully!");
+    println!("Quantum-safe cryptography demonstration completed successfully!");
 
     Ok(())
 }

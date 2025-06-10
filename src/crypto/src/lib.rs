@@ -2,7 +2,7 @@
  * QaSa Cryptography Module
  *
  * This module implements post-quantum cryptographic primitives for the QaSa
- * secure chat application, with a focus on providing quantum-resistant security.
+ * quantum-safe cryptographic operations, with a focus on providing quantum-resistant security.
  * 
  * The main cryptographic algorithms used are:
  * 

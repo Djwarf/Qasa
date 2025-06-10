@@ -102,8 +102,8 @@ assert_eq!(plaintext, &decrypted[..]);
 The crate includes several examples demonstrating different use cases:
 
 ```bash
-# Run the quantum-safe chat example
-cargo run --example quantum_safe_chat
+# Run the secure communication example
+cargo run --example secure_communication
 
 # Run the digital signatures example  
 cargo run --example quantum_signatures

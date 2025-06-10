@@ -52,7 +52,7 @@ The cryptography module provides the following security properties:
 ### Threat Actors
 
 1. **Network Adversaries** (High capability)
-   - Can intercept, modify, or inject messages in the network
+   - Can intercept, modify, or inject data in the network
    - Mitigated by authenticated encryption and signatures
 
 2. **Local System Adversaries** (Medium capability)
@@ -100,7 +100,7 @@ The cryptography module provides the following security properties:
 ### Medium Priority
 
 1. Enhance key rotation with better error handling and recovery mechanisms.
-2. Implement perfect forward secrecy for the messaging protocol.
+2. Implement perfect forward secrecy for the cryptographic protocols.
 3. Add support for hardware security modules for key storage.
 
 ### Low Priority
@@ -129,14 +129,14 @@ The implementation supports compliance with:
 
 ## Conclusion
 
-The QaSa cryptography module implements a strong foundation for post-quantum secure communications. The use of NIST-standardized post-quantum algorithms, combined with proper authenticated encryption and key management, provides a good security posture.
+The QaSa cryptography module implements a strong foundation for post-quantum cryptographic operations. The use of NIST-standardized post-quantum algorithms, combined with proper authenticated encryption and key management, provides a good security posture.
 
 Key improvements needed:
 - Secure memory handling throughout the codebase
 - Enhanced key distribution and authentication
 - Better error handling and recovery mechanisms
 
-With these improvements, the module will be well-positioned for use in secure communications applications, with protection against both current and future cryptographic threats.
+With these improvements, the module will be well-positioned for use in cryptographic applications, with protection against both current and future cryptographic threats.
 
 ## Review Methodology
 
