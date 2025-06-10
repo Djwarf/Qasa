@@ -1,348 +1,478 @@
-# QaSa Deployment Guide
+# QaSa Cryptography Module - Build and Deployment Guide
 
-This guide covers various deployment options for the QaSa secure chat application, from local development to production cloud deployments.
+This document provides comprehensive instructions for building, testing, and deploying the QaSa post-quantum cryptography module.
 
-## Quick Start
+## Prerequisites
 
-The simplest way to deploy QaSa is using the provided deployment script:
+### System Requirements
+
+- **Operating System**: Linux, macOS, or Windows
+- **Architecture**: x86_64, ARM64 (depending on target platform)
+- **Memory**: Minimum 4GB RAM for building
+- **Disk Space**: Minimum 2GB free space
+
+### Development Tools
+
+- **Rust**: Version 1.60 or later
+  ```bash
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+  source ~/.cargo/env
+  ```
+
+- **C Compiler**: GCC or Clang
+  ```bash
+  # On Ubuntu/Debian
+  sudo apt-get install build-essential
+  
+  # On macOS
+  xcode-select --install
+  
+  # On CentOS/RHEL
+  sudo yum groupinstall "Development Tools"
+  ```
+
+- **Git**: For version control
+  ```bash
+  # On Ubuntu/Debian
+  sudo apt-get install git
+  
+  # On macOS
+  brew install git
+  ```
+
+## Building the Crypto Module
+
+### Quick Build
+
+Navigate to the crypto module directory and build:
 
 ```bash
-# Development deployment with Docker
-./deploy.sh
-
-# Production deployment
-./deploy.sh --mode production
-
-# Native deployment without Docker
-./deploy.sh --no-docker
-
-# Build only (no deployment)
-./deploy.sh --build-only
+cd src/crypto
+cargo build --release
 ```
 
-## Deployment Options
+### Development Build
 
-### 1. Docker Deployment (Recommended)
+For development with debug symbols:
 
-#### Prerequisites
-- Docker (20.10+)
-- Docker Compose (2.0+)
-
-#### Development Deployment
 ```bash
-# Clone and navigate to the repository
-git clone <repository-url>
-cd qasa
-
-# Quick deployment
-./deploy.sh
-
-# Or manually with docker-compose
-docker-compose up -d qasa-web
+cd src/crypto
+cargo build
 ```
 
-Access the application at `http://localhost:8080`
+### Build Configuration
 
-#### Production Deployment
+The crypto module supports various build configurations:
+
+#### Feature Flags
+
+- `default`: Standard features including all algorithms
+- `kyber`: CRYSTALS-Kyber KEM only
+- `dilithium`: CRYSTALS-Dilithium signatures only
+- `aes`: AES-GCM symmetric encryption only
+- `optimized`: Memory and performance optimizations
+- `lean`: Minimal footprint for constrained environments
+
+Example build with specific features:
+
 ```bash
-# Deploy with nginx reverse proxy and SSL
-./deploy.sh --mode production
-
-# Or manually
-docker-compose --profile production up -d
+cargo build --release --no-default-features --features "kyber,dilithium,optimized"
 ```
 
-This will:
-- Start the QaSa application
-- Set up nginx reverse proxy with SSL termination
-- Enable HTTPS on port 443
-- Redirect HTTP traffic to HTTPS
+#### Target Platforms
 
-### 2. Native Deployment
+Build for specific platforms:
 
-#### Prerequisites
-- Go 1.22+
-- Rust 1.75+
-- CMake and build tools
-
-#### Build and Run
 ```bash
-# Build all components
-./deploy.sh --no-docker --build-only
+# For ARM64
+cargo build --release --target aarch64-unknown-linux-gnu
 
-# Run manually
-cd src/web
-./qasa-web --port 9000 --web-port 8080
+# For WebAssembly
+cargo build --release --target wasm32-unknown-unknown
+
+# For Windows
+cargo build --release --target x86_64-pc-windows-gnu
 ```
 
-#### Production Service (systemd)
+## Testing
+
+### Unit Tests
+
+Run the complete test suite:
+
 ```bash
-# Deploy as a system service
-./deploy.sh --no-docker --mode production
+cd src/crypto
+cargo test
 ```
 
-### 3. Kubernetes Deployment
+Run tests with output:
 
-#### Prerequisites
-- Kubernetes cluster (1.20+)
-- kubectl configured
-- nginx-ingress controller (optional)
-- cert-manager (for SSL certificates)
-
-#### Deploy to Kubernetes
 ```bash
-# Apply Kubernetes manifests
-kubectl apply -f src/web/k8s/
-
-# Check deployment status
-kubectl get pods -l app=qasa-web
-kubectl get svc qasa-web-service
+cargo test -- --nocapture
 ```
 
-#### Configure Ingress (Optional)
-Edit `src/web/k8s/ingress.yaml` and replace `your-domain.com` with your actual domain:
+Run specific test modules:
 
 ```bash
-# Apply ingress configuration
-kubectl apply -f src/web/k8s/ingress.yaml
+cargo test kyber::tests
+cargo test dilithium::tests
+cargo test key_management::tests
+```
+
+### Integration Tests
+
+Run integration tests:
+
+```bash
+cargo test --test integration
+```
+
+### Security Tests
+
+Run security-focused tests:
+
+```bash
+cargo test security
+cargo test constant_time
+```
+
+## Benchmarking
+
+### Performance Benchmarks
+
+Run all benchmarks:
+
+```bash
+cd src/crypto
+cargo bench
+```
+
+Run specific algorithm benchmarks:
+
+```bash
+cargo bench kyber
+cargo bench dilithium
+cargo bench aes
+```
+
+### Memory Usage Analysis
+
+Analyze memory usage with Valgrind (Linux only):
+
+```bash
+cargo build --release
+valgrind --tool=massif target/release/qasa-crypto
+```
+
+## Documentation
+
+### Generate Documentation
+
+Generate API documentation:
+
+```bash
+cd src/crypto
+cargo doc --open
+```
+
+Generate documentation with private items:
+
+```bash
+cargo doc --document-private-items --open
+```
+
+## Installation
+
+### System-wide Installation
+
+Install the crypto library system-wide:
+
+```bash
+cd src/crypto
+cargo install --path .
+```
+
+### Library Installation
+
+To use as a library dependency, add to `Cargo.toml`:
+
+```toml
+[dependencies]
+qasa-crypto = { path = "./src/crypto" }
 ```
 
 ## Configuration
 
 ### Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `QASA_WEB_PORT` | 8080 | Web interface port |
-| `QASA_NETWORK_PORT` | 9000 | P2P network port |
-| `QASA_ENABLE_MDNS` | true | Enable mDNS discovery |
-| `QASA_ENABLE_DHT` | true | Enable DHT discovery |
+Configure runtime behavior:
 
-### Docker Environment File
+```bash
+# Set log level
+export RUST_LOG=qasa_crypto=debug
 
-Create a `.env` file in the project root:
+# Set memory allocation strategy
+export QASA_MEMORY_STRATEGY=secure
 
-```env
-QASA_WEB_PORT=8080
-QASA_NETWORK_PORT=9000
-QASA_MODE=production
+# Set random number generation source
+export QASA_RNG_SOURCE=system
 ```
 
 ### Configuration Files
 
-The application uses configuration files stored in `~/.qasa/` directory:
+The crypto module supports configuration via `crypto.toml`:
 
-- `keys/` - Cryptographic keys
-- `config.yaml` - Application configuration
-- `peers.json` - Known peers database
+```toml
+[security]
+# Use secure memory allocation
+secure_memory = true
 
-## SSL/TLS Configuration
+# Enable constant-time operations
+constant_time = true
 
-### Development (Self-signed certificates)
+# Memory zeroization policy
+zeroize_on_drop = true
 
-The deployment script automatically generates self-signed certificates for development:
+[algorithms]
+# Default Kyber variant
+kyber_variant = "Kyber768"
 
-```bash
-# Certificates will be created in ssl/ directory
-./deploy.sh --mode production
-```
+# Default Dilithium variant  
+dilithium_variant = "Dilithium3"
 
-### Production (Let's Encrypt)
+# AES key size
+aes_key_size = 256
 
-For production deployments with real SSL certificates:
+[performance]
+# Enable SIMD optimizations
+simd = true
 
-1. Install cert-manager in your Kubernetes cluster:
-```bash
-kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.0/cert-manager.yaml
-```
+# Use hardware acceleration when available
+hardware_accel = true
 
-2. Create a ClusterIssuer for Let's Encrypt:
-```yaml
-apiVersion: cert-manager.io/v1
-kind: ClusterIssuer
-metadata:
-  name: letsencrypt-prod
-spec:
-  acme:
-    server: https://acme-v02.api.letsencrypt.org/directory
-    email: djwarfqasa@proton.me
-    privateKeySecretRef:
-      name: letsencrypt-prod
-    solvers:
-    - http01:
-        ingress:
-          class: nginx
-```
+[memory]
+# Memory usage mode: "standard", "optimized", "minimal"
+usage_mode = "optimized"
 
-3. Update the ingress.yaml with your domain name.
-
-## Monitoring and Health Checks
-
-### Health Check Endpoints
-
-- `GET /api/status` - Application status
-- `GET /api/peers` - Connected peers
-- `WS /ws` - WebSocket connection test
-
-### Docker Health Checks
-
-Health checks are automatically configured in docker-compose.yml:
-
-```yaml
-healthcheck:
-  test: ["CMD", "curl", "-f", "http://localhost:8080"]
-  interval: 30s
-  timeout: 10s
-  retries: 3
-```
-
-### Kubernetes Probes
-
-Liveness and readiness probes are configured in the deployment:
-
-```yaml
-livenessProbe:
-  httpGet:
-    path: /api/status
-    port: 8080
-  initialDelaySeconds: 30
-  periodSeconds: 10
-```
-
-## Scaling
-
-### Docker Compose
-
-To scale the application:
-
-```bash
-docker-compose up -d --scale qasa-web=3
-```
-
-### Kubernetes
-
-To scale the deployment:
-
-```bash
-kubectl scale deployment qasa-web --replicas=5
+# Maximum memory per operation (bytes)
+max_memory_per_op = 1048576  # 1MB
 ```
 
 ## Security Considerations
 
-### Production Checklist
+### Build Security
 
-- [ ] Use HTTPS with valid SSL certificates
-- [ ] Configure firewall rules (ports 80, 443, 9000)
-- [ ] Set up rate limiting (configured in nginx.conf)
-- [ ] Regular security updates
-- [ ] Monitor logs for suspicious activity
-- [ ] Backup cryptographic keys regularly
+- Always use release builds for production: `cargo build --release`
+- Verify checksums of dependencies: `cargo audit`
+- Use reproducible builds when possible
+- Enable stack protection and ASLR in the target environment
 
-### Network Security
+### Runtime Security
 
-- Port 8080: Web interface (should be behind reverse proxy in production)
-- Port 9000: P2P network communication (needs to be accessible for peer discovery)
-- Configure firewall to allow only necessary traffic
+- Store cryptographic keys securely using the key management system
+- Use secure memory allocation when available
+- Enable memory zeroization for sensitive data
+- Monitor for side-channel attacks in production environments
+
+### Key Management
+
+The crypto module includes secure key storage:
+
+```bash
+# Create a new key store
+mkdir -p ~/.qasa/keys
+chmod 700 ~/.qasa/keys
+
+# Generate initial keys (done automatically on first run)
+```
+
+## Deployment Scenarios
+
+### Embedded Systems
+
+For embedded or resource-constrained environments:
+
+```bash
+# Build with minimal features
+cargo build --release --no-default-features --features "lean"
+
+# Use size optimization
+export CARGO_TARGET_<TARGET>_RUSTFLAGS="-C opt-level=s"
+```
+
+### High-Performance Systems
+
+For high-performance requirements:
+
+```bash
+# Build with all optimizations
+cargo build --release --features "optimized,simd"
+
+# Use native CPU features
+export RUSTFLAGS="-C target-cpu=native"
+```
+
+### WebAssembly
+
+For web deployment:
+
+```bash
+# Install wasm-pack
+cargo install wasm-pack
+
+# Build for web
+wasm-pack build --target web --out-dir pkg
+
+# Generate TypeScript bindings
+wasm-pack build --typescript
+```
+
+## Monitoring and Maintenance
+
+### Health Checks
+
+Monitor crypto module health:
+
+```bash
+# Check algorithm functionality
+qasa-crypto --self-test
+
+# Verify key integrity
+qasa-crypto --verify-keys
+
+# Performance baseline
+qasa-crypto --benchmark
+```
+
+### Updates
+
+Keep the crypto module updated:
+
+```bash
+# Update dependencies
+cargo update
+
+# Check for security advisories
+cargo audit
+
+# Update documentation
+cargo doc --no-deps
+```
+
+### Backup Procedures
+
+**Important**: Back up cryptographic keys regularly:
+
+```bash
+# Backup key directory
+tar -czf qasa-keys-backup-$(date +%Y%m%d).tar.gz ~/.qasa/keys/
+
+# Store backup securely (encrypted external storage recommended)
+```
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Port already in use**
+1. **Build Failures**
    ```bash
-   # Check what's using the port
-   sudo netstat -tulpn | grep :8080
+   # Clean and rebuild
+   cargo clean
+   cargo build --release
+   ```
+
+2. **Missing Dependencies**
+   ```bash
+   # Install required system packages
+   sudo apt-get install pkg-config libssl-dev
+   ```
+
+3. **Test Failures**
+   ```bash
+   # Run tests with detailed output
+   cargo test -- --nocapture
+   ```
+
+4. **Performance Issues**
+   ```bash
+   # Check if release mode is being used
+   cargo build --release
    
-   # Use different port
-   ./deploy.sh --port 3000
+   # Enable CPU-specific optimizations
+   export RUSTFLAGS="-C target-cpu=native"
    ```
 
-2. **Docker build fails**
-   ```bash
-   # Check Docker logs
-   docker-compose logs qasa-web
-   
-   # Rebuild without cache
-   docker-compose build --no-cache
-   ```
+### Debug Information
 
-3. **Application not accessible**
-   ```bash
-   # Check container status
-   docker-compose ps
-   
-   # Check logs
-   docker-compose logs -f qasa-web
-   ```
-
-4. **SSL certificate issues**
-   ```bash
-   # Generate new self-signed certificates
-   mkdir -p ssl
-   openssl req -x509 -newkey rsa:4096 -keyout ssl/key.pem -out ssl/cert.pem -days 365 -nodes
-   ```
-
-### Log Files
-
-- Docker: `docker-compose logs`
-- Native: Application logs in `~/.qasa/logs/`
-- Systemd: `journalctl -u qasa-web`
-
-## Performance Tuning
-
-### Docker Resource Limits
-
-```yaml
-deploy:
-  resources:
-    limits:
-      cpus: '1.0'
-      memory: 512M
-    reservations:
-      cpus: '0.5'
-      memory: 256M
-```
-
-### Kubernetes Resource Requests
-
-```yaml
-resources:
-  requests:
-    memory: "256Mi"
-    cpu: "250m"
-  limits:
-    memory: "512Mi"
-    cpu: "500m"
-```
-
-## Backup and Recovery
-
-### Backup Important Data
+Enable debug logging:
 
 ```bash
-# Backup user keys and configuration
-tar -czf qasa-backup-$(date +%Y%m%d).tar.gz ~/.qasa/
-
-# For Docker volumes
-docker run --rm -v qasa_qasa-data:/data -v $(pwd):/backup alpine tar czf /backup/qasa-data-backup.tar.gz /data
+export RUST_LOG=qasa_crypto=trace
+export RUST_BACKTRACE=1
 ```
 
-### Restore from Backup
+### Support
+
+For technical support and issues:
+
+1. Check the [project documentation](README.md)
+2. Review [security guidelines](src/crypto/security_review.md)
+3. Consult the [API documentation](docs/api/crypto_api.md)
+4. Submit issues via the project repository
+
+## Security Audit
+
+### Self-Assessment
+
+Perform regular security assessments:
 
 ```bash
-# Restore user configuration
-tar -xzf qasa-backup-YYYYMMDD.tar.gz -C ~/
+# Run security tests
+cargo test security
 
-# For Docker volumes
-docker run --rm -v qasa_qasa-data:/data -v $(pwd):/backup alpine tar xzf /backup/qasa-data-backup.tar.gz -C /
+# Check for known vulnerabilities
+cargo audit
+
+# Analyze code quality
+cargo clippy -- -D warnings
 ```
 
-## Support
+### External Audit
 
-For deployment issues:
+For production deployments, consider:
 
-1. Check the logs for error messages
-2. Verify all prerequisites are installed
-3. Ensure ports are not blocked by firewall
-4. Check the GitHub issues page for known problems
-5. Create a new issue with deployment details and error logs 
+- Independent security audits
+- Penetration testing
+- Code review by cryptography experts
+- Compliance validation
+
+## Performance Optimization
+
+### Compilation Flags
+
+Optimize for different scenarios:
+
+```bash
+# Maximum performance
+export RUSTFLAGS="-C target-cpu=native -C opt-level=3"
+
+# Minimum size
+export RUSTFLAGS="-C opt-level=s"
+
+# Debug with optimizations
+export RUSTFLAGS="-C opt-level=2 -g"
+```
+
+### Profiling
+
+Profile performance bottlenecks:
+
+```bash
+# Install profiling tools
+cargo install flamegraph
+
+# Generate flame graph
+cargo flamegraph --bench crypto_bench
+```
+
+This deployment guide ensures secure, reliable deployment of the QaSa cryptography module across various environments and use cases. 
