@@ -200,23 +200,7 @@ impl LeanDilithium {
         Ok(self.sig_instance.as_mut().unwrap())
     }
     
-    /// Generate a new key pair
-    ///
-    /// # Returns
-    ///
-    /// A new DilithiumKeyPair or an error if key generation failed
-    pub fn generate_keypair(&mut self) -> Result<DilithiumKeyPair, CryptoError> {
-        let sig = self.get_sig()?;
-        
-        let (public_key, secret_key) = sig.keypair()
-            .map_err(|e| CryptoError::KeyGenerationError(e.to_string()))?;
-            
-        Ok(DilithiumKeyPair {
-            public_key: public_key.into_vec(),
-            secret_key: secret_key.into_vec(),
-            algorithm: self.variant,
-        })
-    }
+
     
     /// Sign a message with the given secret key
     ///
@@ -761,7 +745,7 @@ mod tests {
     #[test]
     fn test_lean_dilithium() {
         let mut lean = LeanDilithium::new(DilithiumVariant::Dilithium2);
-        let key_pair = lean.generate_keypair().unwrap();
+        let key_pair = DilithiumKeyPair::generate(DilithiumVariant::Dilithium2).unwrap();
         
         let message = b"Test message for lean Dilithium";
         
