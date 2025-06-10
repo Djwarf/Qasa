@@ -27,10 +27,8 @@ find . -name "Thumbs.db" -delete 2>/dev/null || true
 echo "Removing runtime data..."
 find . -name ".qasa" -type d -exec rm -rf {} + 2>/dev/null || true
 
-# Clean Go module cache for this project
-echo "Cleaning Go modules..."
-cd src && go clean -modcache 2>/dev/null || true
-cd ..
+# Additional cleanup
+echo "Cleaning additional artifacts..."
 
 # Clean Rust target directories
 echo "Cleaning Rust targets..."
