@@ -250,7 +250,7 @@ impl QuantumSafeTLS {
     }
     
     /// Encrypt application data
-    pub fn encrypt_data(data: &[u8]) -> CryptoResult<Vec<u8>> {
+    pub fn encrypt_data(&mut self, data: &[u8], session: &Session) -> CryptoResult<Vec<u8>> {
         if self.state != TlsState::ApplicationData {
             return Err(CryptoError::ProtocolError {
                 protocol: "TLS".to_string(),
@@ -266,7 +266,7 @@ impl QuantumSafeTLS {
     }
     
     /// Decrypt application data
-    pub fn decrypt_data(data: &[u8]) -> CryptoResult<Vec<u8>> {
+    pub fn decrypt_data(&mut self, ciphertext: &[u8], session: &Session) -> CryptoResult<Vec<u8>> {
         if self.state != TlsState::ApplicationData {
             return Err(CryptoError::ProtocolError {
                 protocol: "TLS".to_string(),
@@ -312,7 +312,7 @@ impl QuantumSafeTLS {
         Ok(public_key)
     }
     
-    fn sign_handshake_data(data: &[u8]) -> CryptoResult<Vec<u8>> {
+    fn sign_handshake_data(&self, client_hello: &ClientHello, certificate: &[u8]) -> CryptoResult<Vec<u8>> {
         let mut data_to_sign = Vec::new();
         data_to_sign.extend_from_slice(&bincode::serialize(client_hello).map_err(|e| {
             CryptoError::SerializationError(e.to_string())
@@ -432,7 +432,7 @@ impl SecureMessaging {
     }
     
     /// Send an encrypted message to a recipient
-    pub fn send_message(data: &[u8]) -> CryptoResult<EncryptedMessage> {
+    pub fn send_message(&mut self, recipient: &ContactId, message: &[u8]) -> CryptoResult<EncryptedMessage> {
         // Get or create ephemeral key for this contact
         let ephemeral_key = self.get_or_create_ephemeral_key(recipient)?;
         

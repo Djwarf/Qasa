@@ -217,10 +217,10 @@ impl LeanDilithium {
         
         // Create a secret key from bytes using the Sig instance
         let sk = sig.secret_key_from_bytes(secret_key)
-            .ok_or_else(|| CryptoError::dilithium_error("Signature generation failed", "Failed to create secret key from bytes".to_string(, error_codes::DILITHIUM_SIGNING_FAILED)))?;
+            .ok_or_else(|| CryptoError::dilithium_error("Signature generation failed", "Failed to create secret key from bytes", error_codes::DILITHIUM_SIGNING_FAILED))?;
         
         let signature = sig.sign(message, &sk)
-            .map_err(|e| CryptoError::dilithium_error("Signature generation failed", e.to_string(, error_codes::DILITHIUM_SIGNING_FAILED)))?;
+            .map_err(|e| CryptoError::dilithium_error("Signature generation failed", &e.to_string(), error_codes::DILITHIUM_SIGNING_FAILED))?;
         
         Ok(signature.into_vec())
     }
@@ -241,10 +241,10 @@ impl LeanDilithium {
         
         // Create public key and signature objects from bytes
         let pk = sig.public_key_from_bytes(public_key)
-            .ok_or_else(|| CryptoError::dilithium_error("Signature verification failed", "Failed to create public key from bytes".to_string(, error_codes::DILITHIUM_VERIFICATION_FAILED)))?;
+            .ok_or_else(|| CryptoError::dilithium_error("Signature verification failed", "Failed to create public key from bytes", error_codes::DILITHIUM_SIGNING_FAILED))?;
         
         let sig_obj = sig.signature_from_bytes(signature)
-            .ok_or_else(|| CryptoError::dilithium_error("Signature verification failed", "Failed to create signature from bytes".to_string(, error_codes::DILITHIUM_VERIFICATION_FAILED)))?;
+            .ok_or_else(|| CryptoError::dilithium_error("Signature verification failed", "Failed to create signature from bytes", error_codes::DILITHIUM_SIGNING_FAILED))?;
         
         match sig.verify(message, &sig_obj, &pk) {
             Ok(_) => Ok(true),
@@ -417,7 +417,7 @@ impl DilithiumKeyPair {
         let dilithium = Sig::new(alg).map_err(|e| CryptoError::OqsError(e.to_string()))?;
         
         let (public_key, secret_key) = dilithium.keypair()
-            .map_err(|e| CryptoError::kyber_error("Key generation failed", e.to_string(, error_codes::KYBER_KEY_GENERATION_FAILED)))?;
+            .map_err(|e| CryptoError::dilithium_error("Key generation failed", &e.to_string(), error_codes::DILITHIUM_KEY_GENERATION_FAILED))?;
             
         Ok(Self {
             public_key: public_key.into_vec(),
@@ -441,10 +441,10 @@ impl DilithiumKeyPair {
         
         // Create a secret key from bytes using the Sig instance
         let sk = dilithium.secret_key_from_bytes(&self.secret_key)
-            .ok_or_else(|| CryptoError::dilithium_error("Signature generation failed", "Failed to create secret key from bytes".to_string(, error_codes::DILITHIUM_SIGNING_FAILED)))?;
+            .ok_or_else(|| CryptoError::dilithium_error("Signature generation failed", "Failed to create secret key from bytes", error_codes::DILITHIUM_SIGNING_FAILED))?;
         
         let signature = dilithium.sign(message, &sk)
-            .map_err(|e| CryptoError::dilithium_error("Signature generation failed", e.to_string(, error_codes::DILITHIUM_SIGNING_FAILED)))?;
+            .map_err(|e| CryptoError::dilithium_error("Signature generation failed", &e.to_string(), error_codes::DILITHIUM_SIGNING_FAILED))?;
         
         Ok(signature.into_vec())
     }
@@ -465,11 +465,11 @@ impl DilithiumKeyPair {
         
         // Create a public key from bytes using the Sig instance
         let pk = dilithium.public_key_from_bytes(&self.public_key)
-            .ok_or_else(|| CryptoError::dilithium_error("Signature verification failed", "Failed to create public key from bytes".to_string(, error_codes::DILITHIUM_VERIFICATION_FAILED)))?;
+            .ok_or_else(|| CryptoError::dilithium_error("Signature verification failed", "Failed to create public key from bytes", error_codes::DILITHIUM_SIGNING_FAILED))?;
         
         // Create a signature from bytes using the Sig instance
         let sig = dilithium.signature_from_bytes(signature)
-            .ok_or_else(|| CryptoError::dilithium_error("Signature verification failed", "Failed to create signature from bytes".to_string(, error_codes::DILITHIUM_VERIFICATION_FAILED)))?;
+            .ok_or_else(|| CryptoError::dilithium_error("Signature verification failed", "Failed to create signature from bytes", error_codes::DILITHIUM_SIGNING_FAILED))?;
         
         match dilithium.verify(message, &sig, &pk) {
             Ok(_) => Ok(true),
@@ -537,11 +537,11 @@ impl DilithiumKeyPair {
         
         // Create a public key from bytes using the Sig instance
         let pk = dilithium.public_key_from_bytes(public_key)
-            .ok_or_else(|| CryptoError::dilithium_error("Signature verification failed", "Failed to create public key from bytes".to_string(, error_codes::DILITHIUM_VERIFICATION_FAILED)))?;
+            .ok_or_else(|| CryptoError::dilithium_error("Signature verification failed", "Failed to create public key from bytes", error_codes::DILITHIUM_SIGNING_FAILED))?;
         
         // Create a signature from bytes using the Sig instance
         let sig = dilithium.signature_from_bytes(signature)
-            .ok_or_else(|| CryptoError::dilithium_error("Signature verification failed", "Failed to create signature from bytes".to_string(, error_codes::DILITHIUM_VERIFICATION_FAILED)))?;
+            .ok_or_else(|| CryptoError::dilithium_error("Signature verification failed", "Failed to create signature from bytes", error_codes::DILITHIUM_SIGNING_FAILED))?;
         
         match dilithium.verify(message, &sig, &pk) {
             Ok(_) => Ok(true),
@@ -567,10 +567,10 @@ impl DilithiumPublicKey {
         
         // Create OQS objects from bytes using the Sig instance
         let pk = dilithium.public_key_from_bytes(&self.public_key)
-            .ok_or_else(|| CryptoError::dilithium_error("Signature verification failed", "Failed to create public key from bytes".to_string(, error_codes::DILITHIUM_VERIFICATION_FAILED)))?;
+            .ok_or_else(|| CryptoError::dilithium_error("Signature verification failed", "Failed to create public key from bytes", error_codes::DILITHIUM_SIGNING_FAILED))?;
         
         let sig = dilithium.signature_from_bytes(signature)
-            .ok_or_else(|| CryptoError::dilithium_error("Signature verification failed", "Failed to create signature from bytes".to_string(, error_codes::DILITHIUM_VERIFICATION_FAILED)))?;
+            .ok_or_else(|| CryptoError::dilithium_error("Signature verification failed", "Failed to create signature from bytes", error_codes::DILITHIUM_SIGNING_FAILED))?;
         
         match dilithium.verify(message, &sig, &pk) {
             Ok(_) => Ok(true),

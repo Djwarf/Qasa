@@ -47,11 +47,14 @@ pub mod protocols;
 /// Security framework including constant-time verification
 pub mod security;
 
+/// High-level user-friendly API
+pub mod simple;
+
 // Re-export main types for convenience
 pub use dilithium::DilithiumKeyPair;
 pub use dilithium::DilithiumPublicKey;
 pub use dilithium::DilithiumVariant;
-pub use error::CryptoError;
+pub use error::{CryptoError, CryptoResult};
 pub use kyber::KyberKeyPair;
 pub use kyber::KyberPublicKey;
 pub use kyber::KyberVariant;
@@ -152,7 +155,11 @@ pub mod prelude {
     /// 2. Applies authenticated encryption for message confidentiality and integrity
     /// 3. Signs the encrypted message to provide sender authentication
     /// 4. Protects against both classical and quantum attacks
-    pub fn create_secure_message(data: &[u8]) -> Result<Vec<u8>, crate::CryptoError> {
+    pub fn create_secure_message(
+        message: &[u8], 
+        recipient_public_key: &crate::kyber::KyberPublicKey, 
+        sender_signing_key: &crate::dilithium::DilithiumKeyPair
+    ) -> Result<Vec<u8>, crate::CryptoError> {
         // Perform key encapsulation to get a shared secret
         let (ciphertext, shared_secret) = recipient_public_key.encapsulate()?;
         
@@ -205,7 +212,11 @@ pub mod prelude {
     /// 2. Fails immediately if signature verification fails, preventing oracle attacks
     /// 3. Uses post-quantum secure algorithms for all cryptographic operations
     /// 4. Provides authentication, integrity and confidentiality
-    pub fn open_secure_message(data: &[u8]) -> Result<Vec<u8>, crate::CryptoError> {
+    pub fn open_secure_message(
+        encrypted_message: &[u8], 
+        recipient_private_key: &crate::kyber::KyberKeyPair, 
+        sender_verify_key: &crate::dilithium::DilithiumPublicKey
+    ) -> Result<Vec<u8>, crate::CryptoError> {
         // Deserialize the signed package
         let signed_package: SignedPackage = bincode::deserialize(encrypted_message)
             .map_err(|e| crate::CryptoError::SerializationError(format!("Failed to deserialize message: {}", e)))?;
@@ -340,7 +351,10 @@ mod tests {
 /// 1. Post-quantum secure key encapsulation using Kyber
 /// 2. Authenticated encryption via AES-GCM
 /// 3. Unique key for each message (forward secrecy)
-pub fn encrypt_message(data: &[u8]) -> Result<(Vec<u8>, Vec<u8>, Vec<u8>), CryptoError> {
+pub fn encrypt_message(
+    message: &[u8], 
+    recipient_public_key: &crate::kyber::KyberPublicKey
+) -> Result<(Vec<u8>, Vec<u8>, Vec<u8>), CryptoError> {
     // Perform key encapsulation
     let (encapsulated_key, shared_secret) = recipient_public_key.encapsulate()?;
     
@@ -376,7 +390,12 @@ pub fn encrypt_message(data: &[u8]) -> Result<(Vec<u8>, Vec<u8>, Vec<u8>), Crypt
 ///
 /// 1. Authenticated decryption that verifies message integrity and authenticity
 /// 2. Post-quantum secure key recovery
-pub fn decrypt_message(data: &[u8]) -> Result<Vec<u8>, CryptoError> {
+pub fn decrypt_message(
+    encrypted_message: &[u8], 
+    encapsulated_key: &[u8], 
+    nonce: &[u8], 
+    my_keypair: &crate::kyber::KyberKeyPair
+) -> Result<Vec<u8>, CryptoError> {
     // Recover the shared secret
     let shared_secret = my_keypair.decapsulate(encapsulated_key)?;
     
@@ -410,7 +429,10 @@ pub fn decrypt_message(data: &[u8]) -> Result<Vec<u8>, CryptoError> {
 /// 1. Post-quantum secure digital signature using Dilithium
 /// 2. Provides authenticity and integrity verification
 /// 3. Non-repudiation (signer cannot deny having signed the message)
-pub fn sign_message(data: &[u8]) -> Result<Vec<u8>, CryptoError> {
+pub fn sign_message(
+    message: &[u8], 
+    signing_key: &crate::dilithium::DilithiumKeyPair
+) -> Result<Vec<u8>, CryptoError> {
     signing_key.sign(message)
 }
 
@@ -436,7 +458,11 @@ pub fn sign_message(data: &[u8]) -> Result<Vec<u8>, CryptoError> {
 ///
 /// 1. Post-quantum secure signature verification using Dilithium
 /// 2. Verifies both authenticity (who created the message) and integrity (message not modified)
-pub fn verify_message(data: &[u8]) -> Result<bool, CryptoError> {
+pub fn verify_message(
+    message: &[u8], 
+    signature: &[u8], 
+    sender_verify_key: &crate::dilithium::DilithiumPublicKey
+) -> Result<bool, CryptoError> {
     sender_verify_key.verify(message, signature)
 }
 
@@ -470,7 +496,11 @@ pub fn verify_message(data: &[u8]) -> Result<bool, CryptoError> {
 /// 1. Combines confidentiality (encryption) with authenticity and integrity (signing)
 /// 2. Signs the encrypted message rather than the plaintext, preventing signature-based oracles
 /// 3. Uses post-quantum secure algorithms for all cryptographic operations
-pub fn encrypt_and_sign_message(data: &[u8]) -> Result<(Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>), CryptoError> {
+pub fn encrypt_and_sign_message(
+    message: &[u8], 
+    recipient_public_key: &crate::kyber::KyberPublicKey, 
+    signing_key: &crate::dilithium::DilithiumKeyPair
+) -> Result<(Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>), CryptoError> {
     // Encrypt the message
     let (encrypted_message, encapsulated_key, nonce) = encrypt_message(message, recipient_public_key)?;
     
@@ -516,7 +546,14 @@ pub fn encrypt_and_sign_message(data: &[u8]) -> Result<(Vec<u8>, Vec<u8>, Vec<u8
 /// 1. Verifies the message's integrity and authenticity before attempting decryption
 /// 2. Prevents attacks that might use decryption as an oracle
 /// 3. Provides complete end-to-end security with post-quantum algorithms
-pub fn decrypt_and_verify_message(data: &[u8]) -> Result<Vec<u8>, CryptoError> {
+pub fn decrypt_and_verify_message(
+    encrypted_message: &[u8], 
+    encapsulated_key: &[u8], 
+    nonce: &[u8], 
+    signature: &[u8], 
+    my_keypair: &crate::kyber::KyberKeyPair, 
+    sender_verify_key: &crate::dilithium::DilithiumPublicKey
+) -> Result<Vec<u8>, CryptoError> {
     // Verify the signature
     let mut to_verify = Vec::new();
     to_verify.extend_from_slice(encrypted_message);

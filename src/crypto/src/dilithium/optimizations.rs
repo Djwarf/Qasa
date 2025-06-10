@@ -6,7 +6,7 @@
  */
 
 use crate::dilithium::{DilithiumKeyPair, DilithiumVariant};
-use crate::error::CryptoError;
+use crate::error::{CryptoError, error_codes};
 use oqs::sig::{Algorithm, Sig};
 
 /// A leaner implementation of Dilithium for resource-constrained environments
@@ -39,7 +39,7 @@ impl LeanDilithium {
 
         let (public_key, secret_key) = sig
             .keypair()
-            .map_err(|e| CryptoError::dilithium_error("Key generation failed", &e.to_string(, error_codes::DILITHIUM_KEY_GENERATION_FAILED)))?;
+            .map_err(|e| CryptoError::dilithium_error("Key generation failed", &e.to_string(), error_codes::DILITHIUM_KEY_GENERATION_FAILED))?;
 
         self.signer = Some(sig);
 
@@ -65,7 +65,7 @@ impl LeanDilithium {
 
         let signature = sig
             .sign(message, &sk)
-            .map_err(|e| CryptoError::dilithium_error("Signature generation failed", &e.to_string(, error_codes::DILITHIUM_SIGNING_FAILED)))?;
+            .map_err(|e| CryptoError::dilithium_error("Signature generation failed", &e.to_string(), error_codes::DILITHIUM_SIGNING_FAILED))?;
 
         Ok(signature.into_vec())
     }

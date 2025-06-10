@@ -103,10 +103,7 @@ pub mod polynomial {
             };
             
             if !is_available {
-                return Err(CryptoError::invalid_parameter(
-                    &format!("{:?}", algorithm),
-                    "SIMD instruction set not available on this CPU"
-                ));
+                return Err(CryptoError::invalid_parameter(&format!("{:?}", algorithm), "SIMD instruction set not available on this CPU", "provided"));
             }
             
             Ok(Self {

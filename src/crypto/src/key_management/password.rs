@@ -130,7 +130,7 @@ pub fn high_security_params() -> KeyDerivationParams {
 /// # Returns
 ///
 /// The derived key bytes or an error
-fn derive_key_internal(data: &[u8]) -> Result<Vec<u8>, CryptoError> {
+fn derive_key_internal(password: &[u8], salt: &[u8], params: &KeyDerivationParams) -> Result<Vec<u8>, CryptoError> {
     // Create Argon2 params
     let mut builder = ParamsBuilder::new();
     builder
@@ -140,7 +140,7 @@ fn derive_key_internal(data: &[u8]) -> Result<Vec<u8>, CryptoError> {
         .output_len(params.key_length);
     
     let argon2_params = builder.build().map_err(|e| {
-        CryptoError::KeyManagementError(format!("Failed to build Argon2 parameters: {}", e))
+        CryptoError::key_management_error("Parameter building failed", &format!("Failed to build Argon2 parameters: {}", e), "argon2")
     })?;
     
     // Create Argon2 instance with the specified parameters
@@ -152,7 +152,7 @@ fn derive_key_internal(data: &[u8]) -> Result<Vec<u8>, CryptoError> {
     
     // Convert the salt to a SaltString
     let salt_string = SaltString::encode_b64(salt).map_err(|e| {
-        CryptoError::KeyManagementError(format!("Failed to encode salt: {}", e))
+        CryptoError::key_management_error("Salt encoding failed", &format!("Failed to encode salt: {}", e), "argon2")
     })?;
     
     // Create a buffer for the output key
@@ -164,7 +164,7 @@ fn derive_key_internal(data: &[u8]) -> Result<Vec<u8>, CryptoError> {
         salt_string.as_str().as_bytes(),
         &mut key_buffer
     ).map_err(|e| {
-        CryptoError::KeyManagementError(format!("Failed to derive key: {}", e))
+        CryptoError::key_management_error("Key derivation failed", &format!("Failed to derive key: {}", e), "argon2")
     })?;
     
     Ok(key_buffer)
@@ -205,7 +205,7 @@ fn derive_key_internal(data: &[u8]) -> Result<Vec<u8>, CryptoError> {
 /// // The derived key can now be used for encryption or other purposes
 /// // The salt should be stored alongside the key for password verification
 /// ```
-pub fn derive_key_from_password(data: &[u8]) -> Result<DerivedKey, CryptoError> {
+pub fn derive_key_from_password(password: &str, salt: Option<&[u8]>, params: Option<&KeyDerivationParams>) -> Result<DerivedKey, CryptoError> {
     // Create secure password handling
     let secure_password = SecureBytes::new(password.as_bytes());
     
@@ -375,7 +375,7 @@ pub fn change_password(
 ) -> Result<DerivedKey, CryptoError> {
     // Verify the old password first
     if !verify_password(old_password, derived_key, params)? {
-        return Err(CryptoError::key_management_error("Invalid password", "Password validation failed", "password")("Invalid password".to_string()));
+        return Err(CryptoError::key_management_error("Invalid operation", "Operation failed", "unknown"));
     }
     
     // Generate a new derived key with the new password

@@ -1,6 +1,7 @@
 // Key storage implementation
 // This file contains code moved from src/key_management.rs for key storage
 
+use super::password::derive_key_from_password;
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -10,7 +11,6 @@ use serde::{Deserialize, Serialize};
 use crate::aes;
 use crate::dilithium::DilithiumKeyPair;
 use crate::error::CryptoError;
-use crate::key_management::password::derive_key_from_password;
 use crate::kyber::KyberKeyPair;
 
 /// Metadata for stored key files
@@ -65,7 +65,7 @@ fn ensure_key_directory(dir: Option<&Path>) -> Result<PathBuf, CryptoError> {
 
     if !path.exists() {
         fs::create_dir_all(&path).map_err(|e| {
-            CryptoError::key_management_error("operation", &format!("Failed to create key directory: {}", e), 4001)
+            CryptoError::key_management_error("Failed to create key directory", &format!("Directory creation failed: {}", e), "unknown")
         })?;
     }
 
@@ -145,11 +145,11 @@ pub fn store_kyber_keypair(
     // Write to file
     let file_path = key_directory.join(format!("{}.kyber.key", key_id));
     let mut file = File::create(&file_path).map_err(|e| {
-        CryptoError::key_management_error("operation", &format!("Failed to create key file: {}", e), 4001)
+        CryptoError::key_management_error("Failed to create key file", &format!("File creation error: {}", e), "unknown")
     })?;
     
     file.write_all(&serialized).map_err(|e| {
-        CryptoError::key_management_error("operation", &format!("Failed to write key file: {}", e), 4001)
+        CryptoError::key_management_error("Failed to write key file", &format!("File write error: {}", e), "unknown")
     })?;
     
     Ok(key_id)
@@ -176,19 +176,17 @@ pub fn load_kyber_keypair(
     
     // Check if file exists
     if !file_path.exists() {
-        return Err(CryptoError::KeyManagementError(
-            format!("Key {} does not exist", key_id),
-        ));
+        return Err(CryptoError::key_management_error("Key not found", &format!("Key {} does not exist", key_id), "unknown"));
     }
     
     // Read the encrypted key file
     let mut file = File::open(&file_path).map_err(|e| {
-        CryptoError::key_management_error("operation", &format!("Failed to open key file: {}", e), 4001)
+        CryptoError::key_management_error("Failed to open key file", &format!("File open error: {}", e), "unknown")
     })?;
     
     let mut encrypted_data = Vec::new();
     file.read_to_end(&mut encrypted_data).map_err(|e| {
-        CryptoError::key_management_error("operation", &format!("Failed to read key file: {}", e), 4001)
+        CryptoError::key_management_error("Failed to read key file", &format!("File read error: {}", e), "unknown")
     })?;
     
     // Deserialize the encrypted key structure
@@ -276,11 +274,11 @@ pub fn store_dilithium_keypair(
     // Write to file
     let file_path = key_directory.join(format!("{}.dilithium.key", key_id));
     let mut file = File::create(&file_path).map_err(|e| {
-        CryptoError::key_management_error("operation", &format!("Failed to create key file: {}", e), 4001)
+        CryptoError::key_management_error("Failed to create key file", &format!("File creation error: {}", e), "unknown")
     })?;
     
     file.write_all(&serialized).map_err(|e| {
-        CryptoError::key_management_error("operation", &format!("Failed to write key file: {}", e), 4001)
+        CryptoError::key_management_error("Failed to write key file", &format!("File write error: {}", e), "unknown")
     })?;
     
     Ok(key_id)
@@ -307,19 +305,17 @@ pub fn load_dilithium_keypair(
     
     // Check if file exists
     if !file_path.exists() {
-        return Err(CryptoError::KeyManagementError(
-            format!("Key {} does not exist", key_id),
-        ));
+        return Err(CryptoError::key_management_error("Key not found", &format!("Key {} does not exist", key_id), "unknown"));
     }
     
     // Read the encrypted key file
     let mut file = File::open(&file_path).map_err(|e| {
-        CryptoError::key_management_error("operation", &format!("Failed to open key file: {}", e), 4001)
+        CryptoError::key_management_error("Failed to open key file", &format!("File open error: {}", e), "unknown")
     })?;
     
     let mut encrypted_data = Vec::new();
     file.read_to_end(&mut encrypted_data).map_err(|e| {
-        CryptoError::key_management_error("operation", &format!("Failed to read key file: {}", e), 4001)
+        CryptoError::key_management_error("Failed to read key file", &format!("File read error: {}", e), "unknown")
     })?;
     
     // Deserialize the encrypted key structure
@@ -358,7 +354,7 @@ pub fn list_keys() -> Result<Vec<(String, String)>, CryptoError> {
     let key_directory = ensure_key_directory(None)?;
     
     let entries = fs::read_dir(&key_directory).map_err(|e| {
-        CryptoError::key_management_error("operation", &format!("Failed to read key directory: {}", e), 4001)
+        CryptoError::key_management_error("Failed to read key directory", &format!("Directory read error: {}", e), "unknown")
     })?;
     
     let mut keys = Vec::new();
@@ -403,8 +399,7 @@ pub fn delete_key(key_id: &str, key_type: &str, path: Option<&str>) -> Result<()
     let extension = match key_type.to_lowercase().as_str() {
         "kyber" => "kyber.key",
         "dilithium" => "dilithium.key",
-        _ => return Err(CryptoError::KeyManagementError(
-            format!("Invalid key type: {}", key_type),
+        _ => return Err(CryptoError::key_management_error("Operation failed", &format!("Invalid key type: {}", key_type), "unknown")
         )),
     };
     
@@ -412,14 +407,12 @@ pub fn delete_key(key_id: &str, key_type: &str, path: Option<&str>) -> Result<()
     
     // Check if file exists
     if !file_path.exists() {
-        return Err(CryptoError::KeyManagementError(
-            format!("Key {} does not exist", key_id),
-        ));
+        return Err(CryptoError::key_management_error("Key not found", &format!("Key {} does not exist", key_id), "unknown"));
     }
     
     // Delete the key file
     fs::remove_file(&file_path).map_err(|e| {
-        CryptoError::key_management_error("operation", &format!("Failed to delete key file: {}", e), 4001)
+        CryptoError::key_management_error("Failed to delete key file", &format!("File deletion error: {}", e), "unknown")
     })?;
     
     // Also delete metadata file if it exists
@@ -467,9 +460,7 @@ pub fn export_key(
                 CryptoError::SerializationError(format!("Failed to serialize keypair: {}", e))
             })?
         },
-        _ => return Err(CryptoError::KeyManagementError(
-            format!("Invalid key type: {}", key_type),
-        )),
+        _ => return Err(CryptoError::key_management_error("Operation failed", &format!("Invalid key type: {}", key_type), "unknown")),
     };
     
     // Derive a key from the export password
@@ -517,11 +508,11 @@ pub fn export_key(
     
     // Write to file
     let mut file = File::create(export_path).map_err(|e| {
-        CryptoError::key_management_error("operation", &format!("Failed to create export file: {}", e), 4001)
+        CryptoError::key_management_error("Failed to create export file", &format!("Export file creation error: {}", e), "unknown")
     })?;
     
     file.write_all(&serialized).map_err(|e| {
-        CryptoError::key_management_error("operation", &format!("Failed to write export file: {}", e), 4001)
+        CryptoError::key_management_error("Failed to write export file", &format!("File write error: {}", e), "unknown")
     })?;
     
     Ok(())
@@ -547,12 +538,12 @@ pub fn import_key(
 ) -> Result<(String, String), CryptoError> {
     // Read the exported key file
     let mut file = File::open(import_path).map_err(|e| {
-        CryptoError::key_management_error("operation", &format!("Failed to open export file: {}", e), 4001)
+        CryptoError::key_management_error("Failed to open export file", &format!("File open error: {}", e), "unknown")
     })?;
     
     let mut encrypted_data = Vec::new();
     file.read_to_end(&mut encrypted_data).map_err(|e| {
-        CryptoError::key_management_error("operation", &format!("Failed to read export file: {}", e), 4001)
+        CryptoError::key_management_error("Failed to read export file", &format!("File read error: {}", e), "unknown")
     })?;
     
     // Deserialize the export structure
@@ -602,9 +593,7 @@ pub fn import_key(
             
             store_dilithium_keypair(&keypair, key_storage_path, new_password)?
         },
-        _ => return Err(CryptoError::KeyManagementError(
-            format!("Invalid key type in import file: {}", key_type),
-        )),
+        _ => return Err(CryptoError::key_management_error("Operation failed", &format!("Invalid key type in import file: {}", key_type), "unknown")),
     };
     
     Ok((new_key_id, key_type))
