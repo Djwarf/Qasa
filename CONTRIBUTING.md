@@ -11,12 +11,12 @@ Please be respectful and considerate of others when contributing to this project
 1. Fork the repository on GitHub.
 2. Clone your fork locally:
    ```bash
-   git clone https://github.com/your-username/qasa.git
-   cd qasa
+   git clone https://github.com/your-username/Qasa.git
+   cd Qasa
    ```
 3. Add the original repository as an upstream remote:
    ```bash
-   git remote add upstream https://github.com/qasa/qasa.git
+   git remote add upstream https://github.com/Djwarf/Qasa.git
    ```
 
 ## Development Workflow

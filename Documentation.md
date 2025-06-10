@@ -38,8 +38,8 @@ QaSa (Quantum-Safe) is a post-quantum cryptography implementation that provides 
 
 1. Clone the repository
    ```bash
-   git clone https://github.com/qasa/qasa.git
-   cd qasa
+   git clone https://github.com/Djwarf/Qasa.git
+   cd Qasa
    ```
 
 2. Build the cryptography module
