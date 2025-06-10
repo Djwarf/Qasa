@@ -215,7 +215,7 @@ impl SecureBytes {
     /// # Arguments
     ///
     /// * `data` - The data to append to this buffer
-    pub fn extend_from_slice(data: &[u8]) {
+    pub fn extend_from_slice(&mut self, data: &[u8]) {
         self.bytes.extend_from_slice(data);
     }
     

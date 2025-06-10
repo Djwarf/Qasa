@@ -191,7 +191,7 @@ impl AesGcm {
         
         // Encrypt using the Aead trait
         self.cipher.encrypt(nonce, payload)
-            .map_err(|e| CryptoError::aes_error("Encryption failed", &format!("AES-GCM encryption failed: {}", e)))
+            .map_err(|e| CryptoError::aes_error("Encryption failed", &format!("AES-GCM encryption failed: {}", e, error_codes::AES_ENCRYPTION_FAILED)))
     }
 
     /// Decrypt ciphertext using AES-GCM
@@ -268,7 +268,7 @@ impl AesGcm {
         
         // Decrypt using the Aead trait
         self.cipher.decrypt(nonce, payload)
-            .map_err(|e| CryptoError::aes_error("Decryption failed", &format!("AES-GCM decryption failed: {}", e)))
+            .map_err(|e| CryptoError::aes_error("Decryption failed", &format!("AES-GCM decryption failed: {}", e, error_codes::AES_DECRYPTION_FAILED)))
     }
 }
 

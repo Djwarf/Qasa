@@ -39,7 +39,7 @@ impl LeanDilithium {
 
         let (public_key, secret_key) = sig
             .keypair()
-            .map_err(|e| CryptoError::dilithium_error("Key generation failed", &e.to_string()))?;
+            .map_err(|e| CryptoError::dilithium_error("Key generation failed", &e.to_string(, error_codes::DILITHIUM_KEY_GENERATION_FAILED)))?;
 
         self.signer = Some(sig);
 
@@ -56,16 +56,16 @@ impl LeanDilithium {
         let sig = if let Some(ref signer) = self.signer {
             signer
         } else {
-            return Err(CryptoError::dilithium_error("Signature generation failed", "Failed to generate digital signature"));
+            return Err(CryptoError::dilithium_error("Signature generation failed", "Failed to generate digital signature", error_codes::DILITHIUM_SIGNING_FAILED));
         };
 
         let sk = sig.secret_key_from_bytes(secret_key).ok_or_else(|| {
-            CryptoError::dilithium_error("Signature generation failed", "Failed to create secret key from bytes")
+            CryptoError::dilithium_error("Signature generation failed", "Failed to create secret key from bytes", error_codes::DILITHIUM_SIGNING_FAILED)
         })?;
 
         let signature = sig
             .sign(message, &sk)
-            .map_err(|e| CryptoError::dilithium_error("Signature generation failed", &e.to_string()))?;
+            .map_err(|e| CryptoError::dilithium_error("Signature generation failed", &e.to_string(, error_codes::DILITHIUM_SIGNING_FAILED)))?;
 
         Ok(signature.into_vec())
     }
@@ -76,15 +76,15 @@ impl LeanDilithium {
         let sig = if let Some(ref signer) = self.signer {
             signer
         } else {
-            return Err(CryptoError::dilithium_error("Signature verification failed", "Signer not initialized"));
+            return Err(CryptoError::dilithium_error("Signature verification failed", "Signer not initialized", error_codes::DILITHIUM_VERIFICATION_FAILED));
         };
 
         let pk = sig.public_key_from_bytes(public_key).ok_or_else(|| {
-            CryptoError::dilithium_error("Signature verification failed", "Failed to create public key from bytes")
+            CryptoError::dilithium_error("Signature verification failed", "Failed to create public key from bytes", error_codes::DILITHIUM_VERIFICATION_FAILED)
         })?;
 
         let sig_bytes = sig.signature_from_bytes(signature).ok_or_else(|| {
-            CryptoError::dilithium_error("Signature verification failed", "Failed to create signature from bytes")
+            CryptoError::dilithium_error("Signature verification failed", "Failed to create signature from bytes", error_codes::DILITHIUM_VERIFICATION_FAILED)
         })?;
 
         match sig.verify(message, &sig_bytes, &pk) {
