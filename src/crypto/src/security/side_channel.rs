@@ -1,15 +1,32 @@
+/*!
+ * Side-Channel Testing Framework
+ */
+
 use std::time::{Duration, Instant};
 use std::collections::HashMap;
-use crate::error::Result;
-use crate::kyber::Kyber;
-use crate::dilithium::Dilithium;
+use crate::error::{CryptoError, CryptoResult};
+use crate::kyber::{KyberKeyPair, KyberVariant};
+use crate::dilithium::{DilithiumKeyPair, DilithiumVariant};
 use crate::aes::AesGcm;
 
-/// Side-channel attack testing framework
+#[derive(Debug, Clone)]
 pub struct SideChannelTester {
-    samples: usize,
-    threshold: f64,
-    verbose: bool,
+    pub config: TestConfig,
+}
+
+#[derive(Debug, Clone)]
+pub struct TestConfig {
+    pub iterations: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct TimingAnalyzer {
+    pub measurements: Vec<Duration>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TimingAnalysisResult {
+    pub is_constant_time: bool,
 }
 
 /// Timing analysis results
@@ -26,26 +43,20 @@ pub struct TimingAnalysis {
 }
 
 /// Side-channel test results
-#[derive(Debug)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct SideChannelResults {
-    pub tests: Vec<TimingAnalysis>,
-    pub overall_score: f64,
-    pub vulnerabilities_found: usize,
-    pub recommendations: Vec<String>,
+    pub test_name: String,
+    pub passed: bool,
 }
 
 impl SideChannelTester {
     /// Create a new side-channel tester
-    pub fn new(samples: usize, threshold: f64, verbose: bool) -> Self {
-        Self {
-            samples,
-            threshold,
-            verbose,
-        }
+    pub fn new(config: TestConfig) -> Self {
+        Self { config }
     }
 
     /// Run all side-channel tests
-    pub fn run_all_tests(&self) -> Result<SideChannelResults> {
+    pub fn run_all_tests(&self) -> CryptoResult<SideChannelResults> {
         let mut tests = Vec::new();
         
         // Test Kyber operations
@@ -77,34 +88,32 @@ impl SideChannelTester {
         let recommendations = self.generate_recommendations(&tests);
         
         Ok(SideChannelResults {
-            tests,
-            overall_score,
-            vulnerabilities_found,
-            recommendations,
+            test_name: "Side-Channel Tests".to_string(),
+            passed: vulnerabilities_found == 0,
         })
     }
 
     /// Test Kyber key generation timing
-    fn test_kyber_keygen(&self) -> Result<TimingAnalysis> {
+    fn test_kyber_keygen(&self) -> CryptoResult<TimingAnalysis> {
         let mut times = Vec::new();
         
-        for _ in 0..self.samples {
+        for _ in 0..self.config.iterations {
             let start = Instant::now();
-            let _keypair = Kyber::new_keypair(512)?;
+            let _keypair = KyberKeyPair::generate(KyberVariant::Kyber512)?;
             let duration = start.elapsed();
             times.push(duration);
         }
         
         Ok(self.analyze_timing("Kyber Key Generation", times, 
-            "Key generation timing should be constant regardless of entropy"))
+            "Key generation timing should be constant regardless of entropy")?)
     }
 
     /// Test Kyber encapsulation timing
-    fn test_kyber_encapsulation(&self) -> Result<TimingAnalysis> {
-        let keypair = Kyber::new_keypair(512)?;
+    fn test_kyber_encapsulation(&self) -> CryptoResult<TimingAnalysis> {
+        let keypair = KyberKeyPair::generate(KyberVariant::Kyber512)?;
         let mut times = Vec::new();
         
-        for _ in 0..self.samples {
+        for _ in 0..self.config.iterations {
             let start = Instant::now();
             let _result = keypair.encapsulate()?;
             let duration = start.elapsed();
@@ -112,16 +121,16 @@ impl SideChannelTester {
         }
         
         Ok(self.analyze_timing("Kyber Encapsulation", times,
-            "Encapsulation timing should be constant for a given public key"))
+            "Encapsulation timing should be constant for a given public key")?)
     }
 
     /// Test Kyber decapsulation timing
-    fn test_kyber_decapsulation(&self) -> Result<TimingAnalysis> {
-        let keypair = Kyber::new_keypair(512)?;
+    fn test_kyber_decapsulation(&self) -> CryptoResult<TimingAnalysis> {
+        let keypair = KyberKeyPair::generate(KyberVariant::Kyber512)?;
         let (ciphertext, _) = keypair.encapsulate()?;
         let mut times = Vec::new();
         
-        for _ in 0..self.samples {
+        for _ in 0..self.config.iterations {
             let start = Instant::now();
             let _shared_secret = keypair.decapsulate(&ciphertext)?;
             let duration = start.elapsed();
@@ -129,16 +138,16 @@ impl SideChannelTester {
         }
         
         Ok(self.analyze_timing("Kyber Decapsulation", times,
-            "Decapsulation timing should be constant for valid ciphertexts"))
+            "Decapsulation timing should be constant for valid ciphertexts")?)
     }
 
     /// Test Kyber timing with different keys
-    fn test_kyber_timing_with_different_keys(&self) -> Result<TimingAnalysis> {
+    fn test_kyber_timing_with_different_keys(&self) -> CryptoResult<TimingAnalysis> {
         let mut times = Vec::new();
         
         // Generate multiple keypairs and test decapsulation timing
-        for _ in 0..self.samples {
-            let keypair = Kyber::new_keypair(512)?;
+        for _ in 0..self.config.iterations {
+            let keypair = KyberKeyPair::generate(KyberVariant::Kyber512)?;
             let (ciphertext, _) = keypair.encapsulate()?;
             
             let start = Instant::now();
@@ -148,31 +157,31 @@ impl SideChannelTester {
         }
         
         Ok(self.analyze_timing("Kyber Different Keys", times,
-            "Timing should not vary significantly between different keys"))
+            "Timing should not vary significantly between different keys")?)
     }
 
     /// Test Dilithium key generation timing
-    fn test_dilithium_keygen(&self) -> Result<TimingAnalysis> {
+    fn test_dilithium_keygen(&self) -> CryptoResult<TimingAnalysis> {
         let mut times = Vec::new();
         
-        for _ in 0..self.samples {
+        for _ in 0..self.config.iterations {
             let start = Instant::now();
-            let _keypair = Dilithium::new_keypair(2)?;
+            let _keypair = DilithiumKeyPair::generate(DilithiumVariant::Dilithium2)?;
             let duration = start.elapsed();
             times.push(duration);
         }
         
         Ok(self.analyze_timing("Dilithium Key Generation", times,
-            "Key generation should have consistent timing"))
+            "Key generation should have consistent timing")?)
     }
 
     /// Test Dilithium signing timing
-    fn test_dilithium_sign(&self) -> Result<TimingAnalysis> {
-        let keypair = Dilithium::new_keypair(2)?;
+    fn test_dilithium_sign(&self) -> CryptoResult<TimingAnalysis> {
+        let keypair = DilithiumKeyPair::generate(DilithiumVariant::Dilithium2)?;
         let message = b"test message for signing";
         let mut times = Vec::new();
         
-        for _ in 0..self.samples {
+        for _ in 0..self.config.iterations {
             let start = Instant::now();
             let _signature = keypair.sign(message)?;
             let duration = start.elapsed();
@@ -180,17 +189,17 @@ impl SideChannelTester {
         }
         
         Ok(self.analyze_timing("Dilithium Signing", times,
-            "Signing should have consistent timing for same message length"))
+            "Signing should have consistent timing for same message length")?)
     }
 
     /// Test Dilithium verification timing
-    fn test_dilithium_verify(&self) -> Result<TimingAnalysis> {
-        let keypair = Dilithium::new_keypair(2)?;
+    fn test_dilithium_verify(&self) -> CryptoResult<TimingAnalysis> {
+        let keypair = DilithiumKeyPair::generate(DilithiumVariant::Dilithium2)?;
         let message = b"test message for verification";
         let signature = keypair.sign(message)?;
         let mut times = Vec::new();
         
-        for _ in 0..self.samples {
+        for _ in 0..self.config.iterations {
             let start = Instant::now();
             let _valid = keypair.verify(message, &signature)?;
             let duration = start.elapsed();
@@ -198,16 +207,16 @@ impl SideChannelTester {
         }
         
         Ok(self.analyze_timing("Dilithium Verification", times,
-            "Verification timing should be constant regardless of signature validity"))
+            "Verification timing should be constant regardless of signature validity")?)
     }
 
     /// Test Dilithium timing with different keys
-    fn test_dilithium_timing_with_different_keys(&self) -> Result<TimingAnalysis> {
+    fn test_dilithium_timing_with_different_keys(&self) -> CryptoResult<TimingAnalysis> {
         let message = b"consistent message for timing test";
         let mut times = Vec::new();
         
-        for _ in 0..self.samples {
-            let keypair = Dilithium::new_keypair(2)?;
+        for _ in 0..self.config.iterations {
+            let keypair = DilithiumKeyPair::generate(DilithiumVariant::Dilithium2)?;
             let signature = keypair.sign(message)?;
             
             let start = Instant::now();
@@ -217,92 +226,96 @@ impl SideChannelTester {
         }
         
         Ok(self.analyze_timing("Dilithium Different Keys", times,
-            "Verification timing should not leak information about keys"))
+            "Verification timing should not leak information about keys")?)
     }
 
     /// Test AES encryption timing
-    fn test_aes_encryption(&self) -> Result<TimingAnalysis> {
+    fn test_aes_encryption(&self) -> CryptoResult<TimingAnalysis> {
         let key = [0u8; 32];
         let aes = AesGcm::new(&key)?;
         let plaintext = vec![0u8; 1024];
         let mut times = Vec::new();
         
-        for _ in 0..self.samples {
+        for _ in 0..self.config.iterations {
             let start = Instant::now();
-            let _ciphertext = aes.encrypt(&plaintext, &[])?;
+            let nonce = AesGcm::generate_nonce();
+            let _ciphertext = aes.encrypt(&plaintext, &nonce, None)?;
             let duration = start.elapsed();
             times.push(duration);
         }
         
         Ok(self.analyze_timing("AES Encryption", times,
-            "AES encryption should have consistent timing for same plaintext size"))
+            "AES encryption should have consistent timing for same plaintext size")?)
     }
 
     /// Test AES decryption timing
-    fn test_aes_decryption(&self) -> Result<TimingAnalysis> {
+    fn test_aes_decryption(&self) -> CryptoResult<TimingAnalysis> {
         let key = [0u8; 32];
         let aes = AesGcm::new(&key)?;
         let plaintext = vec![0u8; 1024];
-        let ciphertext = aes.encrypt(&plaintext, &[])?;
+        let nonce = AesGcm::generate_nonce();
+        let ciphertext = aes.encrypt(&plaintext, &nonce, None)?;
         let mut times = Vec::new();
         
-        for _ in 0..self.samples {
+        for _ in 0..self.config.iterations {
             let start = Instant::now();
-            let _decrypted = aes.decrypt(&ciphertext, &[])?;
+            let _decrypted = aes.decrypt(&ciphertext, &nonce, None)?;
             let duration = start.elapsed();
             times.push(duration);
         }
         
         Ok(self.analyze_timing("AES Decryption", times,
-            "AES decryption should have consistent timing"))
+            "AES decryption should have consistent timing")?)
     }
 
     /// Test AES timing with different keys
-    fn test_aes_timing_with_different_keys(&self) -> Result<TimingAnalysis> {
+    fn test_aes_timing_with_different_keys(&self) -> CryptoResult<TimingAnalysis> {
         let plaintext = vec![0u8; 1024];
         let mut times = Vec::new();
         
-        for i in 0..self.samples {
+        for i in 0..self.config.iterations {
             let mut key = [0u8; 32];
             key[0] = (i % 256) as u8;
             let aes = AesGcm::new(&key)?;
             
             let start = Instant::now();
-            let _ciphertext = aes.encrypt(&plaintext, &[])?;
+            let nonce = AesGcm::generate_nonce();
+            let _ciphertext = aes.encrypt(&plaintext, &nonce, None)?;
             let duration = start.elapsed();
             times.push(duration);
         }
         
         Ok(self.analyze_timing("AES Different Keys", times,
-            "AES timing should not depend on key values"))
+            "AES timing should not depend on key values")?)
     }
 
     /// Test AES timing with different plaintexts
-    fn test_aes_timing_with_different_plaintexts(&self) -> Result<TimingAnalysis> {
+    fn test_aes_timing_with_different_plaintexts(&self) -> CryptoResult<TimingAnalysis> {
         let key = [0u8; 32];
         let aes = AesGcm::new(&key)?;
         let mut times = Vec::new();
         
-        for i in 0..self.samples {
+        for i in 0..self.config.iterations {
             let mut plaintext = vec![0u8; 1024];
             plaintext[0] = (i % 256) as u8;
             
             let start = Instant::now();
-            let _ciphertext = aes.encrypt(&plaintext, &[])?;
+            let nonce = AesGcm::generate_nonce();
+            let _ciphertext = aes.encrypt(&plaintext, &nonce, None)?;
             let duration = start.elapsed();
             times.push(duration);
         }
         
         Ok(self.analyze_timing("AES Different Plaintexts", times,
-            "AES timing should not depend on plaintext content"))
+            "AES timing should not depend on plaintext content")?)
     }
 
     /// Test memory access patterns
-    fn test_memory_access_patterns(&self) -> Result<TimingAnalysis> {
+    fn test_memory_access_patterns(&self) -> CryptoResult<TimingAnalysis> {
         let mut times = Vec::new();
         let data = vec![0u8; 4096]; // One page
         
-        for _ in 0..self.samples {
+        for _ in 0..self.config.iterations {
             let start = Instant::now();
             
             // Simulate memory access pattern that might leak information
@@ -319,15 +332,15 @@ impl SideChannelTester {
         }
         
         Ok(self.analyze_timing("Memory Access Patterns", times,
-            "Memory access should have consistent patterns"))
+            "Memory access should have consistent patterns")?)
     }
 
     /// Test cache timing attacks
-    fn test_cache_timing_attacks(&self) -> Result<TimingAnalysis> {
+    fn test_cache_timing_attacks(&self) -> CryptoResult<TimingAnalysis> {
         let mut times = Vec::new();
         let lookup_table = vec![0u8; 256];
         
-        for i in 0..self.samples {
+        for i in 0..self.config.iterations {
             let index = i % 256;
             
             let start = Instant::now();
@@ -340,11 +353,11 @@ impl SideChannelTester {
         }
         
         Ok(self.analyze_timing("Cache Timing", times,
-            "Table lookups should be resistant to cache timing attacks"))
+            "Table lookups should be resistant to cache timing attacks")?)
     }
 
     /// Analyze timing measurements
-    fn analyze_timing(&self, test_name: &str, times: Vec<Duration>, description: &str) -> TimingAnalysis {
+    fn analyze_timing(&self, test_name: &str, times: Vec<Duration>, description: &str) -> CryptoResult<TimingAnalysis> {
         let times_nanos: Vec<u64> = times.iter().map(|d| d.as_nanos() as u64).collect();
         
         let mean = times_nanos.iter().sum::<u64>() as f64 / times_nanos.len() as f64;
@@ -361,7 +374,7 @@ impl SideChannelTester {
         let coefficient_of_variation = if mean > 0.0 { std_dev / mean } else { 0.0 };
         
         // Determine if there's a potential vulnerability
-        let potential_vulnerability = coefficient_of_variation > self.threshold;
+        let potential_vulnerability = coefficient_of_variation > 0.1;
         
         let vulnerability_description = if potential_vulnerability {
             format!("High timing variation detected (CV: {:.4}). {}", 
@@ -370,16 +383,7 @@ impl SideChannelTester {
             format!("Timing appears consistent (CV: {:.4})", coefficient_of_variation)
         };
 
-        if self.verbose {
-            println!("Test: {}", test_name);
-            println!("  Mean: {:?}", mean_time);
-            println!("  Std Dev: {:?}", std_deviation);
-            println!("  CV: {:.4}", coefficient_of_variation);
-            println!("  Vulnerable: {}", potential_vulnerability);
-            println!();
-        }
-        
-        TimingAnalysis {
+        Ok(TimingAnalysis {
             test_name: test_name.to_string(),
             mean_time,
             std_deviation,
@@ -388,7 +392,7 @@ impl SideChannelTester {
             coefficient_of_variation,
             potential_vulnerability,
             vulnerability_description,
-        }
+        })
     }
 
     /// Calculate overall security score
@@ -444,18 +448,18 @@ impl SideChannelTester {
     }
 
     /// Export results to JSON
-    pub fn export_results(results: &SideChannelResults, filename: &str) -> Result<()> {
+    pub fn export_results(results: &SideChannelResults, filename: &str) -> CryptoResult<()> {
         use std::fs::File;
         use std::io::Write;
         
         let json = serde_json::to_string_pretty(results)
-            .map_err(|e| crate::error::Error::SerializationError(e.to_string()))?;
+            .map_err(|e| CryptoError::SerializationError(e.to_string()))?;
         
         let mut file = File::create(filename)
-            .map_err(|e| crate::error::Error::IoError(e.to_string()))?;
+            .map_err(|e| CryptoError::IoError(e.to_string()))?;
         
         file.write_all(json.as_bytes())
-            .map_err(|e| crate::error::Error::IoError(e.to_string()))?;
+            .map_err(|e| CryptoError::IoError(e.to_string()))?;
         
         Ok(())
     }
@@ -506,11 +510,10 @@ mod tests {
 
     #[test]
     fn test_side_channel_basic() {
-        let tester = SideChannelTester::new(100, 0.1, false);
+        let tester = SideChannelTester::new(TestConfig { iterations: 100 });
         let results = tester.run_all_tests().expect("Side-channel test failed");
         
-        assert!(!results.tests.is_empty());
-        assert!(results.overall_score >= 0.0 && results.overall_score <= 100.0);
+        assert!(results.passed);
     }
 
     #[test]
@@ -522,10 +525,16 @@ mod tests {
             Duration::from_nanos(1005),
         ];
         
-        let tester = SideChannelTester::new(100, 0.1, false);
-        let analysis = tester.analyze_timing("Test", times, "Test description");
+        let tester = SideChannelTester::new(TestConfig { iterations: 100 });
+        let analysis = tester.analyze_timing("Test", times, "Test description").expect("Timing analysis failed");
         
         assert_eq!(analysis.test_name, "Test");
         assert!(analysis.coefficient_of_variation >= 0.0);
     }
+}
+
+pub fn generate_report(results: &SideChannelResults) -> CryptoResult<String> {
+    serde_json::to_string_pretty(results).map_err(|e| {
+        CryptoError::SerializationError(e.to_string())
+    })
 } 

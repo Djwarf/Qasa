@@ -65,7 +65,7 @@ fn ensure_key_directory(dir: Option<&Path>) -> Result<PathBuf, CryptoError> {
 
     if !path.exists() {
         fs::create_dir_all(&path).map_err(|e| {
-            CryptoError::KeyManagementError(format!("Failed to create key directory: {}", e))
+            CryptoError::key_management_error("operation", &format!("Failed to create key directory: {}", e), 4001)
         })?;
     }
 
@@ -145,11 +145,11 @@ pub fn store_kyber_keypair(
     // Write to file
     let file_path = key_directory.join(format!("{}.kyber.key", key_id));
     let mut file = File::create(&file_path).map_err(|e| {
-        CryptoError::KeyManagementError(format!("Failed to create key file: {}", e))
+        CryptoError::key_management_error("operation", &format!("Failed to create key file: {}", e), 4001)
     })?;
     
     file.write_all(&serialized).map_err(|e| {
-        CryptoError::KeyManagementError(format!("Failed to write key file: {}", e))
+        CryptoError::key_management_error("operation", &format!("Failed to write key file: {}", e), 4001)
     })?;
     
     Ok(key_id)
@@ -183,12 +183,12 @@ pub fn load_kyber_keypair(
     
     // Read the encrypted key file
     let mut file = File::open(&file_path).map_err(|e| {
-        CryptoError::KeyManagementError(format!("Failed to open key file: {}", e))
+        CryptoError::key_management_error("operation", &format!("Failed to open key file: {}", e), 4001)
     })?;
     
     let mut encrypted_data = Vec::new();
     file.read_to_end(&mut encrypted_data).map_err(|e| {
-        CryptoError::KeyManagementError(format!("Failed to read key file: {}", e))
+        CryptoError::key_management_error("operation", &format!("Failed to read key file: {}", e), 4001)
     })?;
     
     // Deserialize the encrypted key structure
@@ -276,11 +276,11 @@ pub fn store_dilithium_keypair(
     // Write to file
     let file_path = key_directory.join(format!("{}.dilithium.key", key_id));
     let mut file = File::create(&file_path).map_err(|e| {
-        CryptoError::KeyManagementError(format!("Failed to create key file: {}", e))
+        CryptoError::key_management_error("operation", &format!("Failed to create key file: {}", e), 4001)
     })?;
     
     file.write_all(&serialized).map_err(|e| {
-        CryptoError::KeyManagementError(format!("Failed to write key file: {}", e))
+        CryptoError::key_management_error("operation", &format!("Failed to write key file: {}", e), 4001)
     })?;
     
     Ok(key_id)
@@ -314,12 +314,12 @@ pub fn load_dilithium_keypair(
     
     // Read the encrypted key file
     let mut file = File::open(&file_path).map_err(|e| {
-        CryptoError::KeyManagementError(format!("Failed to open key file: {}", e))
+        CryptoError::key_management_error("operation", &format!("Failed to open key file: {}", e), 4001)
     })?;
     
     let mut encrypted_data = Vec::new();
     file.read_to_end(&mut encrypted_data).map_err(|e| {
-        CryptoError::KeyManagementError(format!("Failed to read key file: {}", e))
+        CryptoError::key_management_error("operation", &format!("Failed to read key file: {}", e), 4001)
     })?;
     
     // Deserialize the encrypted key structure
@@ -358,7 +358,7 @@ pub fn list_keys() -> Result<Vec<(String, String)>, CryptoError> {
     let key_directory = ensure_key_directory(None)?;
     
     let entries = fs::read_dir(&key_directory).map_err(|e| {
-        CryptoError::KeyManagementError(format!("Failed to read key directory: {}", e))
+        CryptoError::key_management_error("operation", &format!("Failed to read key directory: {}", e), 4001)
     })?;
     
     let mut keys = Vec::new();
@@ -419,7 +419,7 @@ pub fn delete_key(key_id: &str, key_type: &str, path: Option<&str>) -> Result<()
     
     // Delete the key file
     fs::remove_file(&file_path).map_err(|e| {
-        CryptoError::KeyManagementError(format!("Failed to delete key file: {}", e))
+        CryptoError::key_management_error("operation", &format!("Failed to delete key file: {}", e), 4001)
     })?;
     
     // Also delete metadata file if it exists
@@ -517,11 +517,11 @@ pub fn export_key(
     
     // Write to file
     let mut file = File::create(export_path).map_err(|e| {
-        CryptoError::KeyManagementError(format!("Failed to create export file: {}", e))
+        CryptoError::key_management_error("operation", &format!("Failed to create export file: {}", e), 4001)
     })?;
     
     file.write_all(&serialized).map_err(|e| {
-        CryptoError::KeyManagementError(format!("Failed to write export file: {}", e))
+        CryptoError::key_management_error("operation", &format!("Failed to write export file: {}", e), 4001)
     })?;
     
     Ok(())
@@ -547,12 +547,12 @@ pub fn import_key(
 ) -> Result<(String, String), CryptoError> {
     // Read the exported key file
     let mut file = File::open(import_path).map_err(|e| {
-        CryptoError::KeyManagementError(format!("Failed to open export file: {}", e))
+        CryptoError::key_management_error("operation", &format!("Failed to open export file: {}", e), 4001)
     })?;
     
     let mut encrypted_data = Vec::new();
     file.read_to_end(&mut encrypted_data).map_err(|e| {
-        CryptoError::KeyManagementError(format!("Failed to read export file: {}", e))
+        CryptoError::key_management_error("operation", &format!("Failed to read export file: {}", e), 4001)
     })?;
     
     // Deserialize the export structure

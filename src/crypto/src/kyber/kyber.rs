@@ -36,7 +36,7 @@ use crate::utils;
 /// // The encapsulated and decapsulated secrets should match
 /// assert_eq!(shared_secret, decapsulated_secret);
 /// ```
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KyberKeyPair {
     /// Public key for encapsulation
     pub public_key: Vec<u8>,
@@ -86,7 +86,7 @@ impl Zeroize for KyberKeyPair {
 /// // A different party can use the public key to encapsulate a shared secret
 /// let (ciphertext, shared_secret) = public_key.encapsulate().unwrap();
 /// ```
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KyberPublicKey {
     /// Public key for encapsulation
     pub public_key: Vec<u8>,

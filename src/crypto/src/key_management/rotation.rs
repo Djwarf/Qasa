@@ -255,10 +255,10 @@ pub fn save_metadata(key_id: &str, key_type: &str, metadata: &KeyRotationMetadat
         .map_err(|e| CryptoError::SerializationError(format!("Failed to serialize metadata: {}", e)))?;
         
     let mut file = File::create(&path)
-        .map_err(|e| CryptoError::KeyManagementError(format!("Failed to create metadata file: {}", e)))?;
+        .map_err(|e| CryptoError::key_management_error("operation", &format!("Failed to create metadata file: {}", e), 4001))?;
         
     file.write_all(&data)
-        .map_err(|e| CryptoError::KeyManagementError(format!("Failed to write metadata: {}", e)))?;
+        .map_err(|e| CryptoError::key_management_error("operation", &format!("Failed to write metadata: {}", e), 4001))?;
         
     Ok(())
 }
@@ -275,11 +275,11 @@ pub fn load_metadata(key_id: &str, key_type: &str) -> Result<KeyRotationMetadata
     }
     
     let mut file = File::open(&path)
-        .map_err(|e| CryptoError::KeyManagementError(format!("Failed to open metadata file: {}", e)))?;
+        .map_err(|e| CryptoError::key_management_error("operation", &format!("Failed to open metadata file: {}", e), 4001))?;
         
     let mut data = Vec::new();
     file.read_to_end(&mut data)
-        .map_err(|e| CryptoError::KeyManagementError(format!("Failed to read metadata: {}", e)))?;
+        .map_err(|e| CryptoError::key_management_error("operation", &format!("Failed to read metadata: {}", e), 4001))?;
         
     let metadata = bincode::deserialize(&data)
         .map_err(|e| CryptoError::SerializationError(format!("Failed to deserialize metadata: {}", e)))?;
@@ -384,10 +384,10 @@ pub fn check_keys_for_rotation() -> Result<Vec<(String, String)>, CryptoError> {
     }
     
     let entries = fs::read_dir(&dir)
-        .map_err(|e| CryptoError::KeyManagementError(format!("Failed to read key directory: {}", e)))?;
+        .map_err(|e| CryptoError::key_management_error("operation", &format!("Failed to read key directory: {}", e), 4001))?;
     
     for entry in entries {
-        let entry = entry.map_err(|e| CryptoError::KeyManagementError(format!("Failed to read directory entry: {}", e)))?;
+        let entry = entry.map_err(|e| CryptoError::key_management_error("operation", &format!("Failed to read directory entry: {}", e), 4001))?;
         let path = entry.path();
         
         if !path.is_file() {
@@ -456,10 +456,10 @@ where
     }
     
     let entries = fs::read_dir(&dir)
-        .map_err(|e| CryptoError::KeyManagementError(format!("Failed to read key directory: {}", e)))?;
+        .map_err(|e| CryptoError::key_management_error("operation", &format!("Failed to read key directory: {}", e), 4001))?;
     
     for entry in entries {
-        let entry = entry.map_err(|e| CryptoError::KeyManagementError(format!("Failed to read directory entry: {}", e)))?;
+        let entry = entry.map_err(|e| CryptoError::key_management_error("operation", &format!("Failed to read directory entry: {}", e), 4001))?;
         let path = entry.path();
         
         if !path.is_file() {
@@ -582,10 +582,10 @@ pub fn get_all_key_ages() -> Result<Vec<(String, String, KeyAgeSummary)>, Crypto
     }
     
     let entries = fs::read_dir(&dir)
-        .map_err(|e| CryptoError::KeyManagementError(format!("Failed to read key directory: {}", e)))?;
+        .map_err(|e| CryptoError::key_management_error("operation", &format!("Failed to read key directory: {}", e), 4001))?;
     
     for entry in entries {
-        let entry = entry.map_err(|e| CryptoError::KeyManagementError(format!("Failed to read directory entry: {}", e)))?;
+        let entry = entry.map_err(|e| CryptoError::key_management_error("operation", &format!("Failed to read directory entry: {}", e), 4001))?;
         let path = entry.path();
         
         if !path.is_file() {

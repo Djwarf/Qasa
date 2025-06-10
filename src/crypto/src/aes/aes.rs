@@ -82,10 +82,11 @@ impl AesGcm {
     /// ```
     pub fn new(key: &[u8]) -> Result<Self, CryptoError> {
         if key.len() != 32 {
-            return Err(CryptoError::InvalidParameterError(format!(
-                "AES-256-GCM requires a 32-byte key, got {}",
-                key.len()
-            )));
+            return Err(CryptoError::invalid_parameter(
+                "key",
+                "32 bytes",
+                &format!("{} bytes", key.len())
+            ));
         }
 
         let key = Key::<Aes256Gcm>::from_slice(key);
@@ -173,10 +174,11 @@ impl AesGcm {
     /// ```
     pub fn encrypt(&self, plaintext: &[u8], nonce: &[u8], associated_data: Option<&[u8]>) -> Result<Vec<u8>, CryptoError> {
         if nonce.len() != 12 {
-            return Err(CryptoError::InvalidParameterError(format!(
-                "AES-GCM nonce must be 12 bytes, got {}",
-                nonce.len()
-            )));
+            return Err(CryptoError::invalid_parameter(
+                "nonce",
+                "12 bytes",
+                &format!("{} bytes", nonce.len())
+            ));
         }
 
         let nonce = Nonce::from_slice(nonce);
@@ -249,10 +251,11 @@ impl AesGcm {
     /// ```
     pub fn decrypt(&self, ciphertext: &[u8], nonce: &[u8], associated_data: Option<&[u8]>) -> Result<Vec<u8>, CryptoError> {
         if nonce.len() != 12 {
-            return Err(CryptoError::InvalidParameterError(format!(
-                "AES-GCM nonce must be 12 bytes, got {}",
-                nonce.len()
-            )));
+            return Err(CryptoError::invalid_parameter(
+                "nonce",
+                "12 bytes",
+                &format!("{} bytes", nonce.len())
+            ));
         }
 
         let nonce = Nonce::from_slice(nonce);

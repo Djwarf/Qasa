@@ -114,8 +114,10 @@ pub fn to_hex(data: &[u8]) -> String {
 /// * `Err(CryptoError)` - If the string has an odd length or contains invalid characters
 pub fn from_hex(hex: &str) -> Result<Vec<u8>, CryptoError> {
     if hex.len() % 2 != 0 {
-        return Err(CryptoError::InvalidParameterError(
-            "Hex string must have an even number of characters".to_string(),
+        return Err(CryptoError::invalid_parameter(
+            "hex_string",
+            "even number of characters",
+            &format!("{} characters", hex.len())
         ));
     }
 
@@ -123,7 +125,7 @@ pub fn from_hex(hex: &str) -> Result<Vec<u8>, CryptoError> {
     for i in (0..hex.len()).step_by(2) {
         let byte_str = &hex[i..i + 2];
         let byte = u8::from_str_radix(byte_str, 16).map_err(|_| {
-            CryptoError::InvalidParameterError(format!("Invalid hex character: {}", byte_str))
+            CryptoError::invalid_parameter("hex_character", "valid hex digit (0-9, a-f, A-F)", byte_str)
         })?;
         result.push(byte);
     }
@@ -200,8 +202,10 @@ pub fn concat_bytes(slices: &[&[u8]]) -> Vec<u8> {
 /// which is typically more efficient than a loop-based copy.
 pub fn copy_bytes(src: &[u8], dst: &mut [u8]) -> Result<(), CryptoError> {
     if dst.len() < src.len() {
-        return Err(CryptoError::InvalidParameterError(
-            "Destination buffer too small".to_string(),
+        return Err(CryptoError::invalid_parameter(
+            "destination_buffer",
+            &format!("{} bytes", src.len()),
+            &format!("{} bytes", dst.len())
         ));
     }
 

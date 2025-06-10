@@ -38,6 +38,15 @@ pub mod ffi;
 /// Secure memory handling utilities
 pub mod secure_memory;
 
+/// SIMD acceleration framework
+pub mod simd;
+
+/// High-level protocol implementations
+pub mod protocols;
+
+/// Security framework including constant-time verification
+pub mod security;
+
 // Re-export main types for convenience
 pub use dilithium::DilithiumKeyPair;
 pub use dilithium::DilithiumPublicKey;
@@ -218,8 +227,10 @@ pub mod prelude {
         )?;
         
         if !verification_result {
-            return Err(crate::CryptoError::SignatureVerificationError(
-                "Message signature verification failed".to_string(),
+            return Err(crate::CryptoError::dilithium_error(
+                "signature_verification",
+                "Message signature verification failed",
+                crate::error::error_codes::DILITHIUM_VERIFICATION_FAILED
             ));
         }
         
@@ -549,8 +560,10 @@ pub fn decrypt_and_verify_message(
     let is_valid = verify_message(&to_verify, signature, sender_verify_key)?;
     
     if !is_valid {
-        return Err(CryptoError::SignatureVerificationError(
-            "Signature verification failed".to_string(),
+        return Err(CryptoError::dilithium_error(
+            "signature_verification",
+            "Signature verification failed",
+            crate::error::error_codes::DILITHIUM_VERIFICATION_FAILED
         ));
     }
     

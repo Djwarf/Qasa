@@ -54,6 +54,7 @@ chrono = { version = "0.4.41", features = ["serde"] }
 [dev-dependencies]
 criterion = "0.5.1"
 tempfile = "3.8.0"
+proptest = "1.4.0"
 
 [[bench]]
 name = "crypto_benchmarks"
@@ -72,15 +73,21 @@ name = "oqs_correct_api"
 doc-scrape-examples = true
 
 [features]
-default = []
+default = ["simd"]
 # Enable optimized implementations for constrained environments
 lean = []
 # Enable SIMD optimizations when available  
 simd = []
 # Enable hardware acceleration when available
-hardware-acceleration = []
+hardware-acceleration = ["simd"]
 # Enable additional debugging and profiling features
 debug = []
+# Enable constant-time verification testing
+constant-time-testing = []
+# Enable formal verification support
+formal-verification = []
+# Enable security auditing features
+security-audit = []
 
 [package.metadata.docs.rs]
 # Enable all features for documentation generation
