@@ -5,14 +5,7 @@ All notable changes to the QaSa Cryptography Module will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-### Added
-- Additional side-channel resistance testing
-- Enhanced fuzzing for input validation
-- Formal verification of critical security properties
-
-## [1.0.0] - 2024-01-XX
+## [0.0.1] - 2025-06-10
 
 ### Added
 
@@ -142,44 +135,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Optimized Mode**: Reduced memory usage (~1MB peak) with maintained security
 - **Lean Mode**: Minimal footprint (~512KB peak) for constrained environments
 
-## [0.9.0] - 2023-12-XX - Beta Release
 
-### Added
-- Initial implementation of all post-quantum algorithms
-- Basic key management functionality
-- Security framework and testing infrastructure
-- Performance optimization framework
-
-### Security
-- Initial security review conducted
-- Constant-time operations implemented
-- Basic side-channel protection measures
-
-### Performance
-- Algorithm implementations optimized for performance
-- Memory usage profiling and initial optimizations
-- Benchmark suite development
-
-## [0.5.0] - 2023-11-XX - Alpha Release
-
-### Added
-- CRYSTALS-Kyber key encapsulation mechanism
-- CRYSTALS-Dilithium digital signatures
-- Basic AES-GCM symmetric encryption
-- Initial Rust project structure
-- Development tooling and CI/CD setup
-
-### Security
-- Basic cryptographic implementations
-- Initial security testing framework
-
-## [0.1.0] - 2023-10-XX - Initial Development
-
-### Added
-- Project init
-- Research and algorithm selection
-- Development environment setup
-- Initial cryptographic bindings
 
 ---
 
@@ -218,7 +174,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Optimization**: Advanced performance and memory optimizations
 - **Security**: Enhanced side-channel resistance and formal verification
 
-For support, feature requests, or bug reports, please visit our [GitHub repository](https://github.com/djwarf/qasa).
+For support, feature requests, or bug reports, please visit our [GitHub repository](https://github.com/Djwarf/Qasa).
 
 For security issues, please email djwarfqasa@proton.me
 
