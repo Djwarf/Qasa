@@ -302,12 +302,10 @@ impl ConstantTime for Vec<u8> {
         
         a.iter()
             .zip(b.iter())
-            .map(|(&a_byte, &b_byte)| u8::conditional_select(&a_byte, &b_byte, choice))
+            .map(|(&a_byte, &b_byte)| u8::conditional_select(&b_byte, &a_byte, choice))
             .collect::<Vec<u8>>()
     }
 }
-
-
 
 /// Macro for easy constant-time testing
 #[macro_export]

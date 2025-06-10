@@ -453,7 +453,8 @@ mod tests {
         let poly = SimdPolynomial::new(coeffs.clone());
         
         assert_eq!(poly.coefficients(), &coeffs);
-        assert!(poly.vector_width >= 1);
+        let perf_info = poly.performance_info();
+        assert!(perf_info.vector_width >= 1);
     }
 
     #[test]

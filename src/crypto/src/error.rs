@@ -483,7 +483,7 @@ mod tests {
     
     #[test]
     fn test_error_code_generation() {
-        let error = CryptoError::kyber_error("key_generation", "RNG failed", error_codes::KYBER_KEY_GENERATION_FAILED, error_codes::KYBER_KEY_GENERATION_FAILED);
+        let error = CryptoError::kyber_error("key_generation", "RNG failed", error_codes::KYBER_KEY_GENERATION_FAILED);
         assert_eq!(error.error_code(), error_codes::KYBER_KEY_GENERATION_FAILED);
     }
     
@@ -496,7 +496,7 @@ mod tests {
     
     #[test]
     fn test_technical_details() {
-        let error = CryptoError::dilithium_error("signing", "Invalid key format", error_codes::DILITHIUM_SIGNING_FAILED, error_codes::DILITHIUM_SIGNING_FAILED);
+        let error = CryptoError::dilithium_error("signing", "Invalid key format", error_codes::DILITHIUM_SIGNING_FAILED);
         let details = error.technical_details();
         assert!(details.contains_key("error_code"));
         assert!(details.contains_key("operation"));
