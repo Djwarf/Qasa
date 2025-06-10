@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use qasa_crypto::{
+use qasa::{
     aes,
     dilithium::{self, DilithiumKeyPair, DilithiumVariant},
     kyber::{KyberKeyPair, KyberVariant},

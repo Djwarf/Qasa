@@ -1,4 +1,4 @@
-use qasa_crypto::{
+use qasa::{
     dilithium::{DilithiumKeyPair, DilithiumVariant},
     utils,
 };

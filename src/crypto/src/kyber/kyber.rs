@@ -22,7 +22,7 @@ use crate::utils;
 /// # Examples
 ///
 /// ```
-/// use qasa_crypto::kyber::{KyberKeyPair, KyberVariant};
+/// use qasa::kyber::{KyberKeyPair, KyberVariant};
 ///
 /// // Generate a new Kyber-768 key pair
 /// let key_pair = KyberKeyPair::generate(KyberVariant::Kyber768).unwrap();
@@ -75,7 +75,7 @@ impl Zeroize for KyberKeyPair {
 /// # Examples
 ///
 /// ```
-/// use qasa_crypto::kyber::{KyberKeyPair, KyberVariant};
+/// use qasa::kyber::{KyberKeyPair, KyberVariant};
 ///
 /// // Generate a full key pair
 /// let key_pair = KyberKeyPair::generate(KyberVariant::Kyber768).unwrap();
@@ -242,7 +242,7 @@ impl KyberKeyPair {
     /// # Examples
     ///
     /// ```
-    /// use qasa_crypto::kyber::{KyberKeyPair, KyberVariant};
+    /// use qasa::kyber::{KyberKeyPair, KyberVariant};
     ///
     /// // Generate a Kyber-768 key pair (NIST Level 3 security)
     /// let key_pair = KyberKeyPair::generate(KyberVariant::Kyber768).unwrap();
@@ -286,7 +286,7 @@ impl KyberKeyPair {
     /// # Examples
     ///
     /// ```
-    /// use qasa_crypto::kyber::{KyberKeyPair, KyberVariant};
+    /// use qasa::kyber::{KyberKeyPair, KyberVariant};
     ///
     /// // Generate a key pair
     /// let key_pair = KyberKeyPair::generate(KyberVariant::Kyber768).unwrap();
@@ -334,7 +334,7 @@ impl KyberKeyPair {
     /// # Examples
     ///
     /// ```
-    /// use qasa_crypto::kyber::{KyberKeyPair, KyberVariant};
+    /// use qasa::kyber::{KyberKeyPair, KyberVariant};
     ///
     /// // Generate a key pair
     /// let key_pair = KyberKeyPair::generate(KyberVariant::Kyber768).unwrap();
@@ -378,7 +378,7 @@ impl KyberKeyPair {
     /// # Examples
     ///
     /// ```
-    /// use qasa_crypto::kyber::{KyberKeyPair, KyberVariant};
+    /// use qasa::kyber::{KyberKeyPair, KyberVariant};
     ///
     /// // Generate a key pair
     /// let key_pair = KyberKeyPair::generate(KyberVariant::Kyber768).unwrap();
@@ -411,7 +411,7 @@ impl KyberKeyPair {
     /// # Examples
     ///
     /// ```
-    /// use qasa_crypto::kyber::{KyberKeyPair, KyberVariant};
+    /// use qasa::kyber::{KyberKeyPair, KyberVariant};
     ///
     /// // Generate a key pair
     /// let key_pair = KyberKeyPair::generate(KyberVariant::Kyber768).unwrap();

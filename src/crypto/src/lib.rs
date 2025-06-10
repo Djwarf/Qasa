@@ -63,7 +63,7 @@ pub use kyber::KyberVariant;
 /// # Example
 ///
 /// ```
-/// use qasa_crypto::prelude::*;
+/// use qasa::prelude::*;
 ///
 /// fn main() -> Result<(), CryptoError> {
 ///     // Initialize the cryptography module

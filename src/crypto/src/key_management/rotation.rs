@@ -61,7 +61,7 @@ impl RotationPolicy {
     /// # Examples
     ///
     /// ```
-    /// use qasa_crypto::key_management::RotationPolicy;
+    /// use qasa::key_management::RotationPolicy;
     ///
     /// // Create a policy that rotates keys every 30 days
     /// let policy = RotationPolicy::new(30);
@@ -102,7 +102,7 @@ impl RotationPolicy {
     /// # Examples
     ///
     /// ```
-    /// use qasa_crypto::key_management::RotationPolicy;
+    /// use qasa::key_management::RotationPolicy;
     ///
     /// let policy = RotationPolicy::high_security();
     /// assert_eq!(policy.rotation_interval_days, 30); // Monthly rotation
@@ -130,7 +130,7 @@ impl RotationPolicy {
     /// # Examples
     ///
     /// ```
-    /// use qasa_crypto::key_management::RotationPolicy;
+    /// use qasa::key_management::RotationPolicy;
     ///
     /// let policy = RotationPolicy::standard_security();
     /// assert_eq!(policy.rotation_interval_days, 90); // Quarterly rotation

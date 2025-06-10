@@ -4,16 +4,16 @@
 
 use tempfile::tempdir;
 
-use qasa_crypto::aes;
-use qasa_crypto::key_management::{
+use qasa::aes;
+use qasa::key_management::{
     store_kyber_keypair, load_kyber_keypair,
     store_dilithium_keypair, load_dilithium_keypair, rotate_kyber_keypair,
     rotate_dilithium_keypair, delete_key, export_key, import_key,
     RotationPolicy, KeyRotationMetadata, rotation
 };
-use qasa_crypto::kyber::{KyberKeyPair, KyberVariant};
-use qasa_crypto::dilithium::{DilithiumKeyPair, DilithiumVariant};
-use qasa_crypto::secure_memory::with_secure_scope;
+use qasa::kyber::{KyberKeyPair, KyberVariant};
+use qasa::dilithium::{DilithiumKeyPair, DilithiumVariant};
+use qasa::secure_memory::with_secure_scope;
 
 // Helper function to setup a temporary directory for key storage
 fn setup_temp_dir() -> tempfile::TempDir {
@@ -476,7 +476,7 @@ fn test_automatic_key_rotation() {
         .expect("Failed to save test metadata for key 2");
     
     // 5. Run automatic key rotation with policy to rotate keys older than 90 days
-    let rotated_keys = qasa_crypto::key_management::auto_rotate_keys(|_key_id| {
+            let rotated_keys = qasa::key_management::auto_rotate_keys(|_key_id| {
         password.to_string()
     }, Some(temp_path), RotationPolicy {
         rotation_interval_days: 90,

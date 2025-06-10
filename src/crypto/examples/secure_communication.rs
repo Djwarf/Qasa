@@ -1,4 +1,4 @@
-use qasa_crypto::{
+use qasa::{
     aes,
     kyber::{KyberKeyPair, KyberVariant},
 };
@@ -52,7 +52,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  Original message: \"{}\"", message);
 
     // Use the shared secret to encrypt the message with AES-GCM
-    let associated_data = b"QaSa-Crypto-v1"; // Some additional authenticated data
+    let associated_data = b"QaSa-v1"; // Some additional authenticated data
     let (encrypted_message, nonce) = aes::encrypt(
         message.as_bytes(),
         &mary_shared_secret,

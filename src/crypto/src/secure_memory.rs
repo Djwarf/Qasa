@@ -32,7 +32,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 /// # Example
 ///
 /// ```
-/// use qasa_crypto::secure_memory::SecureBuffer;
+/// use qasa::secure_memory::SecureBuffer;
 ///
 /// // Create a secure buffer for a sensitive key
 /// let key = SecureBuffer::new(vec![1, 2, 3, 4, 5]);
@@ -114,7 +114,7 @@ impl<T: Zeroize> DerefMut for SecureBuffer<T> {
 /// # Example
 ///
 /// ```
-/// use qasa_crypto::secure_memory::SecureBytes;
+/// use qasa::secure_memory::SecureBytes;
 ///
 /// // Store a sensitive key in secure memory
 /// let mut key = SecureBytes::new(&[0x01, 0x02, 0x03, 0x04]);
@@ -298,7 +298,7 @@ impl AsMut<[u8]> for SecureBytes {
 /// # Example
 /// 
 /// ```
-/// use qasa_crypto::secure_memory::with_secure_scope;
+/// use qasa::secure_memory::with_secure_scope;
 /// 
 /// fn handle_sensitive_data() {
 ///     let mut key = [0u8; 32];

@@ -5,7 +5,7 @@
 
 set -e
 
-echo "🧹 Cleaning QaSa Cryptography Module..."
+echo "Cleaning QaSa Cryptography Module..."
 
 # Remove build artifacts
 echo "Removing build artifacts..."
@@ -41,7 +41,7 @@ cd ../..
 echo "Removing empty directories..."
 find . -type d -empty -not -path "./.git/*" -delete 2>/dev/null || true
 
-echo "✅ Cleanup complete!"
+echo "Cleanup complete!"
 echo ""
 echo "To rebuild the crypto module:"
 echo "  1. cd src && go mod tidy"

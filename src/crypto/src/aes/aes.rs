@@ -22,7 +22,7 @@ use crate::error::CryptoError;
 /// # Examples
 ///
 /// ```
-/// use qasa_crypto::aes::AesGcm;
+/// use qasa::aes::AesGcm;
 /// 
 /// // Create a new AES-GCM cipher with a 32-byte key
 /// let key = [0x42; 32];
@@ -74,7 +74,7 @@ impl AesGcm {
     /// # Examples
     ///
     /// ```
-    /// use qasa_crypto::aes::AesGcm;
+    /// use qasa::aes::AesGcm;
     /// 
     /// // Create a new AES-GCM cipher with a 32-byte key
     /// let key = [0x42; 32];
@@ -114,7 +114,7 @@ impl AesGcm {
     /// # Examples
     ///
     /// ```
-    /// use qasa_crypto::aes::AesGcm;
+    /// use qasa::aes::AesGcm;
     /// 
     /// // Generate a random nonce
     /// let nonce = AesGcm::generate_nonce();
@@ -156,7 +156,7 @@ impl AesGcm {
     /// # Examples
     ///
     /// ```
-    /// use qasa_crypto::aes::AesGcm;
+    /// use qasa::aes::AesGcm;
     /// 
     /// // Create a cipher and generate a nonce
     /// let key = [0x42; 32];
@@ -225,7 +225,7 @@ impl AesGcm {
     /// # Examples
     ///
     /// ```
-    /// use qasa_crypto::aes::AesGcm;
+    /// use qasa::aes::AesGcm;
     /// 
     /// // Create a cipher and generate a nonce
     /// let key = [0x42; 32];
@@ -298,7 +298,7 @@ impl AesGcm {
 /// # Examples
 ///
 /// ```
-/// use qasa_crypto::aes::encrypt;
+/// use qasa::aes::encrypt;
 /// 
 /// // Encrypt a message
 /// let key = [0x42; 32];
@@ -343,7 +343,7 @@ pub fn encrypt(plaintext: &[u8], key: &[u8], associated_data: Option<&[u8]>) -> 
 /// # Examples
 ///
 /// ```
-/// use qasa_crypto::aes::{encrypt, decrypt};
+/// use qasa::aes::{encrypt, decrypt};
 /// 
 /// // Encrypt a message
 /// let key = [0x42; 32];

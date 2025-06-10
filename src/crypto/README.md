@@ -1,19 +1,19 @@
 # QaSa Crypto
 
-[![Crates.io](https://img.shields.io/crates/v/qasa-crypto.svg)](https://crates.io/crates/qasa-crypto)
-[![Documentation](https://docs.rs/qasa-crypto/badge.svg)](https://docs.rs/qasa-crypto)
+[![Crates.io](https://img.shields.io/crates/v/qasa.svg)](https://crates.io/crates/qasa)
+[![Documentation](https://docs.rs/qasa/badge.svg)](https://github.com/Djwarf/Qasa/blob/main/Documentation.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A robust post-quantum cryptography implementation featuring NIST-selected algorithms CRYSTALS-Kyber and CRYSTALS-Dilithium for quantum-safe communications.
 
 ## Features
 
-- 🔐 **CRYSTALS-Kyber** - Quantum-resistant key encapsulation mechanism (KEM)
-- ✍️ **CRYSTALS-Dilithium** - Quantum-resistant digital signature scheme  
-- 🛡️ **AES-GCM** - Authenticated encryption with associated data
-- 🗝️ **Key Management** - Secure storage and handling of cryptographic keys
-- ⚡ **Optimisations** - Special optimisations for resource-constrained environments
-- 🔒 **Memory Safety** - Secure memory handling with automatic zeroization
+- **CRYSTALS-Kyber** - Quantum-resistant key encapsulation mechanism (KEM)
+- **CRYSTALS-Dilithium** - Quantum-resistant digital signature scheme  
+- **AES-GCM** - Authenticated encryption with associated data
+- **Key Management** - Secure storage and handling of cryptographic keys
+- **Optimisations** - Special optimisations for resource-constrained environments
+- **Memory Safety** - Secure memory handling with automatic zeroization
 
 ## Installation
 
@@ -21,7 +21,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-qasa-crypto = "0.1.0"
+qasa = "0.0.1"
 ```
 
 ## Quick Start
@@ -29,7 +29,7 @@ qasa-crypto = "0.1.0"
 ### Key Encapsulation (Kyber)
 
 ```rust
-use qasa_crypto::kyber::{Kyber768, KyberKeyPair};
+use qasa::kyber::{Kyber768, KyberKeyPair};
 
 // Generate a new key pair
 let keypair = KyberKeyPair::generate()?;
@@ -46,7 +46,7 @@ assert_eq!(shared_secret, decapsulated_secret);
 ### Digital Signatures (Dilithium)
 
 ```rust
-use qasa_crypto::dilithium::{Dilithium3, DilithiumKeyPair};
+use qasa::dilithium::{Dilithium3, DilithiumKeyPair};
 
 // Generate a new signing key pair
 let keypair = DilithiumKeyPair::generate()?;
@@ -63,7 +63,7 @@ assert!(is_valid);
 ### Symmetric Encryption (AES-GCM)
 
 ```rust
-use qasa_crypto::aes::{encrypt, decrypt};
+use qasa::aes::{encrypt, decrypt};
 
 let key = b"your-32-byte-key-here-for-aes256";
 let plaintext = b"Secret message";

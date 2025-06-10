@@ -201,7 +201,7 @@ fn derive_key_internal(
 /// # Example
 ///
 /// ```
-/// use qasa_crypto::key_management::derive_key_from_password;
+/// use qasa::key_management::derive_key_from_password;
 ///
 /// // Derive a key with default parameters and a new random salt
 /// let derived_key = derive_key_from_password("secure_user_password", None, None).unwrap();
@@ -271,7 +271,7 @@ pub fn derive_key_from_password(
 /// # Example
 ///
 /// ```
-/// use qasa_crypto::key_management::{derive_key_from_password, verify_password};
+/// use qasa::key_management::{derive_key_from_password, verify_password};
 ///
 /// // First derive a key from a password
 /// let original_key = derive_key_from_password("user_password", None, None).unwrap();
@@ -359,7 +359,7 @@ pub fn generate_salt(length: usize) -> Result<Vec<u8>, CryptoError> {
 /// # Example
 ///
 /// ```
-/// use qasa_crypto::key_management::{derive_key_from_password, change_password};
+/// use qasa::key_management::{derive_key_from_password, change_password};
 ///
 /// // First derive a key from the original password
 /// let original_key = derive_key_from_password("old_password", None, None).unwrap();

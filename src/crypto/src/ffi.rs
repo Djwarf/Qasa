@@ -57,7 +57,7 @@ unsafe fn copy_to_buffer(src: &[u8], dst: *mut u8, dst_size: usize) -> c_int {
 
 // Initialize the cryptography module
 #[no_mangle]
-pub extern "C" fn qasa_crypto_init(error_msg: *mut *mut c_char) -> c_int {
+pub extern "C" fn qasa_init(error_msg: *mut *mut c_char) -> c_int {
     let result = crate::init();
     handle_result(result, error_msg).0
 }

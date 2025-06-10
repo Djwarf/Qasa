@@ -43,8 +43,8 @@ cargo bench
 ### Key Generation
 
 ```rust
-use qasa_crypto::kyber::{Kyber768, KeyPair};
-use qasa_crypto::dilithium::{Dilithium3, SigningKeyPair};
+use qasa::kyber::{Kyber768, KeyPair};
+use qasa::dilithium::{Dilithium3, SigningKeyPair};
 
 // Generate Kyber key pair for key encapsulation
 let kyber_keypair = Kyber768::generate_keypair()?;
@@ -56,7 +56,7 @@ let dilithium_keypair = Dilithium3::generate_keypair()?;
 ### Key Encapsulation
 
 ```rust
-use qasa_crypto::kyber::Kyber768;
+use qasa::kyber::Kyber768;
 
 // Encapsulate a shared secret
 let (shared_secret, ciphertext) = Kyber768::encapsulate(&public_key)?;
@@ -68,7 +68,7 @@ let decapsulated_secret = Kyber768::decapsulate(&secret_key, &ciphertext)?;
 ### Digital Signatures
 
 ```rust
-use qasa_crypto::dilithium::Dilithium3;
+use qasa::dilithium::Dilithium3;
 
 // Sign a message
 let message = b"Hello, quantum-safe world!";
@@ -81,7 +81,7 @@ let is_valid = Dilithium3::verify(&public_key, message, &signature)?;
 ### Symmetric Encryption
 
 ```rust
-use qasa_crypto::aes::AesGcm256;
+use qasa::aes::AesGcm256;
 
 // Encrypt data with AES-GCM
 let key = shared_secret; // Derived from Kyber
@@ -97,7 +97,7 @@ let decrypted = AesGcm256::decrypt(&key, &ciphertext, &nonce)?;
 ### Secure Key Storage
 
 ```rust
-use qasa_crypto::key_management::{KeyStore, StorageConfig};
+use qasa::key_management::{KeyStore, StorageConfig};
 
 // Create a key store
 let config = StorageConfig::new("~/.qasa/keys");
@@ -114,7 +114,7 @@ let loaded_keypair = key_store.load_keypair("my-kyber-key", Some("password"))?;
 ### Key Rotation
 
 ```rust
-use qasa_crypto::key_management::KeyRotation;
+use qasa::key_management::KeyRotation;
 
 // Set up automatic key rotation
 let rotation_config = KeyRotation::new()

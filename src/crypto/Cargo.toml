@@ -1,13 +1,13 @@
 [package]
-name = "qasa-crypto"
-version = "0.1.0"
+name = "qasa"
+version = "0.0.1"
 edition = "2021"
 description = "Post-quantum cryptography implementation using CRYSTALS-Kyber and CRYSTALS-Dilithium for quantum-safe communications"
 authors = ["QaSa Team <qasa@example.com>"]
 license = "MIT"
 repository = "https://github.com/Djwarf/Qasa"
 homepage = "https://github.com/Djwarf/Qasa"
-documentation = "https://docs.rs/qasa-crypto"
+documentation = "https://github.com/Djwarf/Qasa/blob/main/Documentation.md"
 readme = "README.md"
 keywords = ["cryptography", "post-quantum", "kyber", "dilithium", "quantum-safe"]
 categories = ["cryptography", "algorithms", "encoding", "authentication", "network-programming"]
@@ -20,7 +20,7 @@ exclude = [
 ]
 
 [lib]
-name = "qasa_crypto"
+name = "qasa"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]

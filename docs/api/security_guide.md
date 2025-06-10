@@ -189,7 +189,7 @@ The module implements secure memory handling to protect sensitive data in memory
 For implementing secure end-to-end communication:
 
 ```rust
-use qasa_crypto::prelude::*;
+use qasa::prelude::*;
 
 // Initialize the crypto module
 init()?;
@@ -234,7 +234,7 @@ assert_eq!(&decrypted, message);
 For securely storing and loading keys:
 
 ```rust
-use qasa_crypto::prelude::*;
+use qasa::prelude::*;
 
 // Store keys with password protection
 let password = "strong_unique_password";
@@ -255,7 +255,7 @@ let new_kyber_key_id = rotate_kyber_keypair(&kyber_key_id, password)?;
 For handling sensitive data in memory:
 
 ```rust
-use qasa_crypto::prelude::*;
+use qasa::prelude::*;
 
 // Use SecureBytes for sensitive data
 let mut secret_key = SecureBytes::new(&keypair.secret_key);

@@ -161,7 +161,7 @@ Analyze memory usage with Valgrind (Linux only):
 
 ```bash
 cargo build --release
-valgrind --tool=massif target/release/qasa-crypto
+valgrind --tool=massif target/release/qasa
 ```
 
 ## Documentation
@@ -198,7 +198,7 @@ To use as a library dependency, add to `Cargo.toml`:
 
 ```toml
 [dependencies]
-qasa-crypto = { path = "./src/crypto" }
+qasa = { path = "./src/crypto" }
 ```
 
 ## Configuration
@@ -209,7 +209,7 @@ Configure runtime behavior:
 
 ```bash
 # Set log level
-export RUST_LOG=qasa_crypto=debug
+export RUST_LOG=qasa=debug
 
 # Set memory allocation strategy
 export QASA_MEMORY_STRATEGY=secure
@@ -335,13 +335,13 @@ Monitor crypto module health:
 
 ```bash
 # Check algorithm functionality
-qasa-crypto --self-test
+qasa --self-test
 
 # Verify key integrity
-qasa-crypto --verify-keys
+qasa --verify-keys
 
 # Performance baseline
-qasa-crypto --benchmark
+qasa --benchmark
 ```
 
 ### Updates
@@ -407,7 +407,7 @@ tar -czf qasa-keys-backup-$(date +%Y%m%d).tar.gz ~/.qasa/keys/
 Enable debug logging:
 
 ```bash
-export RUST_LOG=qasa_crypto=trace
+export RUST_LOG=qasa=trace
 export RUST_BACKTRACE=1
 ```
 
