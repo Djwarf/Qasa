@@ -16,7 +16,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-qasa = "0.0.2"
+qasa = "0.0.3
 ```
 
 ## Building from Source

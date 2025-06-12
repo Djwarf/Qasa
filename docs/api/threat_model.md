@@ -5,7 +5,7 @@
 This document describes the threat model for the QaSa cryptography module, which provides post-quantum cryptographic primitives for secure communication applications. Understanding the threats, attack vectors, and security boundaries is essential for properly implementing and using the module.
 
 **Last Updated:** February 2024
-**Current Version:** 0.0.2
+**Current Version:** 0.0.3
 
 ## System Context
 

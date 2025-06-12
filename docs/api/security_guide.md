@@ -5,7 +5,7 @@
 This security guide is designed to help developers understand and properly implement the security features of the QaSa cryptography module. The module provides post-quantum cryptographic protection for secure communications through a carefully selected set of cryptographic primitives and security-focused implementation details.
 
 **Last Updated:** February 2024
-**Current Version:** 0.0.2
+**Current Version:** 0.0.3
 
 ## Cryptographic Components Overview
 
