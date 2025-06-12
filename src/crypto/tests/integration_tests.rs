@@ -22,40 +22,40 @@ fn setup_temp_dir() -> tempfile::TempDir {
 #[test]
 fn test_kyber_encryption_workflow() {
     // 1. Generate Kyber key pair
-    let alice_keypair = KyberKeyPair::generate(KyberVariant::Kyber768)
-        .expect("Failed to generate Alice's Kyber key pair");
+    let mary_keypair = KyberKeyPair::generate(KyberVariant::Kyber768)
+        .expect("Failed to generate Mary's Kyber key pair");
 
-    let _bob_keypair = KyberKeyPair::generate(KyberVariant::Kyber768)
-        .expect("Failed to generate Bob's Kyber key pair");
+    let _elena_keypair = KyberKeyPair::generate(KyberVariant::Kyber768)
+        .expect("Failed to generate Elena's Kyber key pair");
 
-    // 2. Alice extracts her public key and sends it to Bob
-    let alice_public_key = alice_keypair.public_key();
+    // 2. Mary extracts her public key and sends it to Elena
+    let mary_public_key = mary_keypair.public_key();
 
-    // 3. Bob encapsulates a shared secret using Alice's public key
-    let (bob_ciphertext, bob_shared_secret) = alice_public_key
+    // 3. Elena encapsulates a shared secret using Mary's public key
+    let (elena_ciphertext, elena_shared_secret) = mary_public_key
         .encapsulate()
         .expect("Failed to encapsulate shared secret");
 
-    // 4. Bob sends ciphertext to Alice
+    // 4. Elena sends ciphertext to Mary
 
-    // 5. Alice decapsulates to get the same shared secret
-    let alice_shared_secret = alice_keypair
-        .decapsulate(&bob_ciphertext)
+    // 5. Mary decapsulates to get the same shared secret
+    let mary_shared_secret = mary_keypair
+        .decapsulate(&elena_ciphertext)
         .expect("Failed to decapsulate shared secret");
 
     // 6. Verify both parties have the same shared secret
     assert_eq!(
-        alice_shared_secret, bob_shared_secret,
-        "Alice and Bob should have the same shared secret"
+        mary_shared_secret, elena_shared_secret,
+        "Mary and Elena should have the same shared secret"
     );
 
     // 7. Use shared secret for AES encryption
-    let plaintext = b"This is a secret message from Bob to Alice";
+    let plaintext = b"This is a secret message from Elena to Mary";
     let (ciphertext, nonce) =
-        aes::encrypt(plaintext, &bob_shared_secret, None).expect("Failed to encrypt message");
+        aes::encrypt(plaintext, &elena_shared_secret, None).expect("Failed to encrypt message");
 
-    // 8. Alice decrypts the message
-    let decrypted = aes::decrypt(&ciphertext, &alice_shared_secret, &nonce, None)
+    // 8. Mary decrypts the message
+    let decrypted = aes::decrypt(&ciphertext, &mary_shared_secret, &nonce, None)
         .expect("Failed to decrypt message");
 
     // 9. Verify decryption was successful
@@ -350,92 +350,92 @@ fn test_key_export_import_workflow() {
 
 #[test]
 fn test_full_communication_workflow() {
-    // 1. Setup temporary directories for Alice and Bob
-    let alice_dir = setup_temp_dir();
-    let alice_path = alice_dir.path().to_str().unwrap();
+    // 1. Setup temporary directories for Mary and Elena
+    let mary_dir = setup_temp_dir();
+    let mary_path = mary_dir.path().to_str().unwrap();
 
-    let bob_dir = setup_temp_dir();
-    let bob_path = bob_dir.path().to_str().unwrap();
+    let elena_dir = setup_temp_dir();
+    let elena_path = elena_dir.path().to_str().unwrap();
 
-    // 2. Generate key pairs for Alice and Bob
-    let alice_kyber = KyberKeyPair::generate(KyberVariant::Kyber768)
-        .expect("Failed to generate Alice's Kyber key");
+    // 2. Generate key pairs for Mary and Elena
+    let mary_kyber = KyberKeyPair::generate(KyberVariant::Kyber768)
+        .expect("Failed to generate Mary's Kyber key");
 
-    let alice_dilithium = DilithiumKeyPair::generate(DilithiumVariant::Dilithium3)
-        .expect("Failed to generate Alice's Dilithium key");
+    let mary_dilithium = DilithiumKeyPair::generate(DilithiumVariant::Dilithium3)
+        .expect("Failed to generate Mary's Dilithium key");
 
-    let bob_kyber =
-        KyberKeyPair::generate(KyberVariant::Kyber768).expect("Failed to generate Bob's Kyber key");
+    let elena_kyber =
+        KyberKeyPair::generate(KyberVariant::Kyber768).expect("Failed to generate Elena's Kyber key");
 
-    let bob_dilithium = DilithiumKeyPair::generate(DilithiumVariant::Dilithium3)
-        .expect("Failed to generate Bob's Dilithium key");
+    let elena_dilithium = DilithiumKeyPair::generate(DilithiumVariant::Dilithium3)
+        .expect("Failed to generate Elena's Dilithium key");
 
     // 3. Store key pairs
-    let alice_password = "alice_secure_pw_123!";
-    let bob_password = "bob_secure_pw_456!";
+    let mary_password = "mary_secure_pw_123!";
+    let elena_password = "elena_secure_pw_456!";
 
-    // Store Alice's keys
-    let _alice_kyber_id = store_kyber_keypair(&alice_kyber, Some(alice_path), alice_password)
-        .expect("Failed to store Alice's Kyber key");
+    // Store Mary's keys
+    let _mary_kyber_id = store_kyber_keypair(&mary_kyber, Some(mary_path), mary_password)
+        .expect("Failed to store Mary's Kyber key");
 
-    let alice_dilithium_id =
-        store_dilithium_keypair(&alice_dilithium, Some(alice_path), alice_password)
-            .expect("Failed to store Alice's Dilithium key");
+    let mary_dilithium_id =
+        store_dilithium_keypair(&mary_dilithium, Some(mary_path), mary_password)
+            .expect("Failed to store Mary's Dilithium key");
 
-    // Store Bob's keys
-    let _bob_kyber_id = store_kyber_keypair(&bob_kyber, Some(bob_path), bob_password)
-        .expect("Failed to store Bob's Kyber key");
+    // Store Elena's keys
+    let _elena_kyber_id = store_kyber_keypair(&elena_kyber, Some(elena_path), elena_password)
+        .expect("Failed to store Elena's Kyber key");
 
-    let _bob_dilithium_id = store_dilithium_keypair(&bob_dilithium, Some(bob_path), bob_password)
-        .expect("Failed to store Bob's Dilithium key");
+    let _elena_dilithium_id = store_dilithium_keypair(&elena_dilithium, Some(elena_path), elena_password)
+        .expect("Failed to store Elena's Dilithium key");
 
-    // 4. Alice sends her public key to Bob
-    let alice_public_key = alice_kyber.public_key();
+    // 4. Mary sends her public key to Elena
+    let mary_public_key = mary_kyber.public_key();
 
-    // 5. Bob encapsulates a shared secret using Alice's public key
-    let (ciphertext, bob_shared_secret) = alice_public_key
+    // 5. Elena encapsulates a shared secret using Mary's public key
+    let (ciphertext, elena_shared_secret) = mary_public_key
         .encapsulate()
         .expect("Failed to encapsulate shared secret");
 
-    // 6. Bob sends ciphertext to Alice
+    // 6. Elena sends ciphertext to Mary
 
-    // 7. Alice decapsulates to get the same shared secret
-    let alice_shared_secret = alice_kyber
+    // 7. Mary decapsulates to get the same shared secret
+    let mary_shared_secret = mary_kyber
         .decapsulate(&ciphertext)
         .expect("Failed to decapsulate shared secret");
 
     // 8. Verify shared secrets match
     assert_eq!(
-        alice_shared_secret, bob_shared_secret,
-        "Alice and Bob should have the same shared secret"
+        mary_shared_secret, elena_shared_secret,
+        "Mary and Elena should have the same shared secret"
     );
 
-    // 9. Alice creates and signs a message for Bob
-    let message = b"Hello Bob, this is a secure message from Alice!";
+    // 9. Mary creates and signs a message for Elena
+    let message = b"Hello Elena, this is a secure message from Mary!";
 
-    // 10. Alice loads her Dilithium key for signing
-    let alice_dilithium_loaded =
-        load_dilithium_keypair(&alice_dilithium_id, alice_password, Some(alice_path))
-            .expect("Failed to load Alice's Dilithium key");
+    // 10. Mary loads her Dilithium key for signing
+    let mary_dilithium_loaded =
+        load_dilithium_keypair(&mary_dilithium_id, mary_password, Some(mary_path))
+            .expect("Failed to load Mary's Dilithium key");
 
-    // 11. Alice signs the message
-    let signature = alice_dilithium_loaded
+    // 11. Mary signs the message
+    let signature = mary_dilithium_loaded
         .sign(message)
         .expect("Failed to sign message");
 
-    // 12. Alice encrypts the message using the shared secret
+    // 12. Mary encrypts the message using the shared secret
     let (encrypted_message, nonce) =
-        aes::encrypt(message, &alice_shared_secret, None).expect("Failed to encrypt message");
+        aes::encrypt(message, &mary_shared_secret, None).expect("Failed to encrypt message");
 
-    // 13. Alice sends the encrypted message, signature, and her Dilithium public key to Bob
-    let alice_dilithium_public = alice_dilithium.public_key();
+    // 13. Mary sends the encrypted message, signature, and her Dilithium public key to Elena
+    let mary_dilithium_public = mary_dilithium.public_key();
 
-    // 14. Bob decrypts the message using his shared secret
-    let decrypted_message = aes::decrypt(&encrypted_message, &bob_shared_secret, &nonce, None)
+    // 14. Elena decrypts the message using his shared secret
+    let decrypted_message = aes::decrypt(&encrypted_message, &elena_shared_secret, &nonce, None)
         .expect("Failed to decrypt message");
 
-    // 15. Bob verifies the message signature
-    let signature_valid = alice_dilithium_public
+    // 15. Elena verifies the message signature
+    let signature_valid = mary_dilithium_public
         .verify(&decrypted_message, &signature)
         .expect("Failed to verify signature");
 

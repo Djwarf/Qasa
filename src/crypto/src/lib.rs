@@ -297,28 +297,28 @@ mod tests {
         // Initialize
         init().unwrap();
 
-        // Generate keys for Alice and Bob
-        let alice_enc_keys = KyberKeyPair::generate(KyberVariant::Kyber768).unwrap();
-        let alice_sig_keys = DilithiumKeyPair::generate(DilithiumVariant::Dilithium3).unwrap();
+        // Generate keys for Mary and Elena
+        let mary_enc_keys = KyberKeyPair::generate(KyberVariant::Kyber768).unwrap();
+        let mary_sig_keys = DilithiumKeyPair::generate(DilithiumVariant::Dilithium3).unwrap();
 
-        let bob_enc_keys = KyberKeyPair::generate(KyberVariant::Kyber768).unwrap();
-        let bob_sig_keys = DilithiumKeyPair::generate(DilithiumVariant::Dilithium3).unwrap();
+        let elena_enc_keys = KyberKeyPair::generate(KyberVariant::Kyber768).unwrap();
+        let elena_sig_keys = DilithiumKeyPair::generate(DilithiumVariant::Dilithium3).unwrap();
 
         // Extract public keys
-        let _alice_enc_pub = alice_enc_keys.public_key();
-        let alice_sig_pub = alice_sig_keys.public_key();
+        let _mary_enc_pub = mary_enc_keys.public_key();
+        let mary_sig_pub = mary_sig_keys.public_key();
 
-        let bob_enc_pub = bob_enc_keys.public_key();
-        let _bob_sig_pub = bob_sig_keys.public_key();
+        let elena_enc_pub = elena_enc_keys.public_key();
+        let _elena_sig_pub = elena_sig_keys.public_key();
 
-        // Test message from Alice to Bob
-        let message = b"Hello Bob, this is a secure message from Alice!";
+        // Test message from Mary to Elena
+        let message = b"Hello Elena, this is a secure message from Mary!";
 
-        // Alice creates a secure message for Bob
-        let secure_msg = create_secure_message(message, &bob_enc_pub, &alice_sig_keys).unwrap();
+        // Mary creates a secure message for Elena
+        let secure_msg = create_secure_message(message, &elena_enc_pub, &mary_sig_keys).unwrap();
 
-        // Bob receives and opens the message
-        let decrypted = open_secure_message(&secure_msg, &bob_enc_keys, &alice_sig_pub).unwrap();
+        // Elena receives and opens the message
+        let decrypted = open_secure_message(&secure_msg, &elena_enc_keys, &mary_sig_pub).unwrap();
 
         // Verify the message content
         assert_eq!(decrypted, message);

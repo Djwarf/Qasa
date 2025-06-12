@@ -195,35 +195,35 @@ use qasa::prelude::*;
 init()?;
 
 // [SETUP PHASE]
-// Generate keys for Alice and Bob
-let alice_enc_keys = KyberKeyPair::generate(KyberVariant::Kyber768)?;
-let alice_sig_keys = DilithiumKeyPair::generate(DilithiumVariant::Dilithium3)?;
+// Generate keys for Mary and Elena
+let mary_enc_keys = KyberKeyPair::generate(KyberVariant::Kyber768)?;
+let mary_sig_keys = DilithiumKeyPair::generate(DilithiumVariant::Dilithium3)?;
 
-let bob_enc_keys = KyberKeyPair::generate(KyberVariant::Kyber768)?;
-let bob_sig_keys = DilithiumKeyPair::generate(DilithiumVariant::Dilithium3)?;
+let elena_enc_keys = KyberKeyPair::generate(KyberVariant::Kyber768)?;
+let elena_sig_keys = DilithiumKeyPair::generate(DilithiumVariant::Dilithium3)?;
 
 // Exchange public keys (via a secure channel initially)
-let alice_enc_pub = alice_enc_keys.public_key();
-let alice_sig_pub = alice_sig_keys.public_key();
+let mary_enc_pub = mary_enc_keys.public_key();
+let mary_sig_pub = mary_sig_keys.public_key();
 
-let bob_enc_pub = bob_enc_keys.public_key();
-let bob_sig_pub = bob_sig_keys.public_key();
+let elena_enc_pub = elena_enc_keys.public_key();
+let elena_sig_pub = elena_sig_keys.public_key();
 
 // [ALICE SENDS TO BOB]
-// Create a secure message from Alice to Bob
-let message = b"Hello Bob, this is a secure message from Alice!";
+// Create a secure message from Mary to Elena
+let message = b"Hello Elena, this is a secure message from Mary!";
 let secure_message = create_secure_message(
     message, 
-    &bob_enc_pub,
-    &alice_sig_keys,
+    &elena_enc_pub,
+    &mary_sig_keys,
 )?;
 
 // [BOB RECEIVES FROM ALICE]
-// Bob opens the secure message from Alice
+// Elena opens the secure message from Mary
 let decrypted = open_secure_message(
     &secure_message,
-    &bob_enc_keys,
-    &alice_sig_pub,
+    &elena_enc_keys,
+    &mary_sig_pub,
 )?;
 
 assert_eq!(&decrypted, message);
