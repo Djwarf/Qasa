@@ -11,6 +11,13 @@ The cryptography module provides quantum-resistant cryptographic primitives for:
 - Symmetric encryption (using AES-GCM)
 - Key management
 
+## Installation
+
+```toml
+[dependencies]
+qasa = "0.0.2"
+```
+
 ## Core Types
 
 ### `KyberKeyPair`
@@ -74,14 +81,16 @@ let key_pair = KyberKeyPair::generate(KyberVariant::Kyber768)?;
 
 ```rust
 // Encapsulate a shared secret using a public key
-let (ciphertext, shared_secret) = key_pair.encapsulate()?;
+let (ciphertext, shared_secret) = key_pair.public_key()
+    .encapsulate()?;
 ```
 
 ### Decapsulating a Shared Secret
 
 ```rust
-// Decapsulate a shared secret using a ciphertext and the secret key
-let shared_secret = key_pair.decapsulate(&ciphertext)?;
+// Decapsulate a shared secret using a ciphertext
+let shared_secret = key_pair
+    .decapsulate(&ciphertext)?;
 ```
 
 ## Digital Signatures (Dilithium)
@@ -97,14 +106,15 @@ let key_pair = DilithiumKeyPair::generate(DilithiumVariant::Dilithium3)?;
 
 ```rust
 // Sign a message
-let signature = key_pair.sign(message.as_bytes())?;
+let signature = key_pair.sign(message)?;
 ```
 
 ### Verifying a Signature
 
 ```rust
 // Verify a signature
-let is_valid = key_pair.verify(message.as_bytes(), &signature)?;
+let is_valid = key_pair.public_key()
+    .verify(message, &signature)?;
 ```
 
 ## Symmetric Encryption (AES-GCM)
@@ -113,14 +123,14 @@ let is_valid = key_pair.verify(message.as_bytes(), &signature)?;
 
 ```rust
 // Encrypt data using AES-GCM
-let (ciphertext, nonce) = aes::encrypt(plaintext, &key, &associated_data)?;
+let (ciphertext, nonce) = aes::encrypt(plaintext, &key, Some(associated_data))?;
 ```
 
 ### Decrypting Data
 
 ```rust
 // Decrypt data using AES-GCM
-let plaintext = aes::decrypt(&ciphertext, &key, &nonce, &associated_data)?;
+let plaintext = aes::decrypt(&ciphertext, &key, &nonce, Some(associated_data))?;
 ```
 
 ## Key Management

@@ -4,7 +4,8 @@
 
 This security guide is designed to help developers understand and properly implement the security features of the QaSa cryptography module. The module provides post-quantum cryptographic protection for secure communications through a carefully selected set of cryptographic primitives and security-focused implementation details.
 
-**Last Updated:** May 12, 2025
+**Last Updated:** February 2024
+**Current Version:** 0.0.2
 
 ## Cryptographic Components Overview
 
@@ -99,25 +100,32 @@ The module implements secure memory handling to protect sensitive data in memory
    fs::write("private.key", &keypair.secret_key)?;
    
    // CORRECT: Use the secure storage functions
-   let key_id = store_kyber_keypair(&keypair, None, "strong_password")?;
+   let key_id = store_kyber_keypair(&keypair, Some(temp_path), "strong_password")?;
    ```
 
 2. **Use secure memory for sensitive operations**
    ```rust
    // WRONG: Using standard Vec for sensitive data
-   let shared_secret = decrypt_key(ciphertext, keypair)?;
+   let shared_secret = keypair.decapsulate(&ciphertext)?;
    
    // CORRECT: Using SecureBytes for sensitive data
-   let shared_secret = SecureBytes::from(decrypt_key(ciphertext, keypair)?);
+   let shared_secret = SecureBytes::new(keypair.decapsulate(&ciphertext)?);
    ```
 
 3. **Implement key rotation policies**
    ```rust
-   // Create a high security rotation policy (30 days)
-   let policy = RotationPolicy::high_security();
+   // Create a high security rotation policy
+   let policy = RotationPolicy {
+       rotation_interval_days: 30,
+       ..Default::default()
+   };
    
-   // Check if keys are due for rotation
-   let keys_to_rotate = check_keys_for_rotation()?;
+   // Check if keys need rotation
+   let rotated_keys = auto_rotate_keys(
+       |_key_id| password.to_string(),
+       Some(temp_path),
+       policy,
+   )?;
    ```
 
 ### Authentication and Integrity
@@ -125,21 +133,22 @@ The module implements secure memory handling to protect sensitive data in memory
 1. **Always verify signatures before processing messages**
    ```rust
    // WRONG: Decrypting without verifying
-   let plaintext = decrypt_message(&encrypted, &key, &nonce, &keypair)?;
+   let plaintext = aes::decrypt(&encrypted, &key, &nonce, None)?;
    
    // CORRECT: Verifying and decrypting
-   let plaintext = decrypt_and_verify_message(
-       &encrypted, &key, &nonce, &signature, &keypair, &sender_key
-   )?;
+   let is_valid = public_key.verify(message, &signature)?;
+   if is_valid {
+       let plaintext = aes::decrypt(&encrypted, &key, &nonce, None)?;
+   }
    ```
 
 2. **Use AAD (Associated Authenticated Data) when relevant**
    ```rust
    // Encrypt with AAD to bind contextual data to the encryption
    let (ciphertext, nonce) = aes::encrypt(
-       &message, 
+       message, 
        &shared_secret, 
-       Some(&conversation_id)
+       Some(conversation_id.as_bytes())
    )?;
    ```
 

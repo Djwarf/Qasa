@@ -10,6 +10,15 @@ Before you begin, ensure you have the following installed:
 - Git
 - A C compiler (GCC or Clang for building native dependencies)
 
+## Installation
+
+Add this to your `Cargo.toml`:
+
+```toml
+[dependencies]
+qasa = "0.0.2"
+```
+
 ## Building from Source
 
 ### 1. Clone the Repository
@@ -43,53 +52,51 @@ cargo bench
 ### Key Generation
 
 ```rust
-use qasa::kyber::{Kyber768, KeyPair};
-use qasa::dilithium::{Dilithium3, SigningKeyPair};
+use qasa::kyber::{KyberKeyPair, KyberVariant};
+use qasa::dilithium::{DilithiumKeyPair, DilithiumVariant};
 
 // Generate Kyber key pair for key encapsulation
-let kyber_keypair = Kyber768::generate_keypair()?;
+let kyber_keypair = KyberKeyPair::generate(KyberVariant::Kyber768)?;
 
 // Generate Dilithium key pair for digital signatures
-let dilithium_keypair = Dilithium3::generate_keypair()?;
+let dilithium_keypair = DilithiumKeyPair::generate(DilithiumVariant::Dilithium3)?;
 ```
 
 ### Key Encapsulation
 
 ```rust
-use qasa::kyber::Kyber768;
-
 // Encapsulate a shared secret
-let (shared_secret, ciphertext) = Kyber768::encapsulate(&public_key)?;
+let (ciphertext, shared_secret) = kyber_keypair.public_key()
+    .encapsulate()?;
 
 // Decapsulate the shared secret
-let decapsulated_secret = Kyber768::decapsulate(&secret_key, &ciphertext)?;
+let decapsulated_secret = kyber_keypair
+    .decapsulate(&ciphertext)?;
 ```
 
 ### Digital Signatures
 
 ```rust
-use qasa::dilithium::Dilithium3;
-
 // Sign a message
 let message = b"Hello, quantum-safe world!";
-let signature = Dilithium3::sign(&signing_key, message)?;
+let signature = dilithium_keypair.sign(message)?;
 
 // Verify a signature
-let is_valid = Dilithium3::verify(&public_key, message, &signature)?;
+let is_valid = dilithium_keypair.public_key()
+    .verify(message, &signature)?;
 ```
 
 ### Symmetric Encryption
 
 ```rust
-use qasa::aes::AesGcm256;
+use qasa::aes;
 
 // Encrypt data with AES-GCM
-let key = shared_secret; // Derived from Kyber
 let plaintext = b"Confidential message";
-let (ciphertext, nonce) = AesGcm256::encrypt(&key, plaintext)?;
+let (ciphertext, nonce) = aes::encrypt(plaintext, &shared_secret, None)?;
 
 // Decrypt data
-let decrypted = AesGcm256::decrypt(&key, &ciphertext, &nonce)?;
+let decrypted = aes::decrypt(&ciphertext, &shared_secret, &nonce, None)?;
 ```
 
 ## Key Management

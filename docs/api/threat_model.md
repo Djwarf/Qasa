@@ -4,7 +4,8 @@
 
 This document describes the threat model for the QaSa cryptography module, which provides post-quantum cryptographic primitives for secure communication applications. Understanding the threats, attack vectors, and security boundaries is essential for properly implementing and using the module.
 
-**Last Updated:** May 12, 2025
+**Last Updated:** February 2024
+**Current Version:** 0.0.2
 
 ## System Context
 
@@ -255,7 +256,7 @@ The module assumes:
 **Mitigations:**
 - Use of post-quantum Kyber for key exchange resists quantum attacks
 - AES-256 provides adequate security margin against Grover's algorithm
-- Forward secrecy from key rotation limits impact of key compromise
+- Forward secrecy through automatic key rotation limits impact of key compromise
 
 ### Scenario 2: Adversary Accesses Key Storage
 
@@ -268,7 +269,7 @@ The module assumes:
 - Keys are never stored in plaintext
 - Keys are encrypted with password-derived keys using Argon2id
 - Strong Argon2id parameters increase resistance to brute-force attacks
-- Key rotation ensures stolen keys have limited utility
+- Automatic key rotation ensures stolen keys have limited utility
 
 ### Scenario 3: Memory Extraction Attack
 
