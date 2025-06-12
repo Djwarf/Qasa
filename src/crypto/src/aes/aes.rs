@@ -4,12 +4,12 @@ use aes_gcm::{
 };
 use std::sync::Arc;
 
-use crate::error::{CryptoError, error_codes};
+use crate::error::{error_codes, CryptoError};
 
 /// AES-256-GCM cipher for authenticated encryption
-/// 
+///
 /// This struct provides authenticated encryption with associated data (AEAD)
-/// using the AES-256-GCM algorithm. It combines encryption for confidentiality 
+/// using the AES-256-GCM algorithm. It combines encryption for confidentiality
 /// with authentication for integrity and authenticity.
 ///
 /// # Security Properties
@@ -23,19 +23,19 @@ use crate::error::{CryptoError, error_codes};
 ///
 /// ```
 /// use qasa::aes::AesGcm;
-/// 
+///
 /// // Create a new AES-GCM cipher with a 32-byte key
 /// let key = [0x42; 32];
 /// let cipher = AesGcm::new(&key).unwrap();
-/// 
+///
 /// // Generate a nonce (should be unique for each encryption)
 /// let nonce = AesGcm::generate_nonce();
-/// 
+///
 /// // Encrypt a message with optional associated data
 /// let plaintext = b"Secret message";
 /// let aad = b"Additional authenticated data";
 /// let ciphertext = cipher.encrypt(plaintext, &nonce, Some(aad)).unwrap();
-/// 
+///
 /// // Decrypt the message with the same nonce and associated data
 /// let decrypted = cipher.decrypt(&ciphertext, &nonce, Some(aad)).unwrap();
 /// assert_eq!(decrypted, plaintext);
@@ -83,7 +83,7 @@ impl AesGcm {
     ///
     /// ```
     /// use qasa::aes::AesGcm;
-    /// 
+    ///
     /// // Create a new AES-GCM cipher with a 32-byte key
     /// let key = [0x42; 32];
     /// let cipher = AesGcm::new(&key).unwrap();
@@ -93,7 +93,7 @@ impl AesGcm {
             return Err(CryptoError::invalid_parameter(
                 "key",
                 "32 bytes",
-                &format!("{} bytes", key.len())
+                &format!("{} bytes", key.len()),
             ));
         }
 
@@ -106,7 +106,7 @@ impl AesGcm {
     /// Generate a random nonce for encryption
     ///
     /// Generates a cryptographically secure random nonce (number used once)
-    /// for use with AES-GCM encryption. A unique nonce must be used for each 
+    /// for use with AES-GCM encryption. A unique nonce must be used for each
     /// encryption operation with the same key.
     ///
     /// # Returns
@@ -117,14 +117,14 @@ impl AesGcm {
     ///
     /// 1. Each nonce must be unique for a given key
     /// 2. Reusing a nonce with the same key compromises security
-    /// 3. For high-volume applications, consider using a deterministic 
+    /// 3. For high-volume applications, consider using a deterministic
     ///    nonce construction with a counter
     ///
     /// # Examples
     ///
     /// ```
     /// use qasa::aes::AesGcm;
-    /// 
+    ///
     /// // Generate a random nonce
     /// let nonce = AesGcm::generate_nonce();
     /// assert_eq!(nonce.len(), 12);
@@ -158,7 +158,7 @@ impl AesGcm {
     /// # Security Considerations
     ///
     /// 1. The nonce must be unique for each encryption with the same key
-    /// 2. Associated data can be used to authenticate context information 
+    /// 2. Associated data can be used to authenticate context information
     ///    (e.g., headers, sender/recipient info)
     /// 3. The resulting ciphertext includes the authentication tag
     ///
@@ -166,45 +166,58 @@ impl AesGcm {
     ///
     /// ```
     /// use qasa::aes::AesGcm;
-    /// 
+    ///
     /// // Create a cipher and generate a nonce
     /// let key = [0x42; 32];
     /// let cipher = AesGcm::new(&key).unwrap();
     /// let nonce = AesGcm::generate_nonce();
-    /// 
+    ///
     /// // Encrypt with associated data
     /// let plaintext = b"Secret message";
     /// let aad = b"Message metadata";
     /// let ciphertext = cipher.encrypt(plaintext, &nonce, Some(aad)).unwrap();
-    /// 
+    ///
     /// // The ciphertext will be longer than the plaintext due to the auth tag
     /// assert!(ciphertext.len() > plaintext.len());
     /// ```
-    pub fn encrypt(&self, plaintext: &[u8], nonce: &[u8], associated_data: Option<&[u8]>) -> Result<Vec<u8>, CryptoError> {
+    pub fn encrypt(
+        &self,
+        plaintext: &[u8],
+        nonce: &[u8],
+        associated_data: Option<&[u8]>,
+    ) -> Result<Vec<u8>, CryptoError> {
         if nonce.len() != 12 {
             return Err(CryptoError::invalid_parameter(
                 "nonce",
                 "12 bytes",
-                &format!("{} bytes", nonce.len())
+                &format!("{} bytes", nonce.len()),
             ));
         }
 
         let nonce = Nonce::from_slice(nonce);
-        
+
         // Create proper payload with AAD if provided
         let aad = associated_data.unwrap_or(&[]);
-        
+
         // Use Payload struct to associate AAD with the plaintext
-        let payload = Payload { msg: plaintext, aad };
-        
+        let payload = Payload {
+            msg: plaintext,
+            aad,
+        };
+
         // Encrypt using the Aead trait
-        self.cipher.encrypt(nonce, payload)
-            .map_err(|e| CryptoError::aes_error("Encryption failed", &format!("AES-GCM encryption failed: {}", e), error_codes::AES_ENCRYPTION_FAILED))
+        self.cipher.encrypt(nonce, payload).map_err(|e| {
+            CryptoError::aes_error(
+                "Encryption failed",
+                &format!("AES-GCM encryption failed: {}", e),
+                error_codes::AES_ENCRYPTION_FAILED,
+            )
+        })
     }
 
     /// Decrypt ciphertext using AES-GCM
     ///
-    /// Decrypts and authenticates the provided ciphertext using AES-256-GCM with 
+    /// Decrypts and authenticates the provided ciphertext using AES-256-GCM with
     /// the given nonce and optional associated data. This operation will fail if
     /// the ciphertext has been tampered with or if the associated data doesn't match.
     ///
@@ -236,20 +249,20 @@ impl AesGcm {
     ///
     /// ```
     /// use qasa::aes::AesGcm;
-    /// 
+    ///
     /// // Create a cipher and generate a nonce
     /// let key = [0x42; 32];
     /// let cipher = AesGcm::new(&key).unwrap();
     /// let nonce = AesGcm::generate_nonce();
-    /// 
+    ///
     /// // Encrypt and then decrypt
     /// let plaintext = b"Secret message";
     /// let aad = b"Message metadata";
     /// let ciphertext = cipher.encrypt(plaintext, &nonce, Some(aad)).unwrap();
     /// let decrypted = cipher.decrypt(&ciphertext, &nonce, Some(aad)).unwrap();
-    /// 
+    ///
     /// assert_eq!(decrypted, plaintext);
-    /// 
+    ///
     /// // Tampering with the ciphertext will cause decryption to fail
     /// let mut tampered = ciphertext.clone();
     /// if !tampered.is_empty() {
@@ -257,26 +270,39 @@ impl AesGcm {
     ///     assert!(cipher.decrypt(&tampered, &nonce, Some(aad)).is_err());
     /// }
     /// ```
-    pub fn decrypt(&self, ciphertext: &[u8], nonce: &[u8], associated_data: Option<&[u8]>) -> Result<Vec<u8>, CryptoError> {
+    pub fn decrypt(
+        &self,
+        ciphertext: &[u8],
+        nonce: &[u8],
+        associated_data: Option<&[u8]>,
+    ) -> Result<Vec<u8>, CryptoError> {
         if nonce.len() != 12 {
             return Err(CryptoError::invalid_parameter(
                 "nonce",
                 "12 bytes",
-                &format!("{} bytes", nonce.len())
+                &format!("{} bytes", nonce.len()),
             ));
         }
 
         let nonce = Nonce::from_slice(nonce);
-        
+
         // Create proper payload with AAD if provided
         let aad = associated_data.unwrap_or(&[]);
-        
+
         // Use Payload struct to authenticate AAD with the ciphertext
-        let payload = Payload { msg: ciphertext, aad };
-        
+        let payload = Payload {
+            msg: ciphertext,
+            aad,
+        };
+
         // Decrypt using the Aead trait
-        self.cipher.decrypt(nonce, payload)
-            .map_err(|e| CryptoError::aes_error("Decryption failed", &format!("AES-GCM decryption failed: {}", e), error_codes::AES_DECRYPTION_FAILED))
+        self.cipher.decrypt(nonce, payload).map_err(|e| {
+            CryptoError::aes_error(
+                "Decryption failed",
+                &format!("AES-GCM decryption failed: {}", e),
+                error_codes::AES_DECRYPTION_FAILED,
+            )
+        })
     }
 }
 
@@ -310,18 +336,22 @@ impl AesGcm {
 ///
 /// ```
 /// use qasa::aes::encrypt;
-/// 
+///
 /// // Encrypt a message
 /// let key = [0x42; 32];
 /// let message = b"Top secret information";
 /// let metadata = b"Classification: SECRET";
-/// 
+///
 /// let (ciphertext, nonce) = encrypt(message, &key, Some(metadata)).unwrap();
-/// 
+///
 /// // The ciphertext and nonce are needed for decryption
 /// // Both should be stored or transmitted securely
 /// ```
-pub fn encrypt(plaintext: &[u8], key: &[u8], associated_data: Option<&[u8]>) -> Result<(Vec<u8>, Vec<u8>), CryptoError> {
+pub fn encrypt(
+    plaintext: &[u8],
+    key: &[u8],
+    associated_data: Option<&[u8]>,
+) -> Result<(Vec<u8>, Vec<u8>), CryptoError> {
     let cipher = AesGcm::new(key)?;
     let nonce = AesGcm::generate_nonce();
     let ciphertext = cipher.encrypt(plaintext, &nonce, associated_data)?;
@@ -355,19 +385,24 @@ pub fn encrypt(plaintext: &[u8], key: &[u8], associated_data: Option<&[u8]>) -> 
 ///
 /// ```
 /// use qasa::aes::{encrypt, decrypt};
-/// 
+///
 /// // Encrypt a message
 /// let key = [0x42; 32];
 /// let message = b"Top secret information";
 /// let metadata = b"Classification: SECRET";
-/// 
+///
 /// let (ciphertext, nonce) = encrypt(message, &key, Some(metadata)).unwrap();
-/// 
+///
 /// // Decrypt the message
 /// let decrypted = decrypt(&ciphertext, &key, &nonce, Some(metadata)).unwrap();
 /// assert_eq!(decrypted, message);
 /// ```
-pub fn decrypt(ciphertext: &[u8], key: &[u8], nonce: &[u8], associated_data: Option<&[u8]>) -> Result<Vec<u8>, CryptoError> {
+pub fn decrypt(
+    ciphertext: &[u8],
+    key: &[u8],
+    nonce: &[u8],
+    associated_data: Option<&[u8]>,
+) -> Result<Vec<u8>, CryptoError> {
     let cipher = AesGcm::new(key)?;
     cipher.decrypt(ciphertext, nonce, associated_data)
 }
@@ -376,16 +411,16 @@ pub fn decrypt(ciphertext: &[u8], key: &[u8], nonce: &[u8], associated_data: Opt
 mod tests {
     use super::*;
     use crate::utils;
-    
+
     #[test]
     fn test_aes_gcm_encrypt_decrypt() {
         let key = utils::random_bytes(32).unwrap();
         let plaintext = b"Hello, world!";
         let aad = b"Additional data";
-        
+
         let (ciphertext, nonce) = encrypt(plaintext, &key, Some(aad)).unwrap();
         let decrypted = decrypt(&ciphertext, &key, &nonce, Some(aad)).unwrap();
-        
+
         assert_eq!(plaintext, decrypted.as_slice());
     }
 
@@ -396,10 +431,10 @@ mod tests {
 
         // Encrypt without associated data
         let (ciphertext, nonce) = encrypt(plaintext, &key, None).unwrap();
-        
+
         // Decrypt without associated data
         let decrypted = decrypt(&ciphertext, &key, &nonce, None).unwrap();
-        
+
         assert_eq!(decrypted, plaintext);
     }
 
@@ -465,46 +500,49 @@ mod tests {
 
         assert_eq!(decrypted, plaintext);
     }
-    
+
     #[test]
     fn test_cipher_cloning() {
         let key = utils::random_bytes(32).unwrap();
         let cipher1 = AesGcm::new(&key).unwrap();
         let cipher2 = cipher1.clone();
-        
+
         let plaintext = b"Testing cipher cloning";
         let nonce = AesGcm::generate_nonce();
-        
+
         let ciphertext1 = cipher1.encrypt(plaintext, &nonce, None).unwrap();
         let plaintext2 = cipher2.decrypt(&ciphertext1, &nonce, None).unwrap();
-        
+
         assert_eq!(plaintext, &plaintext2[..]);
     }
-    
+
     #[test]
     fn test_empty_vs_none_aad() {
         // Test behavior with empty AAD vs no AAD with the aes-gcm crate
         let key = utils::random_bytes(32).unwrap();
         let plaintext = b"Testing empty vs none AAD";
         let nonce = AesGcm::generate_nonce();
-        
+
         let cipher = AesGcm::new(&key).unwrap();
-        
+
         // Encrypt with empty AAD
         let ciphertext1 = cipher.encrypt(plaintext, &nonce, Some(&[])).unwrap();
-        
+
         // Encrypt with no AAD (None)
         let ciphertext2 = cipher.encrypt(plaintext, &nonce, None).unwrap();
-        
+
         // With the aes-gcm crate, empty AAD and None are treated the same way
         // The ciphertexts should be identical
-        assert_eq!(ciphertext1, ciphertext2, "Empty AAD and None should produce the same ciphertext");
-        
+        assert_eq!(
+            ciphertext1, ciphertext2,
+            "Empty AAD and None should produce the same ciphertext"
+        );
+
         // Verify cross-decryption works
         let decrypted1 = cipher.decrypt(&ciphertext1, &nonce, None).unwrap();
         let decrypted2 = cipher.decrypt(&ciphertext2, &nonce, Some(&[])).unwrap();
-        
+
         assert_eq!(decrypted1, plaintext);
         assert_eq!(decrypted2, plaintext);
     }
-} 
+}

@@ -5,13 +5,13 @@
  * including TLS 1.3 extensions and secure messaging protocols.
  */
 
-use std::collections::HashMap;
-use std::time::{SystemTime, Duration};
-use serde::{Serialize, Deserialize};
-use crate::error::{CryptoError, CryptoResult, error_codes};
-use crate::kyber::{KyberKeyPair, KyberPublicKey};
-use crate::dilithium::{DilithiumKeyPair, DilithiumPublicKey};
 use crate::aes;
+use crate::dilithium::{DilithiumKeyPair, DilithiumPublicKey};
+use crate::error::{error_codes, CryptoError, CryptoResult};
+use crate::kyber::{KyberKeyPair, KyberPublicKey};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::time::{Duration, SystemTime};
 
 /// Session identifier for tracking communication sessions
 pub type SessionId = [u8; 32];
@@ -20,20 +20,20 @@ pub type SessionId = [u8; 32];
 pub type ContactId = String;
 
 /// Quantum-Safe TLS 1.3 Implementation
-/// 
+///
 /// This implementation extends TLS 1.3 with post-quantum key exchange and authentication.
 /// It provides hybrid security by combining classical and post-quantum algorithms.
 pub struct QuantumSafeTLS {
     /// Long-term identity keys for authentication
     kyber_keypair: KyberKeyPair,
     dilithium_keypair: DilithiumKeyPair,
-    
+
     /// Active session keys
     session_keys: HashMap<SessionId, SessionKey>,
-    
+
     /// Protocol configuration
     config: TlsConfig,
-    
+
     /// Current state of the TLS handshake
     state: TlsState,
 }
@@ -137,8 +137,9 @@ impl QuantumSafeTLS {
     /// Create a new quantum-safe TLS instance
     pub fn new(config: TlsConfig) -> CryptoResult<Self> {
         let kyber_keypair = KyberKeyPair::generate(crate::kyber::KyberVariant::Kyber768)?;
-        let dilithium_keypair = DilithiumKeyPair::generate(crate::dilithium::DilithiumVariant::Dilithium3)?;
-        
+        let dilithium_keypair =
+            DilithiumKeyPair::generate(crate::dilithium::DilithiumVariant::Dilithium3)?;
+
         Ok(Self {
             kyber_keypair,
             dilithium_keypair,
@@ -147,7 +148,7 @@ impl QuantumSafeTLS {
             state: TlsState::Initial,
         })
     }
-    
+
     /// Initiate TLS handshake as client
     pub fn client_hello(&mut self) -> CryptoResult<ClientHello> {
         if self.state != TlsState::Initial {
@@ -158,12 +159,11 @@ impl QuantumSafeTLS {
                 error_code: error_codes::PROTOCOL_STATE_INVALID,
             });
         }
-        
+
         let random = self.generate_random_bytes()?;
-        let kyber_public_key = bincode::serialize(&self.kyber_keypair.public_key()).map_err(|e| {
-            CryptoError::SerializationError(e.to_string())
-        })?;
-        
+        let kyber_public_key = bincode::serialize(&self.kyber_keypair.public_key())
+            .map_err(|e| CryptoError::SerializationError(e.to_string()))?;
+
         let client_hello = ClientHello {
             version: 0x0304, // TLS 1.3
             random,
@@ -171,11 +171,11 @@ impl QuantumSafeTLS {
             kyber_public_key,
             extensions: vec![],
         };
-        
+
         self.state = TlsState::ClientHelloSent;
         Ok(client_hello)
     }
-    
+
     /// Process client hello and generate server response
     pub fn server_hello(&mut self, client_hello: &ClientHello) -> CryptoResult<ServerHello> {
         if self.state != TlsState::Initial {
@@ -186,25 +186,28 @@ impl QuantumSafeTLS {
                 error_code: error_codes::PROTOCOL_STATE_INVALID,
             });
         }
-        
+
         // Select cipher suite
         let cipher_suite = self.select_cipher_suite(&client_hello.cipher_suites)?;
-        
+
         // Perform key encapsulation
-        let client_kyber_key: KyberPublicKey = bincode::deserialize(&client_hello.kyber_public_key).map_err(|e| {
-            CryptoError::SerializationError(e.to_string())
-        })?;
+        let client_kyber_key: KyberPublicKey = bincode::deserialize(&client_hello.kyber_public_key)
+            .map_err(|e| CryptoError::SerializationError(e.to_string()))?;
         let (kyber_ciphertext, shared_secret) = client_kyber_key.encapsulate()?;
-        
+
         // Generate certificate and signature
         let certificate = self.generate_certificate()?;
         let signature = self.sign_handshake_data(&client_hello, &certificate)?;
-        
+
         // Create session
         let session_id = self.generate_session_id()?;
         let shared_secret_len = shared_secret.len();
         let shared_secret_array: [u8; 32] = shared_secret.try_into().map_err(|_| {
-            CryptoError::invalid_parameter("shared_secret", "32 bytes", &format!("{} bytes", shared_secret_len))
+            CryptoError::invalid_parameter(
+                "shared_secret",
+                "32 bytes",
+                &format!("{} bytes", shared_secret_len),
+            )
         })?;
         let session_key = SessionKey {
             id: session_id,
@@ -213,9 +216,9 @@ impl QuantumSafeTLS {
             created_at: SystemTime::now(),
             last_used: SystemTime::now(),
         };
-        
+
         self.session_keys.insert(session_id, session_key);
-        
+
         let server_hello = ServerHello {
             version: 0x0304,
             random: self.generate_random_bytes()?,
@@ -225,11 +228,11 @@ impl QuantumSafeTLS {
             signature,
             extensions: vec![],
         };
-        
+
         self.state = TlsState::HandshakeComplete;
         Ok(server_hello)
     }
-    
+
     /// Establish secure session after handshake completion
     pub fn establish_session(&mut self, handshake: &Handshake) -> CryptoResult<Session> {
         if self.state != TlsState::HandshakeComplete {
@@ -240,18 +243,20 @@ impl QuantumSafeTLS {
                 error_code: error_codes::PROTOCOL_STATE_INVALID,
             });
         }
-        
+
         let session_id = handshake.session_id;
-        let session_key = self.session_keys.get(&session_id)
-            .ok_or_else(|| CryptoError::ProtocolError {
-                protocol: "TLS".to_string(),
-                phase: "establish_session".to_string(),
-                cause: "Session not found".to_string(),
-                error_code: error_codes::PROTOCOL_STATE_INVALID,
-            })?;
-        
+        let session_key =
+            self.session_keys
+                .get(&session_id)
+                .ok_or_else(|| CryptoError::ProtocolError {
+                    protocol: "TLS".to_string(),
+                    phase: "establish_session".to_string(),
+                    cause: "Session not found".to_string(),
+                    error_code: error_codes::PROTOCOL_STATE_INVALID,
+                })?;
+
         self.state = TlsState::ApplicationData;
-        
+
         Ok(Session {
             id: session_id,
             cipher_suite: session_key.cipher_suite.clone(),
@@ -260,7 +265,7 @@ impl QuantumSafeTLS {
             sequence_number: 0,
         })
     }
-    
+
     /// Encrypt application data
     pub fn encrypt_data(&mut self, data: &[u8], session: &Session) -> CryptoResult<Vec<u8>> {
         if self.state != TlsState::ApplicationData {
@@ -271,12 +276,12 @@ impl QuantumSafeTLS {
                 error_code: error_codes::PROTOCOL_STATE_INVALID,
             });
         }
-        
+
         let nonce = self.generate_nonce(session.sequence_number)?;
         let (ciphertext, _) = aes::encrypt(data, &session.send_key, Some(&nonce))?;
         Ok(ciphertext)
     }
-    
+
     /// Decrypt application data
     pub fn decrypt_data(&mut self, ciphertext: &[u8], session: &Session) -> CryptoResult<Vec<u8>> {
         if self.state != TlsState::ApplicationData {
@@ -287,11 +292,11 @@ impl QuantumSafeTLS {
                 error_code: error_codes::PROTOCOL_STATE_INVALID,
             });
         }
-        
+
         let nonce = self.generate_nonce(session.sequence_number)?;
         aes::decrypt(ciphertext, &session.receive_key, &nonce, None)
     }
-    
+
     // Helper methods
     fn generate_random_bytes(&self) -> CryptoResult<[u8; 32]> {
         use rand::RngCore;
@@ -300,14 +305,14 @@ impl QuantumSafeTLS {
         rng.fill_bytes(&mut bytes);
         Ok(bytes)
     }
-    
+
     fn select_cipher_suite(&self, client_suites: &[CipherSuite]) -> CryptoResult<CipherSuite> {
         for suite in &self.config.supported_cipher_suites {
             if client_suites.contains(suite) {
                 return Ok(suite.clone());
             }
         }
-        
+
         Err(CryptoError::ProtocolError {
             protocol: "TLS".to_string(),
             phase: "cipher_suite_selection".to_string(),
@@ -315,25 +320,29 @@ impl QuantumSafeTLS {
             error_code: error_codes::PROTOCOL_HANDSHAKE_FAILED,
         })
     }
-    
+
     fn generate_certificate(&self) -> CryptoResult<Vec<u8>> {
         // Simplified certificate generation
-        let public_key = bincode::serialize(&self.dilithium_keypair.public_key()).map_err(|e| {
-            CryptoError::SerializationError(e.to_string())
-        })?;
+        let public_key = bincode::serialize(&self.dilithium_keypair.public_key())
+            .map_err(|e| CryptoError::SerializationError(e.to_string()))?;
         Ok(public_key)
     }
-    
-    fn sign_handshake_data(&self, client_hello: &ClientHello, certificate: &[u8]) -> CryptoResult<Vec<u8>> {
+
+    fn sign_handshake_data(
+        &self,
+        client_hello: &ClientHello,
+        certificate: &[u8],
+    ) -> CryptoResult<Vec<u8>> {
         let mut data_to_sign = Vec::new();
-        data_to_sign.extend_from_slice(&bincode::serialize(client_hello).map_err(|e| {
-            CryptoError::SerializationError(e.to_string())
-        })?);
+        data_to_sign.extend_from_slice(
+            &bincode::serialize(client_hello)
+                .map_err(|e| CryptoError::SerializationError(e.to_string()))?,
+        );
         data_to_sign.extend_from_slice(certificate);
-        
+
         self.dilithium_keypair.sign(&data_to_sign)
     }
-    
+
     fn generate_session_id(&self) -> CryptoResult<SessionId> {
         use rand::RngCore;
         let mut rng = rand::thread_rng();
@@ -341,7 +350,7 @@ impl QuantumSafeTLS {
         rng.fill_bytes(&mut id);
         Ok(id)
     }
-    
+
     fn generate_nonce(&self, sequence_number: u64) -> CryptoResult<[u8; 12]> {
         let mut nonce = [0u8; 12];
         nonce[4..].copy_from_slice(&sequence_number.to_be_bytes());
@@ -368,19 +377,19 @@ pub struct Session {
 }
 
 /// Secure Messaging Protocol
-/// 
+///
 /// Implements a Signal-style secure messaging protocol with post-quantum security.
 /// Provides perfect forward secrecy through ephemeral key exchange.
 pub struct SecureMessaging {
     /// Long-term identity key pair
     identity_keypair: DilithiumKeyPair,
-    
+
     /// Cache of ephemeral keys for contacts
     ephemeral_keys: HashMap<ContactId, EphemeralKeyData>,
-    
+
     /// Message history for replay protection
     message_history: HashMap<ContactId, Vec<MessageId>>,
-    
+
     /// Configuration
     config: MessagingConfig,
 }
@@ -410,7 +419,7 @@ impl Default for MessagingConfig {
         Self {
             max_ephemeral_keys: 100,
             key_rotation_interval: Duration::from_secs(3600), // 1 hour
-            message_expiry: Duration::from_secs(86400 * 7), // 1 week
+            message_expiry: Duration::from_secs(86400 * 7),   // 1 week
             enable_forward_secrecy: true,
         }
     }
@@ -444,8 +453,9 @@ pub struct EncryptedMessage {
 impl SecureMessaging {
     /// Create a new secure messaging instance
     pub fn new(config: MessagingConfig) -> CryptoResult<Self> {
-        let identity_keypair = DilithiumKeyPair::generate(crate::dilithium::DilithiumVariant::Dilithium3)?;
-        
+        let identity_keypair =
+            DilithiumKeyPair::generate(crate::dilithium::DilithiumVariant::Dilithium3)?;
+
         Ok(Self {
             identity_keypair,
             ephemeral_keys: HashMap::new(),
@@ -453,24 +463,28 @@ impl SecureMessaging {
             config,
         })
     }
-    
+
     /// Send an encrypted message to a recipient
-    pub fn send_message(&mut self, recipient: &ContactId, message: &[u8]) -> CryptoResult<EncryptedMessage> {
+    pub fn send_message(
+        &mut self,
+        recipient: &ContactId,
+        message: &[u8],
+    ) -> CryptoResult<EncryptedMessage> {
         // Get or create ephemeral key for this contact
         let ephemeral_key = self.get_or_create_ephemeral_key(recipient)?;
-        
+
         // Perform key encapsulation with recipient's public key
         // In practice, you'd fetch the recipient's public key from a key server
         let recipient_public_key = self.get_recipient_public_key(recipient)?;
         let (kyber_ciphertext, shared_secret) = recipient_public_key.encapsulate()?;
-        
+
         // Generate message ID and nonce
         let message_id = self.generate_message_id()?;
         let nonce = self.generate_message_nonce()?;
-        
+
         // Encrypt the message content
         let (encrypted_content, _) = aes::encrypt(message, &shared_secret, Some(&nonce))?;
-        
+
         // Create message structure for signing
         let message_data = EncryptedMessage {
             sender_id: "self".to_string(), // Replace with actual sender ID
@@ -482,25 +496,24 @@ impl SecureMessaging {
             signature: Vec::new(), // Filled below
             nonce,
         };
-        
+
         // Sign the entire message
-        let message_bytes = bincode::serialize(&message_data).map_err(|e| {
-            CryptoError::SerializationError(e.to_string())
-        })?;
+        let message_bytes = bincode::serialize(&message_data)
+            .map_err(|e| CryptoError::SerializationError(e.to_string()))?;
         let signature = self.identity_keypair.sign(&message_bytes)?;
-        
+
         let mut final_message = message_data;
         final_message.signature = signature;
-        
+
         // Update ephemeral key usage
         self.update_ephemeral_key_usage(recipient)?;
-        
+
         // Add to message history for replay protection
         self.add_to_message_history(recipient, message_id);
-        
+
         Ok(final_message)
     }
-    
+
     /// Receive and decrypt a message
     pub fn receive_message(&mut self, encrypted: &EncryptedMessage) -> CryptoResult<Vec<u8>> {
         // Check for replay attacks
@@ -512,16 +525,15 @@ impl SecureMessaging {
                 severity: crate::error::SecuritySeverity::High,
             });
         }
-        
+
         // Verify message signature
         let sender_public_key = self.get_sender_public_key(&encrypted.sender_id)?;
         let mut message_for_verification = encrypted.clone();
         message_for_verification.signature = Vec::new(); // Clear signature for verification
-        
-        let message_bytes = bincode::serialize(&message_for_verification).map_err(|e| {
-            CryptoError::SerializationError(e.to_string())
-        })?;
-        
+
+        let message_bytes = bincode::serialize(&message_for_verification)
+            .map_err(|e| CryptoError::SerializationError(e.to_string()))?;
+
         let signature_valid = sender_public_key.verify(&message_bytes, &encrypted.signature)?;
         if !signature_valid {
             return Err(CryptoError::SecurityPolicyViolation {
@@ -531,74 +543,88 @@ impl SecureMessaging {
                 severity: crate::error::SecuritySeverity::Critical,
             });
         }
-        
+
         // Get ephemeral key for this sender
         let ephemeral_key = self.get_ephemeral_key(&encrypted.sender_id)?;
-        
+
         // Perform key decapsulation
-        let shared_secret = ephemeral_key.kyber_keypair.decapsulate(&encrypted.kyber_ciphertext)?;
-        
+        let shared_secret = ephemeral_key
+            .kyber_keypair
+            .decapsulate(&encrypted.kyber_ciphertext)?;
+
         // Decrypt message content
-        let plaintext = aes::decrypt(&encrypted.encrypted_content, &shared_secret, &encrypted.nonce, None)?;
-        
+        let plaintext = aes::decrypt(
+            &encrypted.encrypted_content,
+            &shared_secret,
+            &encrypted.nonce,
+            None,
+        )?;
+
         // Add to message history
         self.add_to_message_history(&encrypted.sender_id, encrypted.message_id);
-        
+
         Ok(plaintext)
     }
-    
+
     /// Rotate ephemeral keys for forward secrecy
     pub fn rotate_ephemeral_keys(&mut self) -> CryptoResult<()> {
         let now = SystemTime::now();
         let mut keys_to_rotate = Vec::new();
-        
+
         for (contact_id, key_data) in &self.ephemeral_keys {
-            if now.duration_since(key_data.created_at).unwrap_or(Duration::ZERO) 
-                >= self.config.key_rotation_interval {
+            if now
+                .duration_since(key_data.created_at)
+                .unwrap_or(Duration::ZERO)
+                >= self.config.key_rotation_interval
+            {
                 keys_to_rotate.push(contact_id.clone());
             }
         }
-        
+
         for contact_id in keys_to_rotate {
             self.create_ephemeral_key(&contact_id)?;
         }
-        
+
         Ok(())
     }
-    
+
     // Helper methods
-    fn get_or_create_ephemeral_key(&mut self, contact: &ContactId) -> CryptoResult<&EphemeralKeyData> {
+    fn get_or_create_ephemeral_key(
+        &mut self,
+        contact: &ContactId,
+    ) -> CryptoResult<&EphemeralKeyData> {
         if !self.ephemeral_keys.contains_key(contact) {
             self.create_ephemeral_key(contact)?;
         }
-        
+
         Ok(self.ephemeral_keys.get(contact).unwrap())
     }
-    
+
     fn create_ephemeral_key(&mut self, contact: &ContactId) -> CryptoResult<()> {
         let kyber_keypair = KyberKeyPair::generate(crate::kyber::KyberVariant::Kyber768)?;
         let now = SystemTime::now();
-        
+
         let key_data = EphemeralKeyData {
             kyber_keypair,
             created_at: now,
             last_used: now,
             message_count: 0,
         };
-        
+
         self.ephemeral_keys.insert(contact.clone(), key_data);
         Ok(())
     }
-    
+
     fn get_ephemeral_key(&self, contact: &ContactId) -> CryptoResult<&EphemeralKeyData> {
-        self.ephemeral_keys.get(contact)
-            .ok_or_else(|| CryptoError::key_management_error(
-                "Key retrieval failed", 
+        self.ephemeral_keys.get(contact).ok_or_else(|| {
+            CryptoError::key_management_error(
+                "Key retrieval failed",
                 &format!("No ephemeral key found for contact: {}", contact),
-                "ephemeral"
-            ))
+                "ephemeral",
+            )
+        })
     }
-    
+
     fn update_ephemeral_key_usage(&mut self, contact: &ContactId) -> CryptoResult<()> {
         if let Some(key_data) = self.ephemeral_keys.get_mut(contact) {
             key_data.last_used = SystemTime::now();
@@ -606,7 +632,7 @@ impl SecureMessaging {
         }
         Ok(())
     }
-    
+
     fn generate_message_id(&self) -> CryptoResult<MessageId> {
         use rand::RngCore;
         let mut rng = rand::thread_rng();
@@ -614,7 +640,7 @@ impl SecureMessaging {
         rng.fill_bytes(&mut id);
         Ok(id)
     }
-    
+
     fn generate_message_nonce(&self) -> CryptoResult<[u8; 12]> {
         use rand::RngCore;
         let mut rng = rand::thread_rng();
@@ -622,18 +648,20 @@ impl SecureMessaging {
         rng.fill_bytes(&mut nonce);
         Ok(nonce)
     }
-    
+
     fn is_replay_message(&self, sender: &ContactId, message_id: &MessageId) -> bool {
-        self.message_history.get(sender)
+        self.message_history
+            .get(sender)
             .map(|history| history.contains(message_id))
             .unwrap_or(false)
     }
-    
+
     fn add_to_message_history(&mut self, sender: &ContactId, message_id: MessageId) {
-        self.message_history.entry(sender.clone())
+        self.message_history
+            .entry(sender.clone())
             .or_insert_with(Vec::new)
             .push(message_id);
-        
+
         // Limit history size to prevent memory exhaustion
         if let Some(history) = self.message_history.get_mut(sender) {
             if history.len() > 10000 {
@@ -641,22 +669,24 @@ impl SecureMessaging {
             }
         }
     }
-    
+
     // Placeholder methods - in practice these would interface with a key management system
     fn get_recipient_public_key(&self, _recipient: &ContactId) -> CryptoResult<KyberPublicKey> {
         // Placeholder - would fetch from key server or contact database
-        KyberKeyPair::generate(crate::kyber::KyberVariant::Kyber768).map(|kp| kp.public_key().clone())
+        KyberKeyPair::generate(crate::kyber::KyberVariant::Kyber768)
+            .map(|kp| kp.public_key().clone())
     }
-    
+
     fn get_sender_public_key(&self, _sender: &ContactId) -> CryptoResult<DilithiumPublicKey> {
         // Placeholder - would fetch from key server or contact database
-        DilithiumKeyPair::generate(crate::dilithium::DilithiumVariant::Dilithium3).map(|kp| kp.public_key().clone())
+        DilithiumKeyPair::generate(crate::dilithium::DilithiumVariant::Dilithium3)
+            .map(|kp| kp.public_key().clone())
     }
 }
 
 // Helper functions for key derivation
 fn derive_send_key(shared_secret: &[u8; 32]) -> CryptoResult<[u8; 32]> {
-    use sha2::{Sha256, Digest};
+    use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     hasher.update(shared_secret);
     hasher.update(b"send");
@@ -667,7 +697,7 @@ fn derive_send_key(shared_secret: &[u8; 32]) -> CryptoResult<[u8; 32]> {
 }
 
 fn derive_receive_key(shared_secret: &[u8; 32]) -> CryptoResult<[u8; 32]> {
-    use sha2::{Sha256, Digest};
+    use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     hasher.update(shared_secret);
     hasher.update(b"receive");
@@ -680,71 +710,71 @@ fn derive_receive_key(shared_secret: &[u8; 32]) -> CryptoResult<[u8; 32]> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_tls_config_default() {
         let config = TlsConfig::default();
         assert!(config.max_sessions > 0);
         assert!(!config.supported_cipher_suites.is_empty());
     }
-    
+
     #[test]
     fn test_quantum_safe_tls_creation() {
         let config = TlsConfig::default();
         let tls = QuantumSafeTLS::new(config);
         assert!(tls.is_ok());
-        
+
         let tls = tls.unwrap();
         assert_eq!(tls.state, TlsState::Initial);
         assert!(tls.session_keys.is_empty());
     }
-    
+
     #[test]
     fn test_secure_messaging_creation() {
         let config = MessagingConfig::default();
         let messaging = SecureMessaging::new(config);
         assert!(messaging.is_ok());
-        
+
         let messaging = messaging.unwrap();
         assert!(messaging.ephemeral_keys.is_empty());
         assert!(messaging.message_history.is_empty());
     }
-    
+
     #[test]
     fn test_cipher_suite_selection() {
         let config = TlsConfig::default();
         let mut tls = QuantumSafeTLS::new(config).unwrap();
-        
+
         let client_suites = vec![
             CipherSuite::Kyber768_Dilithium3_AES256GCM,
             CipherSuite::Kyber1024_Dilithium5_AES256GCM,
         ];
-        
+
         let selected = tls.select_cipher_suite(&client_suites);
         assert!(selected.is_ok());
         assert!(client_suites.contains(&selected.unwrap()));
     }
-    
+
     #[test]
     fn test_session_id_generation() {
         let config = TlsConfig::default();
         let tls = QuantumSafeTLS::new(config).unwrap();
-        
+
         let id1 = tls.generate_session_id().unwrap();
         let id2 = tls.generate_session_id().unwrap();
-        
+
         // Session IDs should be unique
         assert_ne!(id1, id2);
     }
-    
+
     #[test]
     fn test_message_id_generation() {
         let config = MessagingConfig::default();
         let messaging = SecureMessaging::new(config).unwrap();
-        
+
         let id1 = messaging.generate_message_id().unwrap();
         let id2 = messaging.generate_message_id().unwrap();
-        
+
         // Message IDs should be unique
         assert_ne!(id1, id2);
     }

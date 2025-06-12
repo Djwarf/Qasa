@@ -65,7 +65,11 @@ fn ensure_key_directory(dir: Option<&Path>) -> Result<PathBuf, CryptoError> {
 
     if !path.exists() {
         fs::create_dir_all(&path).map_err(|e| {
-            CryptoError::key_management_error("Failed to create key directory", &format!("Directory creation failed: {}", e), "unknown")
+            CryptoError::key_management_error(
+                "Failed to create key directory",
+                &format!("Directory creation failed: {}", e),
+                "unknown",
+            )
         })?;
     }
 
@@ -104,20 +108,21 @@ pub fn store_kyber_keypair(
     password: &str,
 ) -> Result<String, CryptoError> {
     // Serialize the key pair
-    let key_data = bincode::serialize(keypair)
-        .map_err(|e| CryptoError::SerializationError(format!("Failed to serialize key pair: {}", e)))?;
-    
+    let key_data = bincode::serialize(keypair).map_err(|e| {
+        CryptoError::SerializationError(format!("Failed to serialize key pair: {}", e))
+    })?;
+
     // Generate a key ID
     let key_id = generate_key_id();
-    
+
     // Derive encryption key from password
     let derived_key = derive_key_from_password(password, None, None)?;
     let key_bytes = derived_key.key.clone(); // Clone to avoid borrowing issues
     let salt = derived_key.salt.clone(); // Clone to avoid borrowing issues
-    
+
     // Encrypt the key data
     let (encrypted_data, nonce) = aes::encrypt(&key_data, &key_bytes, None)?;
-    
+
     // Create metadata
     let metadata = KeyMetadata {
         version: 1,
@@ -127,31 +132,40 @@ pub fn store_kyber_keypair(
         last_rotated: None,
         password_salt: salt,
     };
-    
+
     // Create encrypted key structure
     let encrypted_key = EncryptedKeyData {
         metadata,
         encrypted_data,
         nonce,
     };
-    
+
     // Serialize the encrypted key
-    let serialized = bincode::serialize(&encrypted_key)
-        .map_err(|e| CryptoError::SerializationError(format!("Failed to serialize encrypted key: {}", e)))?;
-    
+    let serialized = bincode::serialize(&encrypted_key).map_err(|e| {
+        CryptoError::SerializationError(format!("Failed to serialize encrypted key: {}", e))
+    })?;
+
     // Get/create key directory
     let key_directory = ensure_key_directory(path.map(Path::new))?;
-    
+
     // Write to file
     let file_path = key_directory.join(format!("{}.kyber.key", key_id));
     let mut file = File::create(&file_path).map_err(|e| {
-        CryptoError::key_management_error("Failed to create key file", &format!("File creation error: {}", e), "unknown")
+        CryptoError::key_management_error(
+            "Failed to create key file",
+            &format!("File creation error: {}", e),
+            "unknown",
+        )
     })?;
-    
+
     file.write_all(&serialized).map_err(|e| {
-        CryptoError::key_management_error("Failed to write key file", &format!("File write error: {}", e), "unknown")
+        CryptoError::key_management_error(
+            "Failed to write key file",
+            &format!("File write error: {}", e),
+            "unknown",
+        )
     })?;
-    
+
     Ok(key_id)
 }
 
@@ -173,30 +187,44 @@ pub fn load_kyber_keypair(
 ) -> Result<KyberKeyPair, CryptoError> {
     let key_directory = ensure_key_directory(path.map(Path::new))?;
     let file_path = key_directory.join(format!("{}.kyber.key", key_id));
-    
+
     // Check if file exists
     if !file_path.exists() {
-        return Err(CryptoError::key_management_error("Key not found", &format!("Key {} does not exist", key_id), "unknown"));
+        return Err(CryptoError::key_management_error(
+            "Key not found",
+            &format!("Key {} does not exist", key_id),
+            "unknown",
+        ));
     }
-    
+
     // Read the encrypted key file
     let mut file = File::open(&file_path).map_err(|e| {
-        CryptoError::key_management_error("Failed to open key file", &format!("File open error: {}", e), "unknown")
+        CryptoError::key_management_error(
+            "Failed to open key file",
+            &format!("File open error: {}", e),
+            "unknown",
+        )
     })?;
-    
+
     let mut encrypted_data = Vec::new();
     file.read_to_end(&mut encrypted_data).map_err(|e| {
-        CryptoError::key_management_error("Failed to read key file", &format!("File read error: {}", e), "unknown")
+        CryptoError::key_management_error(
+            "Failed to read key file",
+            &format!("File read error: {}", e),
+            "unknown",
+        )
     })?;
-    
+
     // Deserialize the encrypted key structure
-    let encrypted_key: EncryptedKeyData = bincode::deserialize(&encrypted_data)
-        .map_err(|e| CryptoError::SerializationError(format!("Failed to deserialize key file: {}", e)))?;
-    
+    let encrypted_key: EncryptedKeyData = bincode::deserialize(&encrypted_data).map_err(|e| {
+        CryptoError::SerializationError(format!("Failed to deserialize key file: {}", e))
+    })?;
+
     // Derive the decryption key from the password
-    let derived_key = derive_key_from_password(password, Some(&encrypted_key.metadata.password_salt), None)?;
+    let derived_key =
+        derive_key_from_password(password, Some(&encrypted_key.metadata.password_salt), None)?;
     let key_bytes = derived_key.key.clone(); // Clone to avoid borrowing issues
-    
+
     // Decrypt the key data
     let key_data = aes::decrypt(
         &encrypted_key.encrypted_data,
@@ -204,15 +232,16 @@ pub fn load_kyber_keypair(
         &encrypted_key.nonce,
         None,
     )?;
-    
+
     // Deserialize the key pair
-    let keypair = bincode::deserialize(&key_data)
-        .map_err(|e| CryptoError::SerializationError(format!("Failed to deserialize key pair: {}", e)))?;
-    
+    let keypair = bincode::deserialize(&key_data).map_err(|e| {
+        CryptoError::SerializationError(format!("Failed to deserialize key pair: {}", e))
+    })?;
+
     // Securely zero the decrypted data
     use crate::utils::secure_zero;
     secure_zero(&mut encrypted_data);
-    
+
     Ok(keypair)
 }
 
@@ -233,20 +262,21 @@ pub fn store_dilithium_keypair(
     password: &str,
 ) -> Result<String, CryptoError> {
     // Serialize the key pair
-    let key_data = bincode::serialize(keypair)
-        .map_err(|e| CryptoError::SerializationError(format!("Failed to serialize key pair: {}", e)))?;
-    
+    let key_data = bincode::serialize(keypair).map_err(|e| {
+        CryptoError::SerializationError(format!("Failed to serialize key pair: {}", e))
+    })?;
+
     // Generate a key ID
     let key_id = generate_key_id();
-    
+
     // Derive encryption key from password
     let derived_key = derive_key_from_password(password, None, None)?;
     let key_bytes = derived_key.key.clone(); // Clone to avoid borrowing issues
     let salt = derived_key.salt.clone(); // Clone to avoid borrowing issues
-    
+
     // Encrypt the key data
     let (encrypted_data, nonce) = aes::encrypt(&key_data, &key_bytes, None)?;
-    
+
     // Create metadata
     let metadata = KeyMetadata {
         version: 1,
@@ -256,31 +286,40 @@ pub fn store_dilithium_keypair(
         last_rotated: None,
         password_salt: salt,
     };
-    
+
     // Create encrypted key structure
     let encrypted_key = EncryptedKeyData {
         metadata,
         encrypted_data,
         nonce,
     };
-    
+
     // Serialize the encrypted key
-    let serialized = bincode::serialize(&encrypted_key)
-        .map_err(|e| CryptoError::SerializationError(format!("Failed to serialize encrypted key: {}", e)))?;
-    
+    let serialized = bincode::serialize(&encrypted_key).map_err(|e| {
+        CryptoError::SerializationError(format!("Failed to serialize encrypted key: {}", e))
+    })?;
+
     // Get/create key directory
     let key_directory = ensure_key_directory(path.map(Path::new))?;
-    
+
     // Write to file
     let file_path = key_directory.join(format!("{}.dilithium.key", key_id));
     let mut file = File::create(&file_path).map_err(|e| {
-        CryptoError::key_management_error("Failed to create key file", &format!("File creation error: {}", e), "unknown")
+        CryptoError::key_management_error(
+            "Failed to create key file",
+            &format!("File creation error: {}", e),
+            "unknown",
+        )
     })?;
-    
+
     file.write_all(&serialized).map_err(|e| {
-        CryptoError::key_management_error("Failed to write key file", &format!("File write error: {}", e), "unknown")
+        CryptoError::key_management_error(
+            "Failed to write key file",
+            &format!("File write error: {}", e),
+            "unknown",
+        )
     })?;
-    
+
     Ok(key_id)
 }
 
@@ -302,30 +341,44 @@ pub fn load_dilithium_keypair(
 ) -> Result<DilithiumKeyPair, CryptoError> {
     let key_directory = ensure_key_directory(path.map(Path::new))?;
     let file_path = key_directory.join(format!("{}.dilithium.key", key_id));
-    
+
     // Check if file exists
     if !file_path.exists() {
-        return Err(CryptoError::key_management_error("Key not found", &format!("Key {} does not exist", key_id), "unknown"));
+        return Err(CryptoError::key_management_error(
+            "Key not found",
+            &format!("Key {} does not exist", key_id),
+            "unknown",
+        ));
     }
-    
+
     // Read the encrypted key file
     let mut file = File::open(&file_path).map_err(|e| {
-        CryptoError::key_management_error("Failed to open key file", &format!("File open error: {}", e), "unknown")
+        CryptoError::key_management_error(
+            "Failed to open key file",
+            &format!("File open error: {}", e),
+            "unknown",
+        )
     })?;
-    
+
     let mut encrypted_data = Vec::new();
     file.read_to_end(&mut encrypted_data).map_err(|e| {
-        CryptoError::key_management_error("Failed to read key file", &format!("File read error: {}", e), "unknown")
+        CryptoError::key_management_error(
+            "Failed to read key file",
+            &format!("File read error: {}", e),
+            "unknown",
+        )
     })?;
-    
+
     // Deserialize the encrypted key structure
-    let encrypted_key: EncryptedKeyData = bincode::deserialize(&encrypted_data)
-        .map_err(|e| CryptoError::SerializationError(format!("Failed to deserialize key file: {}", e)))?;
-    
+    let encrypted_key: EncryptedKeyData = bincode::deserialize(&encrypted_data).map_err(|e| {
+        CryptoError::SerializationError(format!("Failed to deserialize key file: {}", e))
+    })?;
+
     // Derive the decryption key from the password
-    let derived_key = derive_key_from_password(password, Some(&encrypted_key.metadata.password_salt), None)?;
+    let derived_key =
+        derive_key_from_password(password, Some(&encrypted_key.metadata.password_salt), None)?;
     let key_bytes = derived_key.key.clone(); // Clone to avoid borrowing issues
-    
+
     // Decrypt the key data
     let key_data = aes::decrypt(
         &encrypted_key.encrypted_data,
@@ -333,15 +386,16 @@ pub fn load_dilithium_keypair(
         &encrypted_key.nonce,
         None,
     )?;
-    
+
     // Deserialize the key pair
-    let keypair = bincode::deserialize(&key_data)
-        .map_err(|e| CryptoError::SerializationError(format!("Failed to deserialize key pair: {}", e)))?;
-    
+    let keypair = bincode::deserialize(&key_data).map_err(|e| {
+        CryptoError::SerializationError(format!("Failed to deserialize key pair: {}", e))
+    })?;
+
     // Securely zero the decrypted data
     use crate::utils::secure_zero;
     secure_zero(&mut encrypted_data);
-    
+
     Ok(keypair)
 }
 
@@ -352,13 +406,17 @@ pub fn load_dilithium_keypair(
 /// A vector of tuples containing (key_id, key_type) for all stored keys
 pub fn list_keys() -> Result<Vec<(String, String)>, CryptoError> {
     let key_directory = ensure_key_directory(None)?;
-    
+
     let entries = fs::read_dir(&key_directory).map_err(|e| {
-        CryptoError::key_management_error("Failed to read key directory", &format!("Directory read error: {}", e), "unknown")
+        CryptoError::key_management_error(
+            "Failed to read key directory",
+            &format!("Directory read error: {}", e),
+            "unknown",
+        )
     })?;
-    
+
     let mut keys = Vec::new();
-    
+
     for entry in entries {
         if let Ok(entry) = entry {
             let path = entry.path();
@@ -377,7 +435,7 @@ pub fn list_keys() -> Result<Vec<(String, String)>, CryptoError> {
             }
         }
     }
-    
+
     Ok(keys)
 }
 
@@ -394,32 +452,46 @@ pub fn list_keys() -> Result<Vec<(String, String)>, CryptoError> {
 /// `Ok(())` if successful, or an error
 pub fn delete_key(key_id: &str, key_type: &str, path: Option<&str>) -> Result<(), CryptoError> {
     let key_directory = ensure_key_directory(path.map(Path::new))?;
-    
+
     // Determine file extension based on key type
     let extension = match key_type.to_lowercase().as_str() {
         "kyber" => "kyber.key",
         "dilithium" => "dilithium.key",
-        _ => return Err(CryptoError::key_management_error("Operation failed", &format!("Invalid key type: {}", key_type), "unknown")),
+        _ => {
+            return Err(CryptoError::key_management_error(
+                "Operation failed",
+                &format!("Invalid key type: {}", key_type),
+                "unknown",
+            ))
+        }
     };
-    
+
     let file_path = key_directory.join(format!("{}.{}", key_id, extension));
-    
+
     // Check if file exists
     if !file_path.exists() {
-        return Err(CryptoError::key_management_error("Key not found", &format!("Key {} does not exist", key_id), "unknown"));
+        return Err(CryptoError::key_management_error(
+            "Key not found",
+            &format!("Key {} does not exist", key_id),
+            "unknown",
+        ));
     }
-    
+
     // Delete the key file
     fs::remove_file(&file_path).map_err(|e| {
-        CryptoError::key_management_error("Failed to delete key file", &format!("File deletion error: {}", e), "unknown")
+        CryptoError::key_management_error(
+            "Failed to delete key file",
+            &format!("File deletion error: {}", e),
+            "unknown",
+        )
     })?;
-    
+
     // Also delete metadata file if it exists
     let metadata_path = key_directory.join(format!("{}.{}.metadata", key_id, key_type));
     if metadata_path.exists() {
         let _ = fs::remove_file(&metadata_path);
     }
-    
+
     Ok(())
 }
 
@@ -452,20 +524,26 @@ pub fn export_key(
             bincode::serialize(&keypair).map_err(|e| {
                 CryptoError::SerializationError(format!("Failed to serialize keypair: {}", e))
             })?
-        },
+        }
         "dilithium" => {
             let keypair = load_dilithium_keypair(key_id, password, key_storage_path)?;
             bincode::serialize(&keypair).map_err(|e| {
                 CryptoError::SerializationError(format!("Failed to serialize keypair: {}", e))
             })?
-        },
-        _ => return Err(CryptoError::key_management_error("Operation failed", &format!("Invalid key type: {}", key_type), "unknown")),
+        }
+        _ => {
+            return Err(CryptoError::key_management_error(
+                "Operation failed",
+                &format!("Invalid key type: {}", key_type),
+                "unknown",
+            ))
+        }
     };
-    
+
     // Derive a key from the export password
     let derived_key = derive_key_from_password(export_password, None, None)?;
     let key_bytes = derived_key.key.clone();
-    
+
     // Create export metadata
     #[derive(Serialize, Deserialize)]
     struct ExportMetadata {
@@ -475,7 +553,7 @@ pub fn export_key(
         export_date: u64,
         salt: Vec<u8>,
     }
-    
+
     let metadata = ExportMetadata {
         version: 1,
         key_id: key_id.to_string(),
@@ -483,10 +561,10 @@ pub fn export_key(
         export_date: current_time_secs(),
         salt: derived_key.salt.clone(),
     };
-    
+
     // Encrypt the key data
     let (encrypted_data, nonce) = aes::encrypt(&key_data, &key_bytes, None)?;
-    
+
     // Create export structure
     #[derive(Serialize, Deserialize)]
     struct ExportedKey {
@@ -494,26 +572,35 @@ pub fn export_key(
         encrypted_data: Vec<u8>,
         nonce: Vec<u8>,
     }
-    
+
     let exported_key = ExportedKey {
         metadata,
         encrypted_data,
         nonce,
     };
-    
+
     // Serialize the export structure
-    let serialized = bincode::serialize(&exported_key)
-        .map_err(|e| CryptoError::SerializationError(format!("Failed to serialize exported key: {}", e)))?;
-    
+    let serialized = bincode::serialize(&exported_key).map_err(|e| {
+        CryptoError::SerializationError(format!("Failed to serialize exported key: {}", e))
+    })?;
+
     // Write to file
     let mut file = File::create(export_path).map_err(|e| {
-        CryptoError::key_management_error("Failed to create export file", &format!("Export file creation error: {}", e), "unknown")
+        CryptoError::key_management_error(
+            "Failed to create export file",
+            &format!("Export file creation error: {}", e),
+            "unknown",
+        )
     })?;
-    
+
     file.write_all(&serialized).map_err(|e| {
-        CryptoError::key_management_error("Failed to write export file", &format!("File write error: {}", e), "unknown")
+        CryptoError::key_management_error(
+            "Failed to write export file",
+            &format!("File write error: {}", e),
+            "unknown",
+        )
     })?;
-    
+
     Ok(())
 }
 
@@ -537,14 +624,22 @@ pub fn import_key(
 ) -> Result<(String, String), CryptoError> {
     // Read the exported key file
     let mut file = File::open(import_path).map_err(|e| {
-        CryptoError::key_management_error("Failed to open export file", &format!("File open error: {}", e), "unknown")
+        CryptoError::key_management_error(
+            "Failed to open export file",
+            &format!("File open error: {}", e),
+            "unknown",
+        )
     })?;
-    
+
     let mut encrypted_data = Vec::new();
     file.read_to_end(&mut encrypted_data).map_err(|e| {
-        CryptoError::key_management_error("Failed to read export file", &format!("File read error: {}", e), "unknown")
+        CryptoError::key_management_error(
+            "Failed to read export file",
+            &format!("File read error: {}", e),
+            "unknown",
+        )
     })?;
-    
+
     // Deserialize the export structure
     #[derive(Serialize, Deserialize)]
     struct ExportMetadata {
@@ -554,21 +649,23 @@ pub fn import_key(
         export_date: u64,
         salt: Vec<u8>,
     }
-    
+
     #[derive(Serialize, Deserialize)]
     struct ExportedKey {
         metadata: ExportMetadata,
         encrypted_data: Vec<u8>,
         nonce: Vec<u8>,
     }
-    
-    let exported_key: ExportedKey = bincode::deserialize(&encrypted_data)
-        .map_err(|e| CryptoError::SerializationError(format!("Failed to deserialize export file: {}", e)))?;
-    
+
+    let exported_key: ExportedKey = bincode::deserialize(&encrypted_data).map_err(|e| {
+        CryptoError::SerializationError(format!("Failed to deserialize export file: {}", e))
+    })?;
+
     // Derive the decryption key from the import password
-    let derived_key = derive_key_from_password(import_password, Some(&exported_key.metadata.salt), None)?;
+    let derived_key =
+        derive_key_from_password(import_password, Some(&exported_key.metadata.salt), None)?;
     let key_bytes = derived_key.key.clone();
-    
+
     // Decrypt the key data
     let key_data = aes::decrypt(
         &exported_key.encrypted_data,
@@ -576,24 +673,32 @@ pub fn import_key(
         &exported_key.nonce,
         None,
     )?;
-    
+
     // Store the key based on its type
     let key_type = exported_key.metadata.key_type.to_lowercase();
     let new_key_id = match key_type.as_str() {
         "kyber" => {
-            let keypair: KyberKeyPair = bincode::deserialize(&key_data)
-                .map_err(|e| CryptoError::SerializationError(format!("Failed to deserialize keypair: {}", e)))?;
-            
+            let keypair: KyberKeyPair = bincode::deserialize(&key_data).map_err(|e| {
+                CryptoError::SerializationError(format!("Failed to deserialize keypair: {}", e))
+            })?;
+
             store_kyber_keypair(&keypair, key_storage_path, new_password)?
-        },
+        }
         "dilithium" => {
-            let keypair: DilithiumKeyPair = bincode::deserialize(&key_data)
-                .map_err(|e| CryptoError::SerializationError(format!("Failed to deserialize keypair: {}", e)))?;
-            
+            let keypair: DilithiumKeyPair = bincode::deserialize(&key_data).map_err(|e| {
+                CryptoError::SerializationError(format!("Failed to deserialize keypair: {}", e))
+            })?;
+
             store_dilithium_keypair(&keypair, key_storage_path, new_password)?
-        },
-        _ => return Err(CryptoError::key_management_error("Operation failed", &format!("Invalid key type in import file: {}", key_type), "unknown")),
+        }
+        _ => {
+            return Err(CryptoError::key_management_error(
+                "Operation failed",
+                &format!("Invalid key type in import file: {}", key_type),
+                "unknown",
+            ))
+        }
     };
-    
+
     Ok((new_key_id, key_type))
 }

@@ -7,11 +7,11 @@ fn test_password_derivation() {
 
     let derived_key = derive_key_from_password(password, salt, None);
     assert!(derived_key.is_ok());
-    
+
     let derived_key = derived_key.unwrap();
     assert_eq!(derived_key.key.len(), 32); // Default key length is 32 bytes
     assert!(!derived_key.salt.is_empty());
-    
+
     // Test with custom parameters
     let params = KeyDerivationParams {
         memory_cost: 16384,
@@ -19,7 +19,7 @@ fn test_password_derivation() {
         parallelism: 2,
         key_length: 32,
     };
-    
+
     let derived_key2 = derive_key_from_password(password, Some(&derived_key.salt), Some(&params));
     assert!(derived_key2.is_ok());
 }
@@ -28,15 +28,15 @@ fn test_password_derivation() {
 fn test_password_verification() {
     let password = "CorrectPassword123!";
     let wrong_password = "WrongPassword123!";
-    
+
     // Generate a derived key
     let derived_key = derive_key_from_password(password, None, None).unwrap();
-    
+
     // Verify correct password
     let result = verify_password(password, &derived_key, None);
     assert!(result.is_ok());
     assert!(result.unwrap());
-    
+
     // Verify incorrect password
     let result = verify_password(wrong_password, &derived_key, None);
     assert!(result.is_ok());
@@ -51,18 +51,18 @@ fn test_key_rotation_policy() {
     assert!(default_policy.keep_old_keys);
     assert_eq!(default_policy.old_keys_to_keep, 2);
     assert!(!default_policy.auto_rotate);
-    
+
     // Test custom policy
     let rotation_interval_days = 60;
     let policy = RotationPolicy::new(rotation_interval_days);
     assert_eq!(policy.rotation_interval_days, 60);
     assert!(policy.keep_old_keys);
-    
+
     // Test different security levels
     let high_sec = RotationPolicy::high_security();
     let std_sec = RotationPolicy::standard_security();
     let min_sec = RotationPolicy::minimal_security();
-    
+
     assert!(high_sec.rotation_interval_days < std_sec.rotation_interval_days);
     assert!(std_sec.rotation_interval_days < min_sec.rotation_interval_days);
 }
@@ -71,12 +71,12 @@ fn test_key_rotation_policy() {
 fn test_key_rotation_metadata() {
     let policy = RotationPolicy::new(90);
     let metadata = KeyRotationMetadata::new(policy);
-    
+
     // Test initial state
     assert!(metadata.previous_key_ids.is_empty());
     assert_eq!(metadata.last_rotated, None);
     assert_eq!(metadata.policy.rotation_interval_days, 90);
-    
+
     // Test rotation due logic
     // (Implementation-specific tests are in rotation.rs test module)
 }

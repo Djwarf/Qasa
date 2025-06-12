@@ -45,12 +45,12 @@ impl X86SimdPolynomial {
             return Err(CryptoError::invalid_parameter(
                 "polynomial_size",
                 &format!("{}", self.size),
-                &format!("{}", other.size)
+                &format!("{}", other.size),
             ));
         }
 
         let mut result = vec![0i32; self.size];
-        
+
         // Process 8 coefficients at a time with AVX2
         for i in (0..self.size).step_by(8) {
             if i + 8 <= self.size {
@@ -80,7 +80,7 @@ impl X86SimdPolynomial {
                 return unsafe { self.avx2_multiply(other) };
             }
         }
-        
+
         // Software fallback
         self.software_multiply(other)
     }
@@ -91,11 +91,12 @@ impl X86SimdPolynomial {
             return Err(CryptoError::invalid_parameter(
                 "polynomial_size",
                 &format!("{}", self.size),
-                &format!("{}", other.size)
+                &format!("{}", other.size),
             ));
         }
 
-        let result: Vec<i32> = self.coefficients
+        let result: Vec<i32> = self
+            .coefficients
             .iter()
             .zip(other.coefficients.iter())
             .map(|(&a, &b)| a.wrapping_mul(b))
@@ -115,12 +116,12 @@ impl X86SimdPolynomial {
             return Err(CryptoError::invalid_parameter(
                 "polynomial_size",
                 &format!("{}", self.size),
-                &format!("{}", other.size)
+                &format!("{}", other.size),
             ));
         }
 
         let mut result = vec![0i32; self.size];
-        
+
         // Process 8 coefficients at a time with AVX2
         for i in (0..self.size).step_by(8) {
             if i + 8 <= self.size {
@@ -150,7 +151,7 @@ impl X86SimdPolynomial {
                 return unsafe { self.avx2_add(other) };
             }
         }
-        
+
         self.software_add(other)
     }
 
@@ -160,11 +161,12 @@ impl X86SimdPolynomial {
             return Err(CryptoError::invalid_parameter(
                 "polynomial_size",
                 &format!("{}", self.size),
-                &format!("{}", other.size)
+                &format!("{}", other.size),
             ));
         }
 
-        let result: Vec<i32> = self.coefficients
+        let result: Vec<i32> = self
+            .coefficients
             .iter()
             .zip(other.coefficients.iter())
             .map(|(&a, &b)| a.wrapping_add(b))
@@ -195,7 +197,10 @@ pub struct SimdNTT {
 
 impl SimdNTT {
     pub fn new(modulus: i32, root_of_unity: i32) -> Self {
-        Self { modulus, root_of_unity }
+        Self {
+            modulus,
+            root_of_unity,
+        }
     }
 
     /// AVX2-optimized forward NTT
@@ -207,17 +212,18 @@ impl SimdNTT {
             return Err(CryptoError::invalid_parameter(
                 "ntt_size",
                 "power of 2",
-                &format!("{}", n)
+                &format!("{}", n),
             ));
         }
 
         let modulus_vec = _mm256_set1_epi32(self.modulus);
-        
+
         // Process 8 elements at a time
         for chunk in data.chunks_exact_mut(8) {
             let vec = _mm256_loadu_si256(chunk.as_ptr() as *const __m256i);
             // Simplified reduction operation
-            let reduced = _mm256_and_si256(vec, _mm256_sub_epi32(modulus_vec, _mm256_set1_epi32(1)));
+            let reduced =
+                _mm256_and_si256(vec, _mm256_sub_epi32(modulus_vec, _mm256_set1_epi32(1)));
             _mm256_storeu_si256(chunk.as_mut_ptr() as *mut __m256i, reduced);
         }
 
@@ -241,7 +247,7 @@ impl SimdNTT {
                 return unsafe { self.avx2_forward_ntt(data) };
             }
         }
-        
+
         self.software_forward_ntt(data)
     }
 
@@ -252,7 +258,7 @@ impl SimdNTT {
             return Err(CryptoError::invalid_parameter(
                 "ntt_size",
                 "power of 2",
-                &format!("{}", n)
+                &format!("{}", n),
             ));
         }
 
@@ -297,13 +303,13 @@ mod tests {
     fn test_simd_polynomial_multiply() {
         let coeffs1 = vec![1, 2, 3, 4];
         let coeffs2 = vec![2, 3, 4, 5];
-        
+
         let poly1 = X86SimdPolynomial::from_coefficients(coeffs1);
         let poly2 = X86SimdPolynomial::from_coefficients(coeffs2);
-        
+
         let result = poly1.multiply(&poly2);
         assert!(result.is_ok());
-        
+
         let result_poly = result.unwrap();
         let expected = vec![2, 6, 12, 20];
         assert_eq!(result_poly.coefficients(), &expected);
@@ -313,13 +319,13 @@ mod tests {
     fn test_simd_polynomial_add() {
         let coeffs1 = vec![1, 2, 3, 4];
         let coeffs2 = vec![2, 3, 4, 5];
-        
+
         let poly1 = X86SimdPolynomial::from_coefficients(coeffs1);
         let poly2 = X86SimdPolynomial::from_coefficients(coeffs2);
-        
+
         let result = poly1.add(&poly2);
         assert!(result.is_ok());
-        
+
         let result_poly = result.unwrap();
         let expected = vec![3, 5, 7, 9];
         assert_eq!(result_poly.coefficients(), &expected);
@@ -329,7 +335,7 @@ mod tests {
     fn test_ntt_operations() {
         let ntt = SimdNTT::new(3329, 17); // Kyber parameters
         let mut data = vec![1, 2, 3, 4, 5, 6, 7, 8];
-        
+
         let result = ntt.forward_ntt(&mut data);
         assert!(result.is_ok());
     }
@@ -338,16 +344,18 @@ mod tests {
     fn test_simd_capabilities() {
         let caps = SimdCapabilities::detect();
         // Should not panic and return valid capability info
-        println!("SIMD Capabilities - AVX2: {}, SSE2: {}, SSE4.1: {}", 
-                caps.has_avx2, caps.has_sse2, caps.has_sse4_1);
+        println!(
+            "SIMD Capabilities - AVX2: {}, SSE2: {}, SSE4.1: {}",
+            caps.has_avx2, caps.has_sse2, caps.has_sse4_1
+        );
     }
 
     #[test]
     fn test_error_handling() {
         let poly1 = X86SimdPolynomial::new(4);
         let poly2 = X86SimdPolynomial::new(8); // Different size
-        
+
         let result = poly1.multiply(&poly2);
         assert!(result.is_err());
     }
-} 
+}

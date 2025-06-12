@@ -117,7 +117,7 @@ pub fn from_hex(hex: &str) -> Result<Vec<u8>, CryptoError> {
         return Err(CryptoError::invalid_parameter(
             "hex_string",
             "even number of characters",
-            &format!("{} characters", hex.len())
+            &format!("{} characters", hex.len()),
         ));
     }
 
@@ -125,7 +125,11 @@ pub fn from_hex(hex: &str) -> Result<Vec<u8>, CryptoError> {
     for i in (0..hex.len()).step_by(2) {
         let byte_str = &hex[i..i + 2];
         let byte = u8::from_str_radix(byte_str, 16).map_err(|_| {
-            CryptoError::invalid_parameter("hex_character", "valid hex digit (0-9, a-f, A-F)", byte_str)
+            CryptoError::invalid_parameter(
+                "hex_character",
+                "valid hex digit (0-9, a-f, A-F)",
+                byte_str,
+            )
         })?;
         result.push(byte);
     }
@@ -205,7 +209,7 @@ pub fn copy_bytes(src: &[u8], dst: &mut [u8]) -> Result<(), CryptoError> {
         return Err(CryptoError::invalid_parameter(
             "destination_buffer",
             &format!("{} bytes", src.len()),
-            &format!("{} bytes", dst.len())
+            &format!("{} bytes", dst.len()),
         ));
     }
 
@@ -259,35 +263,35 @@ mod tests {
         let bytes = from_hex(&hex).unwrap();
         assert_eq!(bytes, data);
     }
-    
+
     #[test]
     fn test_secure_compare() {
         let a = "secure-password";
         let b = "secure-password";
         let c = "different-password";
-        
+
         assert!(secure_compare(a, b));
         assert!(!secure_compare(a, c));
     }
-    
+
     #[test]
     fn test_concat_bytes() {
         let a = [1, 2, 3];
         let b = [4, 5];
         let c = [6, 7, 8, 9];
-        
+
         let result = concat_bytes(&[&a, &b, &c]);
         assert_eq!(result, [1, 2, 3, 4, 5, 6, 7, 8, 9]);
     }
-    
+
     #[test]
     fn test_copy_bytes() {
         let src = [1, 2, 3, 4];
         let mut dst = [0; 6];
-        
+
         copy_bytes(&src, &mut dst).unwrap();
         assert_eq!(dst, [1, 2, 3, 4, 0, 0]);
-        
+
         // Test error case with destination too small
         let mut small_dst = [0; 2];
         let result = copy_bytes(&src, &mut small_dst);

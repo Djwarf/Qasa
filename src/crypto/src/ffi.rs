@@ -99,9 +99,9 @@ fn kyber_variant_from_int(variant: c_int) -> Result<KyberVariant, CryptoError> {
         768 => Ok(KyberVariant::Kyber768),
         1024 => Ok(KyberVariant::Kyber1024),
         _ => Err(CryptoError::invalid_parameter(
-            "variant", 
-            "512, 768, or 1024", 
-            &format!("{}", variant)
+            "variant",
+            "512, 768, or 1024",
+            &format!("{}", variant),
         )),
     }
 }
@@ -115,7 +115,7 @@ fn dilithium_variant_from_int(variant: c_int) -> Result<DilithiumVariant, Crypto
         _ => Err(CryptoError::invalid_parameter(
             "variant",
             "2, 3, or 5",
-            &format!("{}", variant)
+            &format!("{}", variant),
         )),
     }
 }
@@ -161,7 +161,7 @@ pub extern "C" fn qasa_kyber_keygen(
                     Err(CryptoError::invalid_parameter(
                         "public_key_buffer",
                         &format!("{} bytes", key_pair.public_key.len()),
-                        &format!("{} bytes", max_size)
+                        &format!("{} bytes", max_size),
                     )),
                     error_msg,
                 );
@@ -179,7 +179,7 @@ pub extern "C" fn qasa_kyber_keygen(
                     Err(CryptoError::invalid_parameter(
                         "private_key_buffer",
                         &format!("{} bytes", key_pair.secret_key.len()),
-                        &format!("{} bytes", max_size)
+                        &format!("{} bytes", max_size),
                     )),
                     error_msg,
                 );
@@ -220,7 +220,7 @@ pub extern "C" fn qasa_kyber_encapsulate(
                 Err(CryptoError::invalid_parameter(
                     "public_key",
                     "valid non-null pointer",
-                    "null or invalid"
+                    "null or invalid",
                 )),
                 error_msg,
             );
@@ -252,8 +252,11 @@ pub extern "C" fn qasa_kyber_encapsulate(
             let written = copy_to_buffer(&ct, ciphertext, max_size as usize);
             if written < 0 {
                 handle_result::<()>(
-                    Err(CryptoError::invalid_parameter("Ciphertext_buffer", &format!("{} bytes", ct.len()), &format!("{} bytes", max_size
-                    ))),
+                    Err(CryptoError::invalid_parameter(
+                        "Ciphertext_buffer",
+                        &format!("{} bytes", ct.len()),
+                        &format!("{} bytes", max_size),
+                    )),
                     error_msg,
                 );
                 return -1;
@@ -267,8 +270,11 @@ pub extern "C" fn qasa_kyber_encapsulate(
             let written = copy_to_buffer(&ss, shared_secret, max_size as usize);
             if written < 0 {
                 handle_result::<()>(
-                    Err(CryptoError::invalid_parameter("Shared secret_buffer", &format!("{} bytes", ss.len()), &format!("{} bytes", max_size
-                    ))),
+                    Err(CryptoError::invalid_parameter(
+                        "Shared secret_buffer",
+                        &format!("{} bytes", ss.len()),
+                        &format!("{} bytes", max_size),
+                    )),
                     error_msg,
                 );
                 return -1;
@@ -307,8 +313,8 @@ pub extern "C" fn qasa_kyber_decapsulate(
             handle_result::<()>(
                 Err(CryptoError::invalid_parameter(
                     "private_key",
-                    "valid non-null pointer", 
-                    "null or invalid"
+                    "valid non-null pointer",
+                    "null or invalid",
                 )),
                 error_msg,
             );
@@ -322,7 +328,9 @@ pub extern "C" fn qasa_kyber_decapsulate(
         if ciphertext.is_null() || ciphertext_size <= 0 {
             handle_result::<()>(
                 Err(CryptoError::invalid_parameter(
-                    "ciphertext", "valid non-null pointer", "null or invalid",
+                    "ciphertext",
+                    "valid non-null pointer",
+                    "null or invalid",
                 )),
                 error_msg,
             );
@@ -354,8 +362,11 @@ pub extern "C" fn qasa_kyber_decapsulate(
             let written = copy_to_buffer(&ss, shared_secret, max_size as usize);
             if written < 0 {
                 handle_result::<()>(
-                    Err(CryptoError::invalid_parameter("Shared secret_buffer", &format!("{} bytes", ss.len()), &format!("{} bytes", max_size
-                    ))),
+                    Err(CryptoError::invalid_parameter(
+                        "Shared secret_buffer",
+                        &format!("{} bytes", ss.len()),
+                        &format!("{} bytes", max_size),
+                    )),
                     error_msg,
                 );
                 return -1;
@@ -405,8 +416,11 @@ pub extern "C" fn qasa_dilithium_keygen(
             let written = copy_to_buffer(&key_pair.public_key, public_key, max_size as usize);
             if written < 0 {
                 handle_result::<()>(
-                    Err(CryptoError::invalid_parameter("Public key_buffer", &format!("{} bytes", key_pair.public_key.len()), &format!("{} bytes", max_size
-                    ))),
+                    Err(CryptoError::invalid_parameter(
+                        "Public key_buffer",
+                        &format!("{} bytes", key_pair.public_key.len()),
+                        &format!("{} bytes", max_size),
+                    )),
                     error_msg,
                 );
                 return -1;
@@ -420,8 +434,11 @@ pub extern "C" fn qasa_dilithium_keygen(
             let written = copy_to_buffer(&key_pair.secret_key, private_key, max_size as usize);
             if written < 0 {
                 handle_result::<()>(
-                    Err(CryptoError::invalid_parameter("Private key_buffer", &format!("{} bytes", key_pair.secret_key.len()), &format!("{} bytes", max_size
-                    ))),
+                    Err(CryptoError::invalid_parameter(
+                        "Private key_buffer",
+                        &format!("{} bytes", key_pair.secret_key.len()),
+                        &format!("{} bytes", max_size),
+                    )),
                     error_msg,
                 );
                 return -1;
@@ -459,7 +476,9 @@ pub extern "C" fn qasa_dilithium_sign(
         if private_key.is_null() || private_key_size <= 0 {
             handle_result::<()>(
                 Err(CryptoError::invalid_parameter(
-                    "private key", "valid non-null pointer", "null or invalid",
+                    "private key",
+                    "valid non-null pointer",
+                    "null or invalid",
                 )),
                 error_msg,
             );
@@ -473,7 +492,9 @@ pub extern "C" fn qasa_dilithium_sign(
         if message.is_null() || message_size <= 0 {
             handle_result::<()>(
                 Err(CryptoError::invalid_parameter(
-                    "message", "valid non-null pointer", "null or invalid",
+                    "message",
+                    "valid non-null pointer",
+                    "null or invalid",
                 )),
                 error_msg,
             );
@@ -505,8 +526,11 @@ pub extern "C" fn qasa_dilithium_sign(
             let written = copy_to_buffer(&sig, signature, max_size as usize);
             if written < 0 {
                 handle_result::<()>(
-                    Err(CryptoError::invalid_parameter("Signature_buffer", &format!("{} bytes", sig.len()), &format!("{} bytes", max_size
-                    ))),
+                    Err(CryptoError::invalid_parameter(
+                        "Signature_buffer",
+                        &format!("{} bytes", sig.len()),
+                        &format!("{} bytes", max_size),
+                    )),
                     error_msg,
                 );
                 return -1;
@@ -544,7 +568,9 @@ pub extern "C" fn qasa_dilithium_verify(
         if public_key.is_null() || public_key_size <= 0 {
             handle_result::<()>(
                 Err(CryptoError::invalid_parameter(
-                    "public key", "valid non-null pointer", "null or invalid",
+                    "public key",
+                    "valid non-null pointer",
+                    "null or invalid",
                 )),
                 error_msg,
             );
@@ -558,7 +584,9 @@ pub extern "C" fn qasa_dilithium_verify(
         if message.is_null() || message_size <= 0 {
             handle_result::<()>(
                 Err(CryptoError::invalid_parameter(
-                    "message", "valid non-null pointer", "null or invalid",
+                    "message",
+                    "valid non-null pointer",
+                    "null or invalid",
                 )),
                 error_msg,
             );
@@ -572,7 +600,9 @@ pub extern "C" fn qasa_dilithium_verify(
         if signature.is_null() || signature_size <= 0 {
             handle_result::<()>(
                 Err(CryptoError::invalid_parameter(
-                    "signature", "valid non-null pointer", "null or invalid",
+                    "signature",
+                    "valid non-null pointer",
+                    "null or invalid",
                 )),
                 error_msg,
             );
@@ -624,7 +654,9 @@ pub extern "C" fn qasa_aes_gcm_encrypt(
         if key.is_null() || key_size <= 0 {
             handle_result::<()>(
                 Err(CryptoError::invalid_parameter(
-                    "key", "valid non-null pointer", "null or invalid",
+                    "key",
+                    "valid non-null pointer",
+                    "null or invalid",
                 )),
                 error_msg,
             );
@@ -638,7 +670,9 @@ pub extern "C" fn qasa_aes_gcm_encrypt(
         if plaintext.is_null() || plaintext_size <= 0 {
             handle_result::<()>(
                 Err(CryptoError::invalid_parameter(
-                    "plaintext", "valid non-null pointer", "null or invalid",
+                    "plaintext",
+                    "valid non-null pointer",
+                    "null or invalid",
                 )),
                 error_msg,
             );
@@ -676,8 +710,11 @@ pub extern "C" fn qasa_aes_gcm_encrypt(
             let written = copy_to_buffer(&ct, ciphertext, max_size as usize);
             if written < 0 {
                 handle_result::<()>(
-                    Err(CryptoError::invalid_parameter("Ciphertext_buffer", &format!("{} bytes", ct.len()), &format!("{} bytes", max_size
-                    ))),
+                    Err(CryptoError::invalid_parameter(
+                        "Ciphertext_buffer",
+                        &format!("{} bytes", ct.len()),
+                        &format!("{} bytes", max_size),
+                    )),
                     error_msg,
                 );
                 return -1;
@@ -691,8 +728,11 @@ pub extern "C" fn qasa_aes_gcm_encrypt(
             let written = copy_to_buffer(&nonce_bytes, nonce, max_size as usize);
             if written < 0 {
                 handle_result::<()>(
-                    Err(CryptoError::invalid_parameter("Nonce_buffer", &format!("{} bytes", nonce_bytes.len()), &format!("{} bytes", max_size
-                    ))),
+                    Err(CryptoError::invalid_parameter(
+                        "Nonce_buffer",
+                        &format!("{} bytes", nonce_bytes.len()),
+                        &format!("{} bytes", max_size),
+                    )),
                     error_msg,
                 );
                 return -1;
@@ -724,7 +764,9 @@ pub extern "C" fn qasa_aes_gcm_decrypt(
         if key.is_null() || key_size <= 0 {
             handle_result::<()>(
                 Err(CryptoError::invalid_parameter(
-                    "key", "valid non-null pointer", "null or invalid",
+                    "key",
+                    "valid non-null pointer",
+                    "null or invalid",
                 )),
                 error_msg,
             );
@@ -738,7 +780,9 @@ pub extern "C" fn qasa_aes_gcm_decrypt(
         if ciphertext.is_null() || ciphertext_size <= 0 {
             handle_result::<()>(
                 Err(CryptoError::invalid_parameter(
-                    "ciphertext", "valid non-null pointer", "null or invalid",
+                    "ciphertext",
+                    "valid non-null pointer",
+                    "null or invalid",
                 )),
                 error_msg,
             );
@@ -752,7 +796,9 @@ pub extern "C" fn qasa_aes_gcm_decrypt(
         if nonce.is_null() || nonce_size <= 0 {
             handle_result::<()>(
                 Err(CryptoError::invalid_parameter(
-                    "nonce", "valid non-null pointer", "null or invalid",
+                    "nonce",
+                    "valid non-null pointer",
+                    "null or invalid",
                 )),
                 error_msg,
             );
@@ -790,8 +836,11 @@ pub extern "C" fn qasa_aes_gcm_decrypt(
             let written = copy_to_buffer(&pt, plaintext, max_size as usize);
             if written < 0 {
                 handle_result::<()>(
-                    Err(CryptoError::invalid_parameter("Plaintext_buffer", &format!("{} bytes", pt.len()), &format!("{} bytes", max_size
-                    ))),
+                    Err(CryptoError::invalid_parameter(
+                        "Plaintext_buffer",
+                        &format!("{} bytes", pt.len()),
+                        &format!("{} bytes", max_size),
+                    )),
                     error_msg,
                 );
                 return -1;

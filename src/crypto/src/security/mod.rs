@@ -5,13 +5,13 @@
  * and security policy enforcement as per the improvement roadmap.
  */
 
-pub mod constant_time;
-pub mod side_channel;
 pub mod audit;
+pub mod constant_time;
 pub mod policy;
+pub mod side_channel;
 
 // Re-export main types for convenience
-pub use constant_time::{ConstantTime, verify_constant_time, ConstantTimeResult};
-pub use side_channel::{SideChannelTester, TimingAnalyzer, TimingAnalysisResult};
-pub use audit::{SecurityEvent, SecurityAuditor, Auditable};
-pub use policy::{SecurityPolicy, SecurityPolicyEnforcer}; 
+pub use audit::{Auditable, SecurityAuditor, SecurityEvent};
+pub use constant_time::{verify_constant_time, ConstantTime, ConstantTimeResult};
+pub use policy::{SecurityPolicy, SecurityPolicyEnforcer};
+pub use side_channel::{SideChannelTester, TimingAnalysisResult, TimingAnalyzer};

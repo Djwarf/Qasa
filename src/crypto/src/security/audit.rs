@@ -2,9 +2,9 @@
  * Security Audit Framework
  */
 
-use std::time::SystemTime;
-use std::collections::HashMap;
 use crate::error::{CryptoError, CryptoResult};
+use std::collections::HashMap;
+use std::time::SystemTime;
 
 #[derive(Debug, Clone)]
 pub struct SecurityEvent {
@@ -26,12 +26,12 @@ impl SecurityAuditor {
     pub fn new() -> Self {
         Self { events: Vec::new() }
     }
-    
+
     pub fn log_event(&mut self, event: SecurityEvent) {
         self.events.push(event);
     }
-    
+
     pub fn get_events(&self) -> &[SecurityEvent] {
         &self.events
     }
-} 
+}

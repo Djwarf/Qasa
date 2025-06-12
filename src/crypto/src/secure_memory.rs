@@ -1,12 +1,12 @@
 //! Secure Memory Handling Utilities
-//! 
+//!
 //! This module provides utilities for secure memory operations, including
 //! securely zeroing memory, preventing memory from being swapped, and
 //! creating secure containers for sensitive data.
 //!
 //! The primary goal of these utilities is to minimize the exposure of sensitive
-//! cryptographic material (like keys, passwords, and plaintext) in memory, 
-//! reducing the risk of memory-based attacks such as cold boot attacks or 
+//! cryptographic material (like keys, passwords, and plaintext) in memory,
+//! reducing the risk of memory-based attacks such as cold boot attacks or
 //! memory scanning by malicious processes.
 
 use std::ops::{Deref, DerefMut};
@@ -63,7 +63,7 @@ impl<T: Zeroize> SecureBuffer<T> {
     }
 
     /// Consume the secure buffer and return the contained data
-    /// 
+    ///
     /// This method extracts the sensitive data from the secure buffer,
     /// bypassing the automatic zeroing that would normally occur when the
     /// buffer is dropped. This should only be used when absolutely necessary.
@@ -189,7 +189,7 @@ impl SecureBytes {
     }
 
     /// Consume the container and return the contained bytes
-    /// 
+    ///
     /// This method extracts the byte vector from the secure container,
     /// bypassing the automatic zeroing that would occur when dropped.
     /// This should only be used when absolutely necessary.
@@ -206,7 +206,7 @@ impl SecureBytes {
     pub fn into_vec(mut self) -> Vec<u8> {
         std::mem::replace(&mut self.bytes, Vec::new())
     }
-    
+
     /// Append data to the end of the buffer
     ///
     /// This method adds additional data to the secure buffer, which may be
@@ -218,7 +218,7 @@ impl SecureBytes {
     pub fn extend_from_slice(&mut self, data: &[u8]) {
         self.bytes.extend_from_slice(data);
     }
-    
+
     /// Clear the buffer, securely zeroing all data
     ///
     /// This method zeroes and removes all data from the buffer while
@@ -228,7 +228,7 @@ impl SecureBytes {
         self.bytes.zeroize();
         self.bytes.clear();
     }
-    
+
     /// Get the current length of the buffer in bytes
     ///
     /// # Returns
@@ -237,7 +237,7 @@ impl SecureBytes {
     pub fn len(&self) -> usize {
         self.bytes.len()
     }
-    
+
     /// Check if the buffer is empty
     ///
     /// # Returns
@@ -273,11 +273,11 @@ impl AsMut<[u8]> for SecureBytes {
 }
 
 /// Securely zero memory after a function has completed
-/// 
+///
 /// This is a helper function that lets you wrap operations that produce
 /// sensitive data, ensuring the data is zeroized even if the function
 /// returns early or panics.
-/// 
+///
 /// # Arguments
 ///
 /// * `data` - A mutable reference to the sensitive data to be zeroized after use
@@ -294,17 +294,17 @@ impl AsMut<[u8]> for SecureBytes {
 /// - If the closure returns early via a `return` statement
 /// - If the closure panics
 /// - If an exception is thrown during execution
-/// 
+///
 /// # Example
-/// 
+///
 /// ```
 /// use qasa::secure_memory::with_secure_scope;
-/// 
+///
 /// fn handle_sensitive_data() {
 ///     let mut key = [0u8; 32];
 ///     // Generate random key or other sensitive data
 ///     // ...
-/// 
+///
 ///     with_secure_scope(&mut key, |k| {
 ///         // Use k for sensitive operations
 ///         // ...
@@ -341,58 +341,58 @@ mod tests {
     fn test_secure_buffer() {
         let sensitive_data = vec![1, 2, 3, 4, 5];
         let buffer = SecureBuffer::new(sensitive_data.clone());
-        
+
         // Check we can access the data
         assert_eq!(&*buffer, &sensitive_data);
-        
+
         // Drop the buffer, which should zeroize the data
         drop(buffer);
-        
+
         // We can't check the zeroization directly since the memory is no longer accessible,
         // but the Drop trait implementation from ZeroizeOnDrop should have been called
     }
-    
+
     #[test]
     fn test_secure_bytes() {
         let data = b"sensitive data";
         let mut secure = SecureBytes::new(data);
-        
+
         // Check we can access and modify the data
         assert_eq!(secure.as_bytes(), data);
-        
+
         secure.as_bytes_mut()[0] = b'S';
         assert_eq!(secure.as_bytes()[0], b'S');
-        
+
         // Clear the data and check it's empty
         secure.clear();
         assert!(secure.is_empty());
-        
+
         // Add new data
         secure.extend_from_slice(b"new data");
         assert_eq!(secure.as_bytes(), b"new data");
-        
+
         // Into vec
         let vec = secure.into_vec();
         assert_eq!(vec, b"new data");
     }
-    
+
     #[test]
     fn test_with_secure_scope() {
         let mut sensitive = vec![1, 2, 3, 4, 5];
         let sensitive_clone = sensitive.clone();
-        
+
         with_secure_scope(&mut sensitive, |data| {
             // Modify the data
             data[0] = 10;
             assert_eq!(data, &[10, 2, 3, 4, 5]);
         });
-        
+
         // Check each element is zeroed
         for item in &sensitive {
             assert_eq!(*item, 0);
         }
-        
+
         // Verify it's different from the original
         assert_ne!(sensitive, sensitive_clone);
     }
-} 
+}

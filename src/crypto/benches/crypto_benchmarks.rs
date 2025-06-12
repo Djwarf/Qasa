@@ -244,12 +244,9 @@ fn aes_benchmarks(c: &mut Criterion) {
     });
 
     // Benchmark decryption with different data sizes
-    let (small_encrypted, small_nonce) = aes::encrypt(small_data, &key, Some(b""))
-        .unwrap();
-    let (medium_encrypted, medium_nonce) = aes::encrypt(&medium_data, &key, Some(b""))
-        .unwrap();
-    let (large_encrypted, large_nonce) = aes::encrypt(&large_data, &key, Some(b""))
-        .unwrap();
+    let (small_encrypted, small_nonce) = aes::encrypt(small_data, &key, Some(b"")).unwrap();
+    let (medium_encrypted, medium_nonce) = aes::encrypt(&medium_data, &key, Some(b"")).unwrap();
+    let (large_encrypted, large_nonce) = aes::encrypt(&large_data, &key, Some(b"")).unwrap();
 
     group.bench_function("decrypt_small", |b| {
         b.iter(|| aes::decrypt(&small_encrypted, &key, &small_nonce, Some(b"")))

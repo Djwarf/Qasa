@@ -17,15 +17,17 @@ pub struct SecurityPolicyEnforcer {
 
 impl SecurityPolicyEnforcer {
     pub fn new() -> Self {
-        Self { policies: Vec::new() }
+        Self {
+            policies: Vec::new(),
+        }
     }
-    
+
     pub fn add_policy(&mut self, policy: SecurityPolicy) {
         self.policies.push(policy);
     }
-    
+
     pub fn enforce_policies(&self) -> CryptoResult<()> {
         // Placeholder implementation
         Ok(())
     }
-} 
+}

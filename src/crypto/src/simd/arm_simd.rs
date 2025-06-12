@@ -2,8 +2,8 @@
  * ARM SIMD Implementation Stub
  */
 
-use crate::error::{CryptoError, CryptoResult, error_codes};
-use crate::simd::{SimdCapabilities, SimdAlgorithm};
+use crate::error::{error_codes, CryptoError, CryptoResult};
+use crate::simd::{SimdAlgorithm, SimdCapabilities};
 
 pub fn detect_arm_capabilities() -> SimdCapabilities {
     SimdCapabilities {
@@ -38,4 +38,4 @@ pub fn multiply_neon(_a: &[i16], _b: &[i16]) -> CryptoResult<Vec<i16>> {
         platform: "current platform".to_string(),
         error_code: error_codes::SIMD_NOT_AVAILABLE,
     })
-} 
+}
