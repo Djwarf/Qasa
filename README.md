@@ -1,6 +1,6 @@
 # QaSa - Quantum-Safe Cryptography Module
 
-QaSa (Quantum-Safe) is a post-quantum cryptography implementation that provides protection against quantum computer attacks using NIST-selected post-quantum algorithms.
+QaSa (Quantum-Safe) is a robust post-quantum cryptography implementation, featuring NIST-selected algorithms CRYSTALS-Kyber and CRYSTALS-Dilithium for quantum-safe communications.
 
 ## Features
 
@@ -9,128 +9,89 @@ QaSa (Quantum-Safe) is a post-quantum cryptography implementation that provides 
 - **AES-GCM**: Authenticated encryption with associated data
 - **Key Management**: Secure storage and handling of cryptographic keys
 - **Optimisations**: Special optimisations for resource-constrained environments
+- **Memory Safety**: Secure memory handling with automatic zeroisation
 
-## Getting Started
+## Installation
 
-### Prerequisites
+Add this to your `Cargo.toml`:
 
-- Rust 1.60 or later
-- A C compiler (GCC or Clang)
+```toml
+[dependencies]
+qasa = "0.0.3"
+```
 
-### Building the Crypto Module
+## Quick Start
 
-1. Navigate to the crypto directory:
-   ```bash
-   cd src/crypto
-   ```
+### Key Encapsulation (Kyber)
 
-2. Build the crypto module:
-   ```bash
-   cargo build --release
-   ```
+```rust
+use qasa::kyber::{Kyber768, KyberKeyPair};
 
-3. Run tests:
-   ```bash
-   cargo test
-   ```
+// Generate a new key pair
+let keypair = KyberKeyPair::generate()?;
 
-4. Run benchmarks:
-   ```bash
-   cargo bench
-   ```
+// Encapsulate a shared secret
+let (ciphertext, shared_secret) = keypair.encapsulate()?;
 
-## Architecture
+// Decapsulate the shared secret
+let decapsulated_secret = keypair.decapsulate(&ciphertext)?;
 
-The cryptography module is organised into the following sub-modules:
+assert_eq!(shared_secret, decapsulated_secret);
+```
+
+### Digital Signatures (Dilithium)
+
+```rust
+use qasa::dilithium::{Dilithium3, DilithiumKeyPair};
+
+// Generate a new signing key pair
+let keypair = DilithiumKeyPair::generate()?;
+
+// Sign a message
+let message = b"Hello, quantum-safe world!";
+let signature = keypair.sign(message)?;
+
+// Verify the signature
+let is_valid = keypair.verify(message, &signature)?;
+assert!(is_valid);
+```
+
+### Symmetric Encryption (AES-GCM)
+
+```rust
+use qasa::aes::{encrypt, decrypt};
+
+let key = b"your-32-byte-key-here-for-aes256";
+let plaintext = b"Secret message";
+
+// Encrypt
+let (ciphertext, nonce) = encrypt(plaintext, key)?;
+
+// Decrypt
+let decrypted = decrypt(&ciphertext, key, &nonce)?;
+assert_eq!(plaintext, &decrypted[..]);
+```
+
+## Module Structure
 
 - **kyber**: CRYSTALS-Kyber implementation for quantum-resistant key encapsulation
-- **dilithium**: CRYSTALS-Dilithium implementation for quantum-resistant digital signatures  
+- **dilithium**: CRYSTALS-Dilithium implementation for quantum-resistant digital signatures
 - **aes**: AES-GCM implementation for symmetric encryption
-- **key_management**: Key management system for storing and loading keys
-- **security**: Security utilities and secure memory handling
-- **error.rs**: Common error types for the cryptography module
-- **utils.rs**: Utilities for cryptographic operations
+- **key_management**: Secure key storage and rotation mechanisms
+- **secure_memory**: Memory protection utilities for sensitive data
+- **utils**: Cryptographic utilities and helper functions
 
-## Optimisations for Resource-Constrained Environments
+## Security Levels
 
-The cryptography module includes special optimisations for resource-constrained environments, particularly for the Dilithium signature scheme:
+### Kyber Variants
+- **Kyber512** – NIST Level 1 (equivalent to AES-128)
+- **Kyber768** – NIST Level 3 (equivalent to AES-192)
+- **Kyber1024** – NIST Level 5 (equivalent to AES-256)
 
-### Memory-Efficient Variant Selection
-
-The `DilithiumVariant::for_constrained_environment()` function helps select the most appropriate variant based on available memory and security requirements:
-
-```rust
-// Select the appropriate variant for a device with limited memory
-let variant = DilithiumVariant::for_constrained_environment(
-    2, // Minimum security level
-    8  // Available memory in KB
-);
-```
-
-### Lazy Initialisation
-
-The `LeanDilithium` implementation uses lazy initialisation to minimise memory usage:
-
-```rust
-// Create a lean implementation that doesn't initialise resources immediately
-let mut lean = LeanDilithium::new(DilithiumVariant::Dilithium2);
-
-// Resources are only allocated when needed
-let signature = lean.sign(message, &secret_key)?;
-
-// Resources can be explicitly released when no longer needed
-lean.release_resources();
-```
-
-### Streamlined Operations
-
-For one-off signing or verification operations, streamlined functions are provided:
-
-```rust
-// Sign a message without maintaining state
-let signature = lean_sign(message, &secret_key, DilithiumVariant::Dilithium2)?;
-
-// Verify a signature without maintaining state
-let is_valid = lean_verify(message, &signature, &public_key, DilithiumVariant::Dilithium2)?;
-```
-
-### Batch Verification
-
-For efficient verification of multiple signatures:
-
-```rust
-// Create a batch of messages, signatures, and public keys to verify
-let batch = vec![
-    (message1, signature1, public_key1, DilithiumVariant::Dilithium2),
-    (message2, signature2, public_key2, DilithiumVariant::Dilithium3),
-];
-
-// Verify all signatures in a memory-efficient way
-let results = lean_verify_batch(&batch)?;
-```
-
-## Performance
-
-Benchmark results show that the optimised implementations maintain performance comparable to the standard implementations:
-
-| Operation | Standard Implementation | Optimised Implementation |
-|-----------|-------------------------|--------------------------|
-| Dilithium2 Sign | ~39.3 µs | ~39.2 µs |
-| Dilithium2 Verify | ~14.7 µs | ~14.7 µs |
-| Dilithium3 Sign | ~63.5 µs | ~63.2 µs |
-| Dilithium3 Verify | ~24.7 µs | ~24.7 µs |
-| Dilithium5 Sign | ~76.9 µs | ~78.8 µs |
-| Dilithium5 Verify | ~38.7 µs | ~39.2 µs |
-
-## Documentation
-
-For detailed documentation, see:
-
-- [Crypto Module README](src/crypto/README.md) - Module overview and structure
-- [Security Review](src/crypto/security_review.md) - Security analysis and review
-- [API Documentation](docs/api/crypto_api.md) - API documentation
-- [Security Guide](docs/api/security_guide.md) - Security implementation guide
-- [Threat Model](docs/api/threat_model.md) - Threat model analysis
+### Dilithium Variants
+- **Dilithium2** – NIST Level 2
+- **Dilithium3** – NIST Level 3
+- **Dilithium5** – NIST Level 5
 
 ## Examples
 
@@ -140,24 +101,41 @@ The `src/crypto/examples/` directory contains example usage:
 - `secure_communication.rs`: End-to-end example of quantum-safe cryptographic operations
 - `oqs_correct_api.rs`: Example demonstrating proper OQS API usage
 
+Run examples with:
+
+```bash
+cargo run --example secure_communication
+cargo run --example quantum_signatures
+cargo run --example oqs_correct_api
+```
+
+## Benchmarks
+
+Performance benchmarks are available:
+
+```bash
+cargo bench
+```
+
+## Documentation
+
+- [Crypto Module README](src/crypto/README.md) – Module overview and structure
+- [Security Review](src/crypto/security_review.md) – Security analysis and review
+- [API Documentation](docs/api/crypto_api.md)
+- [Security Guide](docs/api/security_guide.md)
+- [Threat Model](docs/api/threat_model.md)
+
 ## Security Considerations
 
-This is a post-quantum cryptography implementation using NIST-selected algorithms. Key security features:
+This implementation follows NIST post-quantum cryptography standards. For security-related questions or vulnerabilities, please review our [security policy](src/crypto/security_review.md).
 
-- Post-quantum key exchange with CRYSTALS-Kyber
-- Post-quantum signatures with CRYSTALS-Dilithium
-- AES-GCM for symmetric encryption
-- Secure key management and storage
-- Protection against quantum computer attacks
-
-**Note**: This is a research implementation. For production use, conduct a thorough security review.
+**Note**: This is a research implementation. For production use, conduct a thorough security review and consider formal verification.
 
 ## Contributing
 
 Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 When implementing new cryptographic functionality:
-
 1. Place implementation code in the appropriate module directory
 2. Add public API functions to the module's `mod.rs` file
 3. Document all public functions with doc comments
@@ -167,7 +145,7 @@ When implementing new cryptographic functionality:
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License – see the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgments
 

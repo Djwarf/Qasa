@@ -232,32 +232,35 @@ fn aes_benchmarks(c: &mut Criterion) {
 
     // Benchmark encryption with different data sizes
     group.bench_function("encrypt_small", |b| {
-        b.iter(|| aes::encrypt(small_data, &key, b""))
+        b.iter(|| aes::encrypt(small_data, &key, Some(b"")))
     });
 
     group.bench_function("encrypt_medium", |b| {
-        b.iter(|| aes::encrypt(&medium_data, &key, b""))
+        b.iter(|| aes::encrypt(&medium_data, &key, Some(b"")))
     });
 
     group.bench_function("encrypt_large", |b| {
-        b.iter(|| aes::encrypt(&large_data, &key, b""))
+        b.iter(|| aes::encrypt(&large_data, &key, Some(b"")))
     });
 
     // Benchmark decryption with different data sizes
-    let (small_encrypted, small_nonce) = aes::encrypt(small_data, &key, b"").unwrap();
-    let (medium_encrypted, medium_nonce) = aes::encrypt(&medium_data, &key, b"").unwrap();
-    let (large_encrypted, large_nonce) = aes::encrypt(&large_data, &key, b"").unwrap();
+    let (small_encrypted, small_nonce) = aes::encrypt(small_data, &key, Some(b""))
+        .unwrap();
+    let (medium_encrypted, medium_nonce) = aes::encrypt(&medium_data, &key, Some(b""))
+        .unwrap();
+    let (large_encrypted, large_nonce) = aes::encrypt(&large_data, &key, Some(b""))
+        .unwrap();
 
     group.bench_function("decrypt_small", |b| {
-        b.iter(|| aes::decrypt(&small_encrypted, &key, &small_nonce, b""))
+        b.iter(|| aes::decrypt(&small_encrypted, &key, &small_nonce, Some(b"")))
     });
 
     group.bench_function("decrypt_medium", |b| {
-        b.iter(|| aes::decrypt(&medium_encrypted, &key, &medium_nonce, b""))
+        b.iter(|| aes::decrypt(&medium_encrypted, &key, &medium_nonce, Some(b"")))
     });
 
     group.bench_function("decrypt_large", |b| {
-        b.iter(|| aes::decrypt(&large_encrypted, &key, &large_nonce, b""))
+        b.iter(|| aes::decrypt(&large_encrypted, &key, &large_nonce, Some(b"")))
     });
 
     group.finish();

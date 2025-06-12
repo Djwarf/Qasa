@@ -21,7 +21,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-qasa = "0.0.1"
+qasa = "0.0.3"
 ```
 
 ## Quick Start
