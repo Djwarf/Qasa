@@ -9,7 +9,7 @@
 - Version 1.0 Release: 0% complete
 - Future Directions: 0% complete
 
-## 1. Core Development (Q2-Q3 2024) - 90% Complete
+## 1. Core Development (Q2-Q3 2024) - 95% Complete
 
 ### 1.1 Algorithm Refinement - 100% Complete
 - Kyber Optimizations
