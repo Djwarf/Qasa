@@ -1,0 +1,50 @@
+[package]
+name = "qasa-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1.3", features = ["derive"] }
+
+[dependencies.qasa]
+path = ".."
+
+[[bin]]
+name = "fuzz_kyber"
+path = "fuzz_targets/fuzz_target_1.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_dilithium"
+path = "fuzz_targets/fuzz_dilithium.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_aes_gcm"
+path = "fuzz_targets/fuzz_aes_gcm.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_secure_memory"
+path = "fuzz_targets/fuzz_secure_memory.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_high_level_api"
+path = "fuzz_targets/fuzz_high_level_api.rs"
+test = false
+doc = false
+bench = false
