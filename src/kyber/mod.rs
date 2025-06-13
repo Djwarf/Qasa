@@ -6,6 +6,7 @@
  */
 
 mod kyber;
+pub mod lean;
 
 pub use kyber::*;
 

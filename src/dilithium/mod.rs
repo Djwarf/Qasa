@@ -7,9 +7,16 @@
 
 mod dilithium;
 mod optimizations;
+mod compression;
 
 pub use dilithium::*;
 pub use optimizations::LeanDilithium;
+pub use compression::{
+    CompressedSignature,
+    CompressionLevel,
+    compress_signature,
+    decompress_signature,
+};
 
 #[cfg(test)]
 mod tests;

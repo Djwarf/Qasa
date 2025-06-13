@@ -134,11 +134,13 @@ pub enum SecuritySeverity {
 /// Error code constants for different error categories
 pub mod error_codes {
     // Kyber errors: 1000-1999
+    pub const KYBER_INITIALIZATION_FAILED: u32 = 1000;
     pub const KYBER_KEY_GENERATION_FAILED: u32 = 1001;
     pub const KYBER_ENCAPSULATION_FAILED: u32 = 1002;
     pub const KYBER_DECAPSULATION_FAILED: u32 = 1003;
     pub const KYBER_INVALID_KEY_SIZE: u32 = 1004;
     pub const KYBER_INVALID_CIPHERTEXT: u32 = 1005;
+    pub const KYBER_INSUFFICIENT_MEMORY: u32 = 1006;
 
     // Dilithium errors: 2000-2999
     pub const DILITHIUM_KEY_GENERATION_FAILED: u32 = 2001;
@@ -146,6 +148,8 @@ pub mod error_codes {
     pub const DILITHIUM_VERIFICATION_FAILED: u32 = 2003;
     pub const DILITHIUM_INVALID_SIGNATURE: u32 = 2004;
     pub const DILITHIUM_INVALID_KEY_SIZE: u32 = 2005;
+    pub const DILITHIUM_COMPRESSION_FAILED: u32 = 2006;
+    pub const DILITHIUM_DECOMPRESSION_FAILED: u32 = 2007;
 
     // AES errors: 3000-3999
     pub const AES_ENCRYPTION_FAILED: u32 = 3001;
