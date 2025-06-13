@@ -15,7 +15,7 @@ The cryptography module provides quantum-resistant cryptographic primitives for:
 
 ```toml
 [dependencies]
-qasa = "0.0.3"
+qasa = "0.0.4"
 ```
 
 ## Core Types

@@ -2,7 +2,6 @@
  * Security Audit Framework
  */
 
-use crate::error::{CryptoError, CryptoResult};
 use std::collections::HashMap;
 use std::time::SystemTime;
 

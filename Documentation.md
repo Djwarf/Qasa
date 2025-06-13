@@ -44,7 +44,6 @@ QaSa (Quantum-Safe) is a post-quantum cryptography implementation that provides 
 
 2. Build the cryptography module
    ```bash
-   cd src/crypto
    cargo build --release
    ```
 
@@ -63,7 +62,6 @@ QaSa (Quantum-Safe) is a post-quantum cryptography implementation that provides 
 To explore the cryptographic functionality, run the provided examples:
 
 ```bash
-cd src/crypto
 cargo run --example secure_communication
 cargo run --example quantum_signatures
 ```

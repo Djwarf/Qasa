@@ -3,8 +3,8 @@ use qasa::utils::{secure_zero, constant_time_eq};
 
 fn main() {
     let mut sensitive = vec![1u8, 2, 3, 4, 5];
-    let mut compare = vec![1u8, 2, 3, 4, 5];
-    let mut wrong = vec![1u8, 2, 3, 4, 9];
+    let compare = vec![1u8, 2, 3, 4, 5];
+    let wrong = vec![1u8, 2, 3, 4, 9];
 
     // Constant-time comparison
     assert!(constant_time_eq(&sensitive, &compare));

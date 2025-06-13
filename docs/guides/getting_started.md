@@ -16,7 +16,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-qasa = "0.0.3
+qasa = "0.0.4
 ```
 
 ## Building from Source
@@ -31,7 +31,6 @@ cd Qasa
 ### 2. Build the Cryptography Module
 
 ```bash
-cd src/crypto
 cargo build --release
 ```
 
@@ -138,7 +137,6 @@ The `examples/` directory contains complete usage examples:
 ### Basic Cryptographic Operations
 
 ```bash
-cd src/crypto
 cargo run --example quantum_signatures
 cargo run --example secure_communication
 ```
@@ -201,7 +199,7 @@ cargo build --release --no-default-features --features "lean"
 
 ## Next Steps
 
-- Read the [Crypto Module README](../../src/crypto/README.md) for detailed module information
+- Read the [README](../../README.md) for detailed module information
 - Review the [Security Guide](../api/security_guide.md) for implementation best practices
 - Study the [Threat Model](../api/threat_model.md) to understand security considerations
 - Explore the [API Documentation](../api/crypto_api.md) for detailed function reference
@@ -210,8 +208,8 @@ cargo build --release --no-default-features --features "lean"
 
 If you encounter issues:
 
-1. Check the [Security Review](../../src/crypto/security_review.md) for known considerations
-2. Review the examples in `src/crypto/examples/`
+1. Check the [Security Review](../../security_review.md) for known considerations
+2. Review the examples in `examples/`
 3. Search for similar issues on our GitHub repository
 4. Consult the comprehensive API documentation
 

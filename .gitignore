@@ -26,6 +26,9 @@ go.work
 /bin/
 /pkg/
 
+
+/target/
+
 # Generated files
 /generated/
 

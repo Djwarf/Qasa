@@ -17,7 +17,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-qasa = "0.0.3"
+qasa = "0.0.4"
 ```
 
 ## Quick Start
@@ -95,7 +95,7 @@ assert_eq!(plaintext, &decrypted[..]);
 
 ## Examples
 
-The `src/crypto/examples/` directory contains example usage:
+The `examples/` directory contains example usage:
 
 - `quantum_signatures.rs`: Example of using Dilithium for digital signatures
 - `secure_communication.rs`: End-to-end example of quantum-safe cryptographic operations
@@ -119,15 +119,14 @@ cargo bench
 
 ## Documentation
 
-- [Crypto Module README](src/crypto/README.md) – Module overview and structure
-- [Security Review](src/crypto/security_review.md) – Security analysis and review
+- [Security Review](security_review.md) – Security analysis and review
 - [API Documentation](docs/api/crypto_api.md)
 - [Security Guide](docs/api/security_guide.md)
 - [Threat Model](docs/api/threat_model.md)
 
 ## Security Considerations
 
-This implementation follows NIST post-quantum cryptography standards. For security-related questions or vulnerabilities, please review our [security policy](src/crypto/security_review.md).
+This implementation follows NIST post-quantum cryptography standards. For security-related questions or vulnerabilities, please review our [security policy](security_review.md).
 
 **Note**: This is a research implementation. For production use, conduct a thorough security review and consider formal verification.
 

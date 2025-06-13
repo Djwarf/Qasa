@@ -6,7 +6,6 @@ use crate::aes::AesGcm;
 use crate::dilithium::{DilithiumKeyPair, DilithiumVariant};
 use crate::error::{CryptoError, CryptoResult};
 use crate::kyber::{KyberKeyPair, KyberVariant};
-use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone)]

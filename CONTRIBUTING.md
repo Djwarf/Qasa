@@ -30,7 +30,6 @@ Please be respectful and considerate of others when contributing to this project
 
 3. Add comprehensive tests for your changes:
    ```bash
-   cd src/crypto
    cargo test
    ```
 
@@ -208,7 +207,6 @@ rustup component add rustfmt clippy
 cargo install cargo-audit cargo-fuzz flamegraph
 
 # Build and test
-cd src/crypto
 cargo build --release
 cargo test
 cargo bench

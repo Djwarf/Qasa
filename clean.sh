@@ -32,8 +32,7 @@ echo "Cleaning additional artifacts..."
 
 # Clean Rust target directories
 echo "Cleaning Rust targets..."
-cd src/crypto && cargo clean 2>/dev/null || true
-cd ../..
+cargo clean 2>/dev/null || true
 
 # Remove empty directories (except git)
 echo "Removing empty directories..."
@@ -42,6 +41,6 @@ find . -type d -empty -not -path "./.git/*" -delete 2>/dev/null || true
 echo "Cleanup complete!"
 echo ""
 echo "To rebuild the crypto module:"
-echo "  1. cd src/crypto && cargo build --release"
+echo "  1. cargo build --release"
 echo "  2. cargo test"
 echo "  3. cargo run --example secure_communication" 

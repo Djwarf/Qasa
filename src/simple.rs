@@ -3,10 +3,9 @@
 //! This module provides simple, easy-to-use functions for common cryptographic operations.
 //! All functions use secure defaults and post-quantum algorithms.
 
-use crate::aes::AesGcm;
 use crate::dilithium::{DilithiumKeyPair, DilithiumVariant};
 use crate::kyber::{KyberKeyPair, KyberVariant};
-use crate::{CryptoError, CryptoResult};
+use crate::CryptoResult;
 
 /// Simple key generation for encryption
 ///

@@ -2,7 +2,7 @@
  * Security Policy Framework
  */
 
-use crate::error::{CryptoError, CryptoResult};
+use crate::error::CryptoResult;
 
 #[derive(Debug, Clone)]
 pub struct SecurityPolicy {

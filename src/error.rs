@@ -6,7 +6,6 @@
  */
 
 use std::collections::HashMap;
-use std::fmt;
 use thiserror::Error;
 
 /// Comprehensive error type for all cryptographic operations

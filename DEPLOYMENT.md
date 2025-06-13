@@ -47,7 +47,6 @@ This document provides comprehensive instructions for building, testing, and dep
 Navigate to the crypto module directory and build:
 
 ```bash
-cd src/crypto
 cargo build --release
 ```
 
@@ -56,7 +55,6 @@ cargo build --release
 For development with debug symbols:
 
 ```bash
-cd src/crypto
 cargo build
 ```
 
@@ -101,7 +99,6 @@ cargo build --release --target x86_64-pc-windows-gnu
 Run the complete test suite:
 
 ```bash
-cd src/crypto
 cargo test
 ```
 
@@ -143,7 +140,6 @@ cargo test constant_time
 Run all benchmarks:
 
 ```bash
-cd src/crypto
 cargo bench
 ```
 
@@ -171,7 +167,6 @@ valgrind --tool=massif target/release/qasa
 Generate API documentation:
 
 ```bash
-cd src/crypto
 cargo doc --open
 ```
 
@@ -188,7 +183,6 @@ cargo doc --document-private-items --open
 Install the crypto library system-wide:
 
 ```bash
-cd src/crypto
 cargo install --path .
 ```
 
@@ -198,7 +192,7 @@ To use as a library dependency, add to `Cargo.toml`:
 
 ```toml
 [dependencies]
-qasa = { path = "./src/crypto" }
+qasa = { path = "." }
 ```
 
 ## Configuration
@@ -416,7 +410,7 @@ export RUST_BACKTRACE=1
 For technical support and issues:
 
 1. Check the [project documentation](README.md)
-2. Review [security guidelines](src/crypto/security_review.md)
+2. Review [security guidelines](security_review.md)
 3. Consult the [API documentation](docs/api/crypto_api.md)
 4. Submit issues via the project repository
 
