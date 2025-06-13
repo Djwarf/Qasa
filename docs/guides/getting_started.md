@@ -53,12 +53,16 @@ cargo bench
 ```rust
 use qasa::kyber::{KyberKeyPair, KyberVariant};
 use qasa::dilithium::{DilithiumKeyPair, DilithiumVariant};
+use qasa::sphincsplus::{SphincsKeyPair, SphincsVariant};
 
 // Generate Kyber key pair for key encapsulation
 let kyber_keypair = KyberKeyPair::generate(KyberVariant::Kyber768)?;
 
 // Generate Dilithium key pair for digital signatures
 let dilithium_keypair = DilithiumKeyPair::generate(DilithiumVariant::Dilithium3)?;
+
+// Generate SPHINCS+ key pair for hash-based signatures
+let sphincs_keypair = SphincsKeyPair::generate(SphincsVariant::Sphincs192f)?;
 ```
 
 ### Key Encapsulation
@@ -75,6 +79,8 @@ let decapsulated_secret = kyber_keypair
 
 ### Digital Signatures
 
+#### Using Dilithium
+
 ```rust
 // Sign a message
 let message = b"Hello, quantum-safe world!";
@@ -83,6 +89,23 @@ let signature = dilithium_keypair.sign(message)?;
 // Verify a signature
 let is_valid = dilithium_keypair.public_key()
     .verify(message, &signature)?;
+```
+
+#### Using SPHINCS+
+
+```rust
+// Sign a message
+let message = b"Hello, quantum-safe world!";
+let signature = sphincs_keypair.sign(message)?;
+
+// Verify a signature
+let is_valid = sphincs_keypair.public_key()
+    .verify(message, &signature)?;
+
+// For reduced signature size, use compression
+let compressed = sphincs_keypair.sign_compressed(message, CompressionLevel::Medium)?;
+let is_valid = sphincs_keypair.public_key()
+    .verify_compressed(message, &compressed)?;
 ```
 
 ### Symmetric Encryption
@@ -112,6 +135,7 @@ let mut key_store = KeyStore::new(config)?;
 // Store keys securely
 key_store.store_keypair("my-kyber-key", &kyber_keypair, Some("password"))?;
 key_store.store_signing_keypair("my-dilithium-key", &dilithium_keypair, Some("password"))?;
+key_store.store_signing_keypair("my-sphincs-key", &sphincs_keypair, Some("password"))?;
 
 // Load keys
 let loaded_keypair = key_store.load_keypair("my-kyber-key", Some("password"))?;
@@ -139,6 +163,7 @@ The `examples/` directory contains complete usage examples:
 ```bash
 cargo run --example quantum_signatures
 cargo run --example secure_communication
+cargo run --example sphincs_signatures
 ```
 
 ### Optimized Operations for Constrained Environments
@@ -160,6 +185,7 @@ zeroize_on_drop = true
 [algorithms]
 kyber_variant = "Kyber768"
 dilithium_variant = "Dilithium3"
+sphincsplus_variant = "Sphincs192f"
 aes_key_size = 256
 
 [performance]

@@ -4,5 +4,6 @@
 
 pub mod kyber;
 pub mod dilithium;
+pub mod sphincsplus;
 pub mod aes_gcm;
-pub mod secure_memory; 
+pub mod secure_memory;

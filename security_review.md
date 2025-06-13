@@ -18,11 +18,17 @@ The module implements the following cryptographic primitives:
    - Security Level: Dilithium-3 provides 128-bit security level (post-quantum)
    - Implementation: Uses the OQS library bindings
 
-3. **AES-GCM** (Authenticated Encryption with Associated Data)
+3. **SPHINCS+** (Hash-based Digital Signature Algorithm)
+   - Status: NIST-selected post-quantum signature standard
+   - Security Level: Multiple variants from 128-bit to 256-bit security levels
+   - Implementation: Uses the OQS library bindings
+   - Note: Provides algorithm diversity as a non-lattice-based alternative
+
+4. **AES-GCM** (Authenticated Encryption with Associated Data)
    - Key Size: 256-bit keys (provided by Kyber KEM)
    - Implementation: Uses the aes-gcm Rust crate
 
-4. **Argon2id** (Password-Based Key Derivation)
+5. **Argon2id** (Password-Based Key Derivation)
    - Configuration: Memory: 65536 KB, Iterations: 3, Parallelism: 4
    - Output size: 32 bytes (256 bits)
    - Implementation: Uses the argon2 Rust crate
@@ -105,7 +111,7 @@ The cryptography module provides the following security properties:
 
 ### Low Priority
 
-1. Consider additional post-quantum algorithms for algorithm diversity.
+1. Consider additional post-quantum KEM algorithms for KEM diversity.
 2. Implement side-channel resistance testing.
 3. Add formal verification of critical security properties.
 

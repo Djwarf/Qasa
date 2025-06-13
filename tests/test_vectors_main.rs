@@ -4,10 +4,11 @@
 mod test_vectors;
 
 use qasa::kyber::{KyberKeyPair, KyberPublicKey};
-use qasa::dilithium::{DilithiumKeyPair, DilithiumPublicKey, CompressedSignature};
+use qasa::dilithium::{DilithiumKeyPair, DilithiumPublicKey, CompressedSignature as DilithiumCompressedSignature};
+use qasa::sphincsplus::{SphincsKeyPair, SphincsPublicKey, CompressedSignature as SphincsCompressedSignature};
 use qasa::aes;
 use qasa::secure_memory::LockedMemory;
-use test_vectors::{kyber, dilithium, aes_gcm, secure_memory};
+use test_vectors::{kyber, dilithium, sphincsplus, aes_gcm, secure_memory};
 use std::fs;
 use std::path::Path;
 use std::io::Write;
@@ -40,6 +41,17 @@ fn export_test_vectors() -> std::io::Result<()> {
     let dilithium_special_json = serde_json::to_string_pretty(&dilithium_special_vectors)
         .expect("Failed to serialize Dilithium special case test vectors");
     fs::write(output_dir.join("dilithium_special.json"), dilithium_special_json)?;
+    
+    // Export SPHINCS+ test vectors
+    let sphincsplus_vectors = sphincsplus::standard_test_vectors();
+    let sphincsplus_json = serde_json::to_string_pretty(&sphincsplus_vectors)
+        .expect("Failed to serialize SPHINCS+ test vectors");
+    fs::write(output_dir.join("sphincsplus_standard.json"), sphincsplus_json)?;
+    
+    let sphincsplus_special_vectors = sphincsplus::special_case_test_vectors();
+    let sphincsplus_special_json = serde_json::to_string_pretty(&sphincsplus_special_vectors)
+        .expect("Failed to serialize SPHINCS+ special case test vectors");
+    fs::write(output_dir.join("sphincsplus_special.json"), sphincsplus_special_json)?;
     
     // Export AES-GCM test vectors
     let aes_gcm_vectors = aes_gcm::standard_test_vectors();
@@ -74,6 +86,8 @@ This directory contains test vectors for the QaSa cryptography module, designed 
 - `kyber_special.json`: Special case test vectors for Kyber KEM
 - `dilithium_standard.json`: Standard test vectors for Dilithium signatures
 - `dilithium_special.json`: Special case test vectors for Dilithium signatures
+- `sphincsplus_standard.json`: Standard test vectors for SPHINCS+ signatures
+- `sphincsplus_special.json`: Special case test vectors for SPHINCS+ signatures
 - `aes_gcm_standard.json`: Standard test vectors for AES-GCM encryption
 - `aes_gcm_special.json`: Special case test vectors for AES-GCM encryption
 - `secure_memory_standard.json`: Test vectors for secure memory operations
@@ -128,6 +142,18 @@ fn test_all_vectors() {
             .expect("Failed to verify Dilithium signature");
         
         assert!(is_valid, "Dilithium signature verification failed");
+    }
+    
+    // Test SPHINCS+ vectors
+    let sphincsplus_vectors = sphincsplus::standard_test_vectors();
+    for vector in sphincsplus_vectors {
+        let pk = SphincsPublicKey::from_bytes(&vector.public_key)
+            .expect("Failed to deserialize SPHINCS+ public key");
+        
+        let is_valid = pk.verify(&vector.message, &vector.signature)
+            .expect("Failed to verify SPHINCS+ signature");
+        
+        assert!(is_valid, "SPHINCS+ signature verification failed");
     }
     
     // Test AES-GCM vectors

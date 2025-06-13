@@ -20,9 +20,10 @@ QaSa (Quantum-Safe) is a post-quantum cryptography implementation that provides 
 
 ## Features
 
-- **Quantum-Resistant Encryption** - Uses NIST-selected post-quantum algorithms CRYSTALS-Kyber and CRYSTALS-Dilithium
+- **Quantum-Resistant Encryption** - Uses NIST-selected post-quantum algorithms CRYSTALS-Kyber, CRYSTALS-Dilithium, and SPHINCS+
 - **CRYSTALS-Kyber** - Quantum-resistant key encapsulation mechanism (KEM)
 - **CRYSTALS-Dilithium** - Quantum-resistant digital signature scheme
+- **SPHINCS+** - Hash-based stateless signature scheme for signature diversity
 - **AES-GCM** - Authenticated encryption with associated data
 - **Key Management** - Secure storage and handling of cryptographic keys
 - **Optimisations** - Special optimisations for resource-constrained environments
@@ -79,6 +80,7 @@ QaSa focuses on providing a robust cryptography module:
 **Crypto Module (Rust)** - Implements the post-quantum cryptographic algorithms
 - CRYSTALS-Kyber for key encapsulation
 - CRYSTALS-Dilithium for digital signatures
+- SPHINCS+ for hash-based signatures
 - AES-GCM for symmetric encryption
 - Secure key management system
 
@@ -103,6 +105,17 @@ Dilithium offers three security levels:
 - **Dilithium2** - NIST Level 2 security
 - **Dilithium3** - NIST Level 3 security
 - **Dilithium5** - NIST Level 5 security
+
+#### SPHINCS+
+SPHINCS+ is a stateless hash-based signature scheme providing an alternative signature approach not based on lattices.
+
+SPHINCS+ offers multiple variants with different security/performance tradeoffs:
+- **SPHINCS+-128f** - NIST Level 1 security, optimized for speed
+- **SPHINCS+-128s** - NIST Level 1 security, optimized for signature size
+- **SPHINCS+-192f** - NIST Level 3 security, optimized for speed
+- **SPHINCS+-192s** - NIST Level 3 security, optimized for signature size
+- **SPHINCS+-256f** - NIST Level 5 security, optimized for speed
+- **SPHINCS+-256s** - NIST Level 5 security, optimized for signature size
 
 #### AES-GCM
 AES-GCM is used for authenticated symmetric encryption, providing both confidentiality and integrity.
@@ -140,6 +153,23 @@ let signature = key_pair.sign(message.as_bytes())?;
 
 // Verify a signature
 let is_valid = key_pair.verify(message.as_bytes(), &signature)?;
+```
+
+#### Digital Signatures (SPHINCS+)
+
+```rust
+// Generate a new SPHINCS+ key pair
+let key_pair = SphincsKeyPair::generate(SphincsVariant::Sphincs192f)?;
+
+// Sign a message
+let signature = key_pair.sign(message.as_bytes())?;
+
+// Verify a signature
+let is_valid = key_pair.verify(message.as_bytes(), &signature)?;
+
+// Use compressed signatures for reduced size
+let compressed = key_pair.sign_compressed(message.as_bytes(), CompressionLevel::Medium)?;
+let is_valid = key_pair.verify_compressed(message.as_bytes(), &compressed)?;
 ```
 
 #### Symmetric Encryption (AES-GCM)
@@ -184,6 +214,14 @@ Performance benchmarks for the cryptography module on a modern system:
 | Key Generation | 1.25 ms | 2.09 ms | 3.27 ms |
 | Signing | 3.21 ms | 4.98 ms | 7.16 ms |
 | Verification | 0.87 ms | 1.52 ms | 2.31 ms |
+
+#### SPHINCS+
+
+| Operation | SPHINCS+-128f | SPHINCS+-128s | SPHINCS+-256f | SPHINCS+-256s |
+|-----------|---------------|---------------|---------------|---------------|
+| Key Generation | 0.42 ms | 0.38 ms | 0.65 ms | 0.59 ms |
+| Signing | 3.50 ms | 12.80 ms | 14.50 ms | 85.30 ms |
+| Verification | 0.60 ms | 1.80 ms | 2.10 ms | 6.20 ms |
 
 #### AES-GCM
 

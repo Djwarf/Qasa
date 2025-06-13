@@ -20,6 +20,9 @@ pub mod kyber;
 /// CRYSTALS-Dilithium implementation for digital signatures
 pub mod dilithium;
 
+/// SPHINCS+ implementation for digital signatures
+pub mod sphincsplus;
+
 /// AES-GCM implementation for symmetric encryption
 pub mod aes;
 
@@ -54,6 +57,11 @@ pub mod simple;
 pub use dilithium::DilithiumKeyPair;
 pub use dilithium::DilithiumPublicKey;
 pub use dilithium::DilithiumVariant;
+pub use sphincsplus::SphincsKeyPair;
+pub use sphincsplus::SphincsPublicKey;
+pub use sphincsplus::SphincsVariant;
+pub use sphincsplus::CompressionLevel as SphincsCompressionLevel;
+pub use sphincsplus::CompressedSignature as SphincsCompressedSignature;
 pub use error::{CryptoError, CryptoResult};
 pub use kyber::KyberKeyPair;
 pub use kyber::KyberPublicKey;
@@ -134,6 +142,11 @@ pub mod prelude {
     pub use crate::DilithiumKeyPair;
     pub use crate::DilithiumPublicKey;
     pub use crate::DilithiumVariant;
+    pub use crate::SphincsKeyPair;
+    pub use crate::SphincsPublicKey;
+    pub use crate::SphincsVariant;
+    pub use crate::SphincsCompressionLevel;
+    pub use crate::SphincsCompressedSignature;
     pub use crate::KyberKeyPair;
     pub use crate::KyberPublicKey;
     pub use crate::KyberVariant;

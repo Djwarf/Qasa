@@ -67,6 +67,7 @@ The crypto module supports various build configurations:
 - `default`: Standard features including all algorithms
 - `kyber`: CRYSTALS-Kyber KEM only
 - `dilithium`: CRYSTALS-Dilithium signatures only
+- `sphincsplus`: SPHINCS+ signatures only
 - `aes`: AES-GCM symmetric encryption only
 - `optimized`: Memory and performance optimizations
 - `lean`: Minimal footprint for constrained environments
@@ -74,7 +75,7 @@ The crypto module supports various build configurations:
 Example build with specific features:
 
 ```bash
-cargo build --release --no-default-features --features "kyber,dilithium,optimized"
+cargo build --release --no-default-features --features "kyber,dilithium,sphincsplus,optimized"
 ```
 
 #### Target Platforms
@@ -113,6 +114,7 @@ Run specific test modules:
 ```bash
 cargo test kyber::tests
 cargo test dilithium::tests
+cargo test sphincsplus::tests
 cargo test key_management::tests
 ```
 
@@ -148,6 +150,7 @@ Run specific algorithm benchmarks:
 ```bash
 cargo bench kyber
 cargo bench dilithium
+cargo bench sphincsplus
 cargo bench aes
 ```
 
@@ -233,6 +236,9 @@ kyber_variant = "Kyber768"
 
 # Default Dilithium variant  
 dilithium_variant = "Dilithium3"
+
+# Default SPHINCS+ variant
+sphincsplus_variant = "Sphincs192f"
 
 # AES key size
 aes_key_size = 256

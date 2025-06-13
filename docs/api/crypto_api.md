@@ -7,7 +7,7 @@ This document provides an overview of the QaSa cryptography module API.
 The cryptography module provides quantum-resistant cryptographic primitives for:
 
 - Key encapsulation (using CRYSTALS-Kyber)
-- Digital signatures (using CRYSTALS-Dilithium)
+- Digital signatures (using CRYSTALS-Dilithium and SPHINCS+)
 - Symmetric encryption (using AES-GCM)
 - Key management
 
