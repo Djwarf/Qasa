@@ -176,6 +176,9 @@ pub mod error_codes {
     pub const MEMORY_ALLOCATION_FAILED: u32 = 6001;
     pub const SECURE_MEMORY_LOCK_FAILED: u32 = 6002;
     pub const MEMORY_ZEROIZATION_FAILED: u32 = 6003;
+    pub const BUFFER_OVERFLOW_DETECTED: u32 = 6004;
+    pub const BUFFER_UNDERFLOW_DETECTED: u32 = 6005;
+    pub const CANARY_CORRUPTED: u32 = 6006;
 
     // Hardware errors: 7000-7999
     pub const SIMD_NOT_AVAILABLE: u32 = 7001;

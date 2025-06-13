@@ -126,6 +126,8 @@ pub mod prelude {
     pub use crate::secure_memory::SecureBytes;
     pub use crate::secure_memory::LockedMemory;
     pub use crate::secure_memory::LockedBuffer;
+    pub use crate::secure_memory::CanaryBuffer;
+    pub use crate::secure_memory::DEFAULT_CANARY_PATTERN;
     pub use crate::sign_message;
     pub use crate::verify_message;
     pub use crate::CryptoError;
