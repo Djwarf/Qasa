@@ -6,8 +6,7 @@
  */
 
 use crate::error::{CryptoError, error_codes};
-use crate::utils::{secure_compare, hex_to_bytes, bytes_to_hex};
-use crate::secure_memory::SecureBytes;
+use crate::utils;
 use crate::dilithium::{CompressionLevel, CompressedSignature, compress_signature, decompress_signature};
 use zeroize::Zeroize;
 
