@@ -12,7 +12,7 @@ This document describes the threat model for the QaSa cryptography module, which
 The QaSa cryptography module is designed to be a component in end-to-end secure communication systems, providing:
 
 1. Post-quantum key exchange (CRYSTALS-Kyber)
-2. Post-quantum digital signatures (CRYSTALS-Dilithium)
+2. Post-quantum digital signatures (CRYSTALS-Dilithium and SPHINCS+)
 3. Authenticated symmetric encryption (AES-GCM)
 4. Secure key management
 
@@ -125,7 +125,7 @@ The primary assets the cryptography module aims to protect are:
 
 | Attack Vector | Description | Mitigation |
 |---------------|-------------|------------|
-| Quantum Computing | Using quantum algorithms to break cryptography | Use of post-quantum algorithms (Kyber, Dilithium); sufficiently large AES-256 keys |
+| Quantum Computing | Using quantum algorithms to break cryptography | Use of post-quantum algorithms (Kyber, Dilithium, SPHINCS+); algorithm diversity; sufficiently large AES-256 keys |
 | Side-Channel Analysis | Extracting keys by analyzing timing, power, etc. | Constant-time operations where possible; memory zeroization; secure comparison functions |
 | Implementation Flaws | Bugs in cryptographic implementation | Use of well-vetted libraries; comprehensive test suite; security audits |
 | Random Number Generation Flaws | Predictable "random" values used for keys/nonces | Use of OS-provided secure random number generation; entropy checking |
@@ -243,6 +243,7 @@ The module assumes:
 4. The compiler and build process don't introduce backdoors
 5. The execution environment prevents other processes from accessing the application's memory
 6. The platform supports proper memory zeroization (not defeated by compiler optimizations)
+7. The diverse set of cryptographic algorithms (lattice-based and hash-based) provides protection against future cryptanalytic breakthroughs
 
 ## Specific Scenarios and Mitigations
 
@@ -255,6 +256,7 @@ The module assumes:
 
 **Mitigations:**
 - Use of post-quantum Kyber for key exchange resists quantum attacks
+- Multiple signature algorithms (Dilithium and SPHINCS+) provide algorithm diversity
 - AES-256 provides adequate security margin against Grover's algorithm
 - Forward secrecy through automatic key rotation limits impact of key compromise
 
@@ -347,7 +349,7 @@ Responsible disclosure is requested - please allow time for issues to be address
 
 ## References
 
-1. NIST SP 800-208: CRYSTALS-Kyber and CRYSTALS-Dilithium
+1. NIST SP 800-208: CRYSTALS-Kyber, CRYSTALS-Dilithium, and SPHINCS+
 2. NIST SP 800-38D: AES-GCM
 3. RFC 9106: Argon2 Password Hashing
 4. NIST SP 800-175B: Guideline for Using Cryptographic Standards

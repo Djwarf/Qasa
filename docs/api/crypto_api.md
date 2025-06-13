@@ -68,6 +68,33 @@ pub enum DilithiumVariant {
 }
 ```
 
+### `SphincsKeyPair`
+
+Represents a SPHINCS+ key pair for hash-based digital signatures.
+
+```rust
+pub struct SphincsKeyPair {
+    pub public_key: Vec<u8>,
+    pub secret_key: Vec<u8>,
+    pub algorithm: SphincsVariant,
+}
+```
+
+### `SphincsVariant`
+
+Enum representing different security levels and performance tradeoffs of SPHINCS+.
+
+```rust
+pub enum SphincsVariant {
+    Sphincs128f,  // NIST security level 1, optimised for speed
+    Sphincs128s,  // NIST security level 1, optimised for size
+    Sphincs192f,  // NIST security level 3, optimised for speed
+    Sphincs192s,  // NIST security level 3, optimised for size
+    Sphincs256f,  // NIST security level 5, optimised for speed
+    Sphincs256s,  // NIST security level 5, optimised for size
+}
+```
+
 ## Key Encapsulation (Kyber)
 
 ### Generating a Key Pair
@@ -115,6 +142,37 @@ let signature = key_pair.sign(message)?;
 // Verify a signature
 let is_valid = key_pair.public_key()
     .verify(message, &signature)?;
+```
+
+## Digital Signatures (SPHINCS+)
+
+### Generating a Key Pair
+
+```rust
+// Generate a new SPHINCS+ key pair
+let key_pair = SphincsKeyPair::generate(SphincsVariant::Sphincs192f)?;
+```
+
+### Signing a Message
+
+```rust
+// Sign a message
+let signature = key_pair.sign(message)?;
+
+// Sign with compression for reduced size
+let compressed = key_pair.sign_compressed(message, CompressionLevel::Medium)?;
+```
+
+### Verifying a Signature
+
+```rust
+// Verify a standard signature
+let is_valid = key_pair.public_key()
+    .verify(message, &signature)?;
+    
+// Verify a compressed signature
+let is_valid = key_pair.public_key()
+    .verify_compressed(message, &compressed)?;
 ```
 
 ## Symmetric Encryption (AES-GCM)

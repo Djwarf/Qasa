@@ -111,7 +111,7 @@ The cryptography module provides the following security properties:
 
 ### Low Priority
 
-1. Consider additional post-quantum KEM algorithms for KEM diversity.
+1. Consider additional post-quantum KEM algorithms like BIKE or HQC for further KEM diversity.
 2. Implement side-channel resistance testing.
 3. Add formal verification of critical security properties.
 

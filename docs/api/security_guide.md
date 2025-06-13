@@ -12,7 +12,9 @@ This security guide is designed to help developers understand and properly imple
 QaSa implements a hybrid cryptographic system combining both post-quantum and traditional cryptographic algorithms:
 
 1. **Key Encapsulation**: CRYSTALS-Kyber (NIST PQC standard)
-2. **Digital Signatures**: CRYSTALS-Dilithium (NIST PQC standard)
+2. **Digital Signatures**: 
+   - CRYSTALS-Dilithium (NIST PQC standard, lattice-based)
+   - SPHINCS+ (NIST PQC standard, hash-based)
 3. **Symmetric Encryption**: AES-256-GCM (with authenticated data)
 4. **Key Derivation**: Argon2id (for password-based key derivation)
 
@@ -60,7 +62,8 @@ The following are outside the security boundary of the cryptography module:
 All cryptographic operations use algorithms designed to resist attacks from quantum computers:
 
 - **Kyber** uses lattice-based cryptography which is believed to be resistant to quantum attacks
-- **Dilithium** provides signature security against quantum adversaries
+- **Dilithium** provides signature security against quantum adversaries using lattice-based cryptography
+- **SPHINCS+** provides signature security using hash-based cryptography, offering algorithm diversity
 - **AES-256** provides sufficient security margin against Grover's algorithm (effectively 128-bit security against quantum attacks)
 
 ### Authenticated Encryption
