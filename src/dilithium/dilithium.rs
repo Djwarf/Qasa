@@ -1,11 +1,22 @@
-use oqs::sig::{Algorithm, Sig};
-use serde::{Deserialize, Serialize};
-use std::fmt;
+/*! 
+ * CRYSTALS-Dilithium implementation for quantum-resistant digital signatures
+ *
+ * This module implements the CRYSTALS-Dilithium algorithm for digital signatures
+ * as standardized by NIST for post-quantum cryptography.
+ */
+
+use crate::error::{CryptoError, error_codes};
+use crate::utils::{secure_compare, hex_to_bytes, bytes_to_hex};
+use crate::secure_memory::SecureBytes;
+use crate::dilithium::{CompressionLevel, CompressedSignature, compress_signature, decompress_signature};
 use zeroize::Zeroize;
 
-use crate::error::error_codes;
-use crate::error::CryptoError;
-use crate::utils;
+use std::fmt;
+use std::convert::TryFrom;
+use std::time::Duration;
+
+use oqs::sig::{Algorithm, Sig};
+use serde::{Deserialize, Serialize};
 
 /// CRYSTALS-Dilithium key pair for digital signatures
 ///
@@ -695,28 +706,20 @@ impl DilithiumKeyPair {
     ///
     /// // Sign and compress a message
     /// let message = b"Hello, world!";
-    /// let compressed_signature = key_pair.sign_compressed(message, CompressionLevel::Medium).unwrap();
+    /// let compressed = key_pair.sign_compressed(message, CompressionLevel::Light).unwrap();
     ///
-    /// // Print compression statistics
-    /// println!("Original size: {} bytes", key_pair.algorithm.signature_size());
-    /// println!("Compressed size: {} bytes", compressed_signature.size());
-    /// println!("Compression ratio: {:.2}", compressed_signature.compression_ratio());
+    /// // Verify the compressed signature
+    /// assert!(key_pair.verify_compressed(message, &compressed).unwrap());
     /// ```
-    pub fn sign_compressed(
-        &self,
-        message: &[u8],
-        compression_level: crate::dilithium::CompressionLevel,
-    ) -> Result<crate::dilithium::CompressedSignature, CryptoError> {
-        // First sign the message
+    pub fn sign_compressed(&self, message: &[u8], compression_level: CompressionLevel) -> Result<CompressedSignature, CryptoError> {
+        // First sign the message normally
         let signature = self.sign(message)?;
         
         // Then compress the signature
-        crate::dilithium::compress_signature(&signature, compression_level, self.algorithm)
+        compress_signature(&signature, compression_level, self.algorithm)
     }
-
+    
     /// Verify a compressed signature
-    ///
-    /// This method decompresses a signature and then verifies it against a message.
     ///
     /// # Arguments
     ///
@@ -735,21 +738,20 @@ impl DilithiumKeyPair {
     /// // Generate a key pair
     /// let key_pair = DilithiumKeyPair::generate(DilithiumVariant::Dilithium3).unwrap();
     ///
+    /// // Get the public key
+    /// let public_key = key_pair.public_key();
+    ///
     /// // Sign and compress a message
     /// let message = b"Hello, world!";
-    /// let compressed_signature = key_pair.sign_compressed(message, CompressionLevel::Medium).unwrap();
+    /// let compressed = key_pair.sign_compressed(message, CompressionLevel::Light).unwrap();
     ///
-    /// // Verify the compressed signature
-    /// let is_valid = key_pair.verify_compressed(message, &compressed_signature).unwrap();
+    /// // Verify the compressed signature using just the public key
+    /// let is_valid = public_key.verify_compressed(message, &compressed).unwrap();
     /// assert!(is_valid);
     /// ```
-    pub fn verify_compressed(
-        &self,
-        message: &[u8],
-        compressed_signature: &crate::dilithium::CompressedSignature,
-    ) -> Result<bool, CryptoError> {
+    pub fn verify_compressed(&self, message: &[u8], compressed_signature: &CompressedSignature) -> Result<bool, CryptoError> {
         // First decompress the signature
-        let signature = crate::dilithium::decompress_signature(compressed_signature)?;
+        let signature = decompress_signature(compressed_signature)?;
         
         // Then verify the signature
         self.verify(message, &signature)
@@ -888,10 +890,10 @@ impl DilithiumPublicKey {
     ///
     /// // Sign and compress a message
     /// let message = b"Hello, world!";
-    /// let compressed_signature = key_pair.sign_compressed(message, CompressionLevel::Medium).unwrap();
+    /// let compressed = key_pair.sign_compressed(message, CompressionLevel::Light).unwrap();
     ///
     /// // Verify the compressed signature using just the public key
-    /// let is_valid = public_key.verify_compressed(message, &compressed_signature).unwrap();
+    /// let is_valid = public_key.verify_compressed(message, &compressed).unwrap();
     /// assert!(is_valid);
     /// ```
     pub fn verify_compressed(
