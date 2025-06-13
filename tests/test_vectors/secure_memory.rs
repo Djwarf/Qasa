@@ -17,39 +17,39 @@ pub struct LockedMemoryTestVector {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CanaryBufferTestVector {
     pub data: Vec<u8>,
-    pub canary_value: u64,
+    pub canary_value: Vec<u8>,  // Changed from u64 to Vec<u8> to match API
     pub expected_hash: Vec<u8>, // SHA3-256 hash of the data after operations
 }
 
-/// Generate a deterministic test vector for locked memory
+/// Generate a test vector for locked memory
 pub fn generate_locked_memory_vector(data: &[u8]) -> LockedMemoryTestVector {
     // Create a locked memory buffer with the data
     let mut locked = LockedMemory::new(data.len())
         .expect("Failed to create locked memory");
     
-    // Copy data into locked memory
-    locked.copy_from_slice(data);
+    // Copy data into locked buffer
+    locked.as_mut_slice().copy_from_slice(data);
     
     // Perform some operations on the locked memory
-    for i in 0..locked.len() {
+    for i in 0..data.len() {
         if i % 2 == 0 {
-            locked[i] ^= 0x55; // XOR with 0x55 for even indices
+            locked.as_mut_slice()[i] ^= 0x55; // XOR with 0x55 for even indices
         } else {
-            locked[i] ^= 0xAA; // XOR with 0xAA for odd indices
+            locked.as_mut_slice()[i] ^= 0xAA; // XOR with 0xAA for odd indices
         }
     }
     
     // Calculate hash of the modified data
     let mut hasher = Sha3_256::new();
-    hasher.update(&locked[..]);
+    hasher.update(locked.as_slice());
     let hash = hasher.finalize().to_vec();
     
     // Revert the operations to restore original data
-    for i in 0..locked.len() {
+    for i in 0..data.len() {
         if i % 2 == 0 {
-            locked[i] ^= 0x55;
+            locked.as_mut_slice()[i] ^= 0x55;
         } else {
-            locked[i] ^= 0xAA;
+            locked.as_mut_slice()[i] ^= 0xAA;
         }
     }
     
@@ -59,26 +59,25 @@ pub fn generate_locked_memory_vector(data: &[u8]) -> LockedMemoryTestVector {
     }
 }
 
-/// Generate a deterministic test vector for canary buffer
+/// Generate a test vector for canary buffer
 pub fn generate_canary_buffer_vector(
     data: &[u8], 
-    canary_value: u64
+    canary_pattern: &[u8]
 ) -> CanaryBufferTestVector {
     // Create a canary buffer with the data
-    let mut canary_buffer = CanaryBuffer::new(data.len(), canary_value)
-        .expect("Failed to create canary buffer");
+    let mut canary_buffer = CanaryBuffer::new(data.len(), canary_pattern);
     
     // Copy data into canary buffer
-    canary_buffer.copy_from_slice(data);
+    canary_buffer.as_mut_slice().copy_from_slice(data);
     
     // Perform some operations on the canary buffer
-    for i in 0..canary_buffer.len() {
+    for i in 0..data.len() {
         if i % 3 == 0 {
-            canary_buffer[i] ^= 0x33; // XOR with 0x33 for indices divisible by 3
+            canary_buffer.as_mut_slice()[i] ^= 0x33; // XOR with 0x33 for indices divisible by 3
         } else if i % 3 == 1 {
-            canary_buffer[i] ^= 0x66; // XOR with 0x66 for indices with remainder 1
+            canary_buffer.as_mut_slice()[i] ^= 0x66; // XOR with 0x66 for indices with remainder 1
         } else {
-            canary_buffer[i] ^= 0x99; // XOR with 0x99 for indices with remainder 2
+            canary_buffer.as_mut_slice()[i] ^= 0x99; // XOR with 0x99 for indices with remainder 2
         }
     }
     
@@ -88,23 +87,23 @@ pub fn generate_canary_buffer_vector(
     
     // Calculate hash of the modified data
     let mut hasher = Sha3_256::new();
-    hasher.update(&canary_buffer[..]);
+    hasher.update(canary_buffer.as_slice());
     let hash = hasher.finalize().to_vec();
     
     // Revert the operations to restore original data
-    for i in 0..canary_buffer.len() {
+    for i in 0..data.len() {
         if i % 3 == 0 {
-            canary_buffer[i] ^= 0x33;
+            canary_buffer.as_mut_slice()[i] ^= 0x33;
         } else if i % 3 == 1 {
-            canary_buffer[i] ^= 0x66;
+            canary_buffer.as_mut_slice()[i] ^= 0x66;
         } else {
-            canary_buffer[i] ^= 0x99;
+            canary_buffer.as_mut_slice()[i] ^= 0x99;
         }
     }
     
     CanaryBufferTestVector {
         data: data.to_vec(),
-        canary_value,
+        canary_value: canary_pattern.to_vec(),
         expected_hash: hash,
     }
 }
@@ -137,38 +136,41 @@ pub fn standard_canary_buffer_vectors() -> Vec<CanaryBufferTestVector> {
     
     // Test vector 1: Basic data with default canary
     let data_1 = b"This is a test for canary buffer";
-    vectors.push(generate_canary_buffer_vector(data_1, 0xDEADBEEFCAFEBABE));
+    let canary_1 = b"DEADBEEF";
+    vectors.push(generate_canary_buffer_vector(data_1, canary_1));
     
     // Test vector 2: Binary data with custom canary
     let data_2 = &[
         0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
         0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF,
     ];
-    vectors.push(generate_canary_buffer_vector(data_2, 0x1234567890ABCDEF));
+    let canary_2 = b"CAFEBABE";
+    vectors.push(generate_canary_buffer_vector(data_2, canary_2));
     
     // Test vector 3: Large data with another custom canary
     let data_3 = vec![0x69; 1024]; // 1KB of 0x69 bytes
-    vectors.push(generate_canary_buffer_vector(&data_3, 0xFEDCBA9876543210));
+    let canary_3 = b"FEEDFACE";
+    vectors.push(generate_canary_buffer_vector(&data_3, canary_3));
     
     vectors
 }
 
 /// Special case test vectors for secure memory
-pub fn special_case_vectors() -> Vec<(Vec<u8>, u64)> {
+pub fn special_case_vectors() -> Vec<(Vec<u8>, Vec<u8>)> {
     let mut vectors = Vec::new();
     
     // Special case 1: Empty data
-    vectors.push((Vec::new(), 0xDEADBEEFCAFEBABE));
+    vectors.push((Vec::new(), b"DEADBEEF".to_vec()));
     
     // Special case 2: Single byte
-    vectors.push((vec![0x42], 0x1234567890ABCDEF));
+    vectors.push((vec![0x42], b"CAFEBABE".to_vec()));
     
     // Special case 3: Alternating pattern
     let mut alternating = Vec::new();
     for i in 0..100 {
         alternating.push(if i % 2 == 0 { 0x55 } else { 0xAA });
     }
-    vectors.push((alternating, 0xFEDCBA9876543210));
+    vectors.push((alternating, b"FEEDFACE".to_vec()));
     
     vectors
 }
@@ -206,20 +208,20 @@ mod tests {
                 .expect("Failed to create locked memory");
             
             // Copy data into locked memory
-            locked.copy_from_slice(&vector.data);
+            locked.as_mut_slice().copy_from_slice(&vector.data);
             
             // Perform the same operations as in the vector generation
-            for i in 0..locked.len() {
+            for i in 0..vector.data.len() {
                 if i % 2 == 0 {
-                    locked[i] ^= 0x55;
+                    locked.as_mut_slice()[i] ^= 0x55;
                 } else {
-                    locked[i] ^= 0xAA;
+                    locked.as_mut_slice()[i] ^= 0xAA;
                 }
             }
             
             // Calculate hash of the modified data
             let mut hasher = Sha3_256::new();
-            hasher.update(&locked[..]);
+            hasher.update(locked.as_slice());
             let hash = hasher.finalize().to_vec();
             
             // Verify hash matches expected hash
@@ -233,20 +235,19 @@ mod tests {
         
         for vector in vectors {
             // Create a canary buffer with the data
-            let mut canary_buffer = CanaryBuffer::new(vector.data.len(), vector.canary_value)
-                .expect("Failed to create canary buffer");
+            let mut canary_buffer = CanaryBuffer::new(vector.data.len(), &vector.canary_value);
             
             // Copy data into canary buffer
-            canary_buffer.copy_from_slice(&vector.data);
+            canary_buffer.as_mut_slice().copy_from_slice(&vector.data);
             
             // Perform the same operations as in the vector generation
-            for i in 0..canary_buffer.len() {
+            for i in 0..vector.data.len() {
                 if i % 3 == 0 {
-                    canary_buffer[i] ^= 0x33;
+                    canary_buffer.as_mut_slice()[i] ^= 0x33;
                 } else if i % 3 == 1 {
-                    canary_buffer[i] ^= 0x66;
+                    canary_buffer.as_mut_slice()[i] ^= 0x66;
                 } else {
-                    canary_buffer[i] ^= 0x99;
+                    canary_buffer.as_mut_slice()[i] ^= 0x99;
                 }
             }
             
@@ -256,7 +257,7 @@ mod tests {
             
             // Calculate hash of the modified data
             let mut hasher = Sha3_256::new();
-            hasher.update(&canary_buffer[..]);
+            hasher.update(canary_buffer.as_slice());
             let hash = hasher.finalize().to_vec();
             
             // Verify hash matches expected hash
@@ -272,22 +273,21 @@ mod tests {
             // Test with locked memory
             if let Ok(mut locked) = LockedMemory::new(data.len()) {
                 if !data.is_empty() {
-                    locked.copy_from_slice(&data);
+                    locked.as_mut_slice().copy_from_slice(&data);
                 }
                 // Just verify that operations don't panic
-                for i in 0..locked.len() {
-                    locked[i] ^= 0x42;
+                for i in 0..data.len() {
+                    locked.as_mut_slice()[i] ^= 0x42;
                 }
             }
             
             // Test with canary buffer
-            if let Ok(mut canary_buffer) = CanaryBuffer::new(data.len(), canary_value) {
-                if !data.is_empty() {
-                    canary_buffer.copy_from_slice(&data);
-                }
-                // Verify canaries are intact
-                assert!(canary_buffer.verify().is_ok(), "Canary verification failed for special case");
+            let canary_buffer = CanaryBuffer::new(data.len(), &canary_value);
+            if !data.is_empty() {
+                canary_buffer.as_mut_slice().copy_from_slice(&data);
             }
+            // Verify canaries are intact
+            assert!(canary_buffer.verify().is_ok(), "Canary verification failed for special case");
         }
     }
     

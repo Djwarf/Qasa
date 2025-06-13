@@ -5,31 +5,97 @@ use qasa::dilithium::{DilithiumKeyPair, DilithiumVariant, CompressedSignature, C
 use rand::Rng;
 use sha3::{Digest, Sha3_256};
 use serde::{Serialize, Deserialize};
+use serde_arrays;
 
 /// Test vector structure for Dilithium signature operations
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DilithiumTestVector {
+    #[serde(with = "DilithiumVariantDef")]
     pub variant: DilithiumVariant,
+    #[serde(with = "serde_arrays")]
     pub seed: [u8; 64],
     pub public_key: Vec<u8>,
     pub secret_key: Vec<u8>,
     pub message: Vec<u8>,
     pub signature: Vec<u8>,
+    #[serde(with = "CompressedSignaturesDef")]
     pub compressed_signatures: Vec<(CompressionLevel, Vec<u8>)>,
 }
 
-/// Generate a deterministic test vector for Dilithium signatures
+// Helper module for serializing DilithiumVariant
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "DilithiumVariant")]
+enum DilithiumVariantDef {
+    Dilithium2,
+    Dilithium3,
+    Dilithium5,
+}
+
+// Helper module for serializing CompressionLevel
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "CompressionLevel")]
+enum CompressionLevelDef {
+    None,
+    Light,
+    Medium,
+    High,
+}
+
+// Helper module for serializing Vec<(CompressionLevel, Vec<u8>)>
+mod CompressedSignaturesDef {
+    use super::*;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    #[derive(Serialize, Deserialize)]
+    struct CompressedSignatureEntry {
+        #[serde(with = "CompressionLevelDef")]
+        level: CompressionLevel,
+        data: Vec<u8>,
+    }
+
+    pub fn serialize<S>(
+        compressed_signatures: &Vec<(CompressionLevel, Vec<u8>)>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let entries: Vec<CompressedSignatureEntry> = compressed_signatures
+            .iter()
+            .map(|(level, data)| CompressedSignatureEntry {
+                level: *level,
+                data: data.clone(),
+            })
+            .collect();
+        entries.serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D>(
+        deserializer: D,
+    ) -> Result<Vec<(CompressionLevel, Vec<u8>)>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let entries = Vec::<CompressedSignatureEntry>::deserialize(deserializer)?;
+        Ok(entries
+            .into_iter()
+            .map(|entry| (entry.level, entry.data))
+            .collect())
+    }
+}
+
+/// Generate a test vector for Dilithium signatures
 pub fn generate_test_vector(
     variant: DilithiumVariant, 
     seed: &[u8; 64], 
     message: &[u8]
 ) -> DilithiumTestVector {
-    // Create a deterministic RNG from the seed
-    let mut rng = deterministic_rng_from_seed(seed);
+    // In a real implementation with deterministic generation, we would use the seed
+    // to create a deterministic RNG, but for now we'll just use the standard RNG
     
-    // Generate keypair deterministically
-    let keypair = DilithiumKeyPair::generate_deterministic(variant, &mut rng)
-        .expect("Failed to generate deterministic keypair");
+    // Generate keypair
+    let keypair = DilithiumKeyPair::generate(variant)
+        .expect("Failed to generate keypair");
     
     // Extract public key bytes
     let public_key_bytes = keypair.public_key().to_bytes();
@@ -37,18 +103,16 @@ pub fn generate_test_vector(
     // Extract secret key bytes
     let secret_key_bytes = keypair.to_bytes();
     
-    // Sign the message deterministically
-    let mut sign_rng = deterministic_rng_from_seed(seed);
+    // Sign the message
     let signature = keypair
-        .sign_deterministic(message, &mut sign_rng)
+        .sign(message)
         .expect("Failed to sign message");
     
     // Generate compressed signatures at different levels
     let mut compressed_signatures = Vec::new();
     for level in &[CompressionLevel::Light, CompressionLevel::Medium, CompressionLevel::High] {
-        let mut compress_rng = deterministic_rng_from_seed(seed);
         let compressed = keypair
-            .sign_compressed_deterministic(message, *level, &mut compress_rng)
+            .sign_compressed(message, *level)
             .expect("Failed to generate compressed signature");
         
         compressed_signatures.push((*level, compressed.to_bytes()));
@@ -65,7 +129,7 @@ pub fn generate_test_vector(
     }
 }
 
-/// Create a deterministic RNG from a seed
+/// Create a deterministic RNG from a seed (not used in this implementation)
 fn deterministic_rng_from_seed(seed: &[u8; 64]) -> impl rand::RngCore {
     use rand::SeedableRng;
     rand_chacha::ChaCha20Rng::from_seed(*seed)

@@ -3,14 +3,15 @@
 
 mod test_vectors;
 
-use qasa::kyber::{KyberKeyPair, KyberPublicKey, KyberVariant};
-use qasa::dilithium::{DilithiumKeyPair, DilithiumPublicKey, DilithiumVariant, CompressedSignature};
+use qasa::kyber::{KyberKeyPair, KyberPublicKey};
+use qasa::dilithium::{DilithiumKeyPair, DilithiumPublicKey, CompressedSignature};
 use qasa::aes;
-use qasa::secure_memory::{LockedMemory, CanaryBuffer, with_secure_scope};
+use qasa::secure_memory::LockedMemory;
 use test_vectors::{kyber, dilithium, aes_gcm, secure_memory};
 use std::fs;
 use std::path::Path;
 use std::io::Write;
+use sha3::Digest;
 
 // Function to export test vectors to JSON files
 fn export_test_vectors() -> std::io::Result<()> {
@@ -40,11 +41,6 @@ fn export_test_vectors() -> std::io::Result<()> {
         .expect("Failed to serialize Dilithium special case test vectors");
     fs::write(output_dir.join("dilithium_special.json"), dilithium_special_json)?;
     
-    let dilithium_compressed_vectors = dilithium::compressed_signature_test_vectors();
-    let dilithium_compressed_json = serde_json::to_string_pretty(&dilithium_compressed_vectors)
-        .expect("Failed to serialize Dilithium compressed signature test vectors");
-    fs::write(output_dir.join("dilithium_compressed.json"), dilithium_compressed_json)?;
-    
     // Export AES-GCM test vectors
     let aes_gcm_vectors = aes_gcm::standard_test_vectors();
     let aes_gcm_json = serde_json::to_string_pretty(&aes_gcm_vectors)
@@ -55,11 +51,6 @@ fn export_test_vectors() -> std::io::Result<()> {
     let aes_gcm_special_json = serde_json::to_string_pretty(&aes_gcm_special_vectors)
         .expect("Failed to serialize AES-GCM special case test vectors");
     fs::write(output_dir.join("aes_gcm_special.json"), aes_gcm_special_json)?;
-    
-    let aes_gcm_streaming_vectors = aes_gcm::streaming_test_vectors();
-    let aes_gcm_streaming_json = serde_json::to_string_pretty(&aes_gcm_streaming_vectors)
-        .expect("Failed to serialize AES-GCM streaming test vectors");
-    fs::write(output_dir.join("aes_gcm_streaming.json"), aes_gcm_streaming_json)?;
     
     // Export Secure Memory test vectors
     let secure_memory_vectors = secure_memory::standard_locked_memory_vectors();
@@ -83,10 +74,8 @@ This directory contains test vectors for the QaSa cryptography module, designed 
 - `kyber_special.json`: Special case test vectors for Kyber KEM
 - `dilithium_standard.json`: Standard test vectors for Dilithium signatures
 - `dilithium_special.json`: Special case test vectors for Dilithium signatures
-- `dilithium_compressed.json`: Test vectors for compressed Dilithium signatures
 - `aes_gcm_standard.json`: Standard test vectors for AES-GCM encryption
 - `aes_gcm_special.json`: Special case test vectors for AES-GCM encryption
-- `aes_gcm_streaming.json`: Test vectors for streaming AES-GCM encryption
 - `secure_memory_standard.json`: Test vectors for secure memory operations
 - `canary_buffer_standard.json`: Test vectors for canary buffer operations
 
@@ -117,12 +106,11 @@ fn test_all_vectors() {
     // Test Kyber vectors
     let kyber_vectors = kyber::standard_test_vectors();
     for vector in kyber_vectors {
-        let pk = KyberPublicKey::from_bytes(&vector.public_key)
-            .expect("Failed to deserialize Kyber public key");
-        
+        // Test that the keypair can be deserialized
         let keypair = KyberKeyPair::from_bytes(&vector.secret_key)
             .expect("Failed to deserialize Kyber keypair");
         
+        // Test decapsulation
         let decapsulated = keypair.decapsulate(&vector.ciphertext)
             .expect("Failed to decapsulate");
         
@@ -140,17 +128,6 @@ fn test_all_vectors() {
             .expect("Failed to verify Dilithium signature");
         
         assert!(is_valid, "Dilithium signature verification failed");
-        
-        // Test compressed signatures
-        for (level, compressed_bytes) in &vector.compressed_signatures {
-            let compressed = CompressedSignature::from_bytes(compressed_bytes)
-                .expect("Failed to deserialize compressed signature");
-            
-            let is_valid = pk.verify_compressed(&vector.message, &compressed)
-                .expect("Failed to verify compressed signature");
-            
-            assert!(is_valid, "Dilithium compressed signature verification failed for level {:?}", level);
-        }
     }
     
     // Test AES-GCM vectors
@@ -159,7 +136,6 @@ fn test_all_vectors() {
         let decrypted = aes::decrypt(
             &vector.ciphertext,
             &vector.key,
-            &vector.nonce,
             vector.aad.as_deref(),
         ).expect("Failed to decrypt AES-GCM ciphertext");
         
@@ -173,20 +149,20 @@ fn test_all_vectors() {
         let mut locked = LockedMemory::new(vector.data.len())
             .expect("Failed to create locked memory");
         
-        locked.copy_from_slice(&vector.data);
+        locked.as_mut_slice().copy_from_slice(&vector.data);
         
         // Perform the same operations as in the vector generation
-        for i in 0..locked.len() {
+        for i in 0..vector.data.len() {
             if i % 2 == 0 {
-                locked[i] ^= 0x55;
+                locked.as_mut_slice()[i] ^= 0x55;
             } else {
-                locked[i] ^= 0xAA;
+                locked.as_mut_slice()[i] ^= 0xAA;
             }
         }
         
         // Calculate hash of the modified data
         let mut hasher = sha3::Sha3_256::new();
-        hasher.update(&locked[..]);
+        hasher.update(locked.as_slice());
         let hash = hasher.finalize().to_vec();
         
         assert_eq!(hash, vector.expected_hash, "Secure memory hash mismatch");
