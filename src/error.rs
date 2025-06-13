@@ -186,6 +186,7 @@ pub mod error_codes {
     pub const PROTOCOL_HANDSHAKE_FAILED: u32 = 8001;
     pub const PROTOCOL_STATE_INVALID: u32 = 8002;
     pub const PROTOCOL_VERSION_MISMATCH: u32 = 8003;
+    pub const IO_ERROR: u32 = 8004;
 }
 
 impl CryptoError {
@@ -528,6 +529,32 @@ impl CryptoError {
 
     pub fn io_error(cause: &str, error_code: u32) -> Self {
         CryptoError::IoError(cause.to_string())
+    }
+
+    pub fn encryption_error(algorithm: &str, cause: &str) -> Self {
+        CryptoError::AesError {
+            operation: "encryption".to_string(),
+            cause: cause.to_string(),
+            error_code: error_codes::AES_ENCRYPTION_FAILED,
+            context: HashMap::new(),
+        }
+    }
+
+    pub fn decryption_error(algorithm: &str, cause: &str) -> Self {
+        CryptoError::AesError {
+            operation: "decryption".to_string(),
+            cause: cause.to_string(),
+            error_code: error_codes::AES_DECRYPTION_FAILED,
+            context: HashMap::new(),
+        }
+    }
+
+    pub fn memory_error(operation: &str, cause: &str, error_code: u32) -> Self {
+        CryptoError::MemoryError {
+            operation: operation.to_string(),
+            cause: cause.to_string(),
+            error_code,
+        }
     }
 }
 

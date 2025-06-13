@@ -50,6 +50,8 @@ subtle = { version = "2.6.1", features = ["std"] }
 zeroize = { version = "1.8.1", features = ["derive"] }
 uuid = { version = "1.16.0", features = ["v4"] }
 chrono = { version = "0.4.41", features = ["serde"] }
+log = "0.4.21"
+winapi = { version = "0.3.9", features = ["memoryapi", "handleapi", "winbase"] }
 
 [dev-dependencies]
 criterion = "0.5.1"

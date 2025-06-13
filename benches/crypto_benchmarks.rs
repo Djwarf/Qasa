@@ -260,6 +260,61 @@ fn aes_benchmarks(c: &mut Criterion) {
         b.iter(|| aes::decrypt(&large_encrypted, &key, &large_nonce, Some(b"")))
     });
 
+    // Benchmark streaming encryption/decryption
+    group.bench_function("stream_encrypt_large", |b| {
+        b.iter(|| {
+            use std::io::Cursor;
+            let cipher = aes::AesGcm::new(&key).unwrap();
+            let nonce = aes::AesGcm::generate_nonce();
+            let mut input = Cursor::new(&large_data);
+            let mut output = Vec::new();
+            cipher.encrypt_stream(&mut input, &mut output, &nonce, Some(b""), None)
+        })
+    });
+
+    group.bench_function("stream_decrypt_large", |b| {
+        b.iter_with_setup(
+            || {
+                // Setup: encrypt data with streaming
+                use std::io::Cursor;
+                let cipher = aes::AesGcm::new(&key).unwrap();
+                let nonce = aes::AesGcm::generate_nonce();
+                let mut input = Cursor::new(&large_data);
+                let mut encrypted = Vec::new();
+                cipher.encrypt_stream(&mut input, &mut encrypted, &nonce, Some(b""), None).unwrap();
+                (cipher, nonce, encrypted)
+            },
+            |(cipher, nonce, encrypted)| {
+                // Benchmark: decrypt the data
+                use std::io::Cursor;
+                let mut input = Cursor::new(&encrypted);
+                let mut output = Vec::new();
+                cipher.decrypt_stream(&mut input, &mut output, &nonce, Some(b""))
+            },
+        )
+    });
+
+    // Benchmark with different chunk sizes
+    for &chunk_size_kb in &[64, 256, 1024] {
+        let chunk_size = chunk_size_kb * 1024;
+        let chunk_name = format!("{}KB", chunk_size_kb);
+        
+        group.bench_with_input(
+            BenchmarkId::new("stream_encrypt_chunk", &chunk_name),
+            &chunk_size,
+            |b, &chunk_size| {
+                b.iter(|| {
+                    use std::io::Cursor;
+                    let cipher = aes::AesGcm::new(&key).unwrap();
+                    let nonce = aes::AesGcm::generate_nonce();
+                    let mut input = Cursor::new(&large_data);
+                    let mut output = Vec::new();
+                    cipher.encrypt_stream(&mut input, &mut output, &nonce, Some(b""), Some(chunk_size))
+                })
+            },
+        );
+    }
+
     group.finish();
 }
 
