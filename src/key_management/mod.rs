@@ -11,6 +11,7 @@
 pub mod password;
 pub mod rotation;
 pub mod storage;
+pub mod hsm;
 
 #[cfg(test)]
 mod tests;
@@ -37,3 +38,9 @@ pub use storage::load_dilithium_keypair;
 pub use storage::load_kyber_keypair;
 pub use storage::store_dilithium_keypair;
 pub use storage::store_kyber_keypair;
+pub use hsm::HsmProvider;
+pub use hsm::HsmKeyAttributes;
+pub use hsm::connect_hsm;
+pub use hsm::generate_key_in_hsm;
+pub use hsm::sign_with_hsm;
+pub use hsm::verify_with_hsm;

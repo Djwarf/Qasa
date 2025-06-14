@@ -282,6 +282,7 @@ impl CryptoError {
             CryptoError::SphincsError { error_code, .. } => *error_code,
             CryptoError::BikeError { error_code, .. } => *error_code,
             CryptoError::AesError { error_code, .. } => *error_code,
+            CryptoError::ChaCha20Poly1305Error { error_code, .. } => *error_code,
             CryptoError::KeyManagementError { error_code, .. } => *error_code,
             CryptoError::SecurityPolicyViolation { error_code, .. } => *error_code,
             CryptoError::MemoryError { error_code, .. } => *error_code,
@@ -554,14 +555,15 @@ impl CryptoError {
     }
 
     /// Create a BIKE-specific error
-    pub fn bike_error(operation: &str, message: &str, code: u32) -> Self {
-        Self {
-            module: "BIKE".to_string(),
-            operation: operation.to_string(),
-            message: message.to_string(),
-            code,
-        }
-    }
+    // This function is now replaced by the more detailed version below
+    // pub fn bike_error(operation: &str, message: &str, code: u32) -> Self {
+    //     Self {
+    //         module: "BIKE".to_string(),
+    //         operation: operation.to_string(),
+    //         message: message.to_string(),
+    //         code,
+    //     }
+    // }
 
     /// Create a hybrid-specific error
     pub fn hybrid_error(operation: &str, message: &str, code: u32) -> Self {

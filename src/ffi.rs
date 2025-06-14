@@ -16,6 +16,190 @@ use crate::error::CryptoError;
 use crate::kyber::{KyberKeyPair, KyberVariant};
 use libc::{c_char, c_int};
 
+// Python FFI support
+#[cfg(feature = "python")]
+mod python {
+    use pyo3::prelude::*;
+    use pyo3::wrap_pyfunction;
+    use pyo3::types::PyBytes;
+    use pyo3::exceptions::{PyValueError, PyRuntimeError};
+    
+    use crate::kyber::{KyberKeyPair, KyberVariant};
+    use crate::dilithium::{DilithiumKeyPair, DilithiumVariant};
+    use crate::error::CryptoError;
+    
+    /// Convert a Rust Result to a Python Result
+    fn to_py_result<T>(result: Result<T, CryptoError>) -> PyResult<T> {
+        result.map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+    
+    /// Python module for QaSa cryptography
+    #[pymodule]
+    fn qasa(_py: Python, m: &PyModule) -> PyResult<()> {
+        // Initialize the module
+        m.add_function(wrap_pyfunction!(init, m)?)?;
+        
+        // Kyber functions
+        m.add_function(wrap_pyfunction!(kyber_keygen, m)?)?;
+        m.add_function(wrap_pyfunction!(kyber_encapsulate, m)?)?;
+        m.add_function(wrap_pyfunction!(kyber_decapsulate, m)?)?;
+        
+        // Dilithium functions
+        m.add_function(wrap_pyfunction!(dilithium_keygen, m)?)?;
+        m.add_function(wrap_pyfunction!(dilithium_sign, m)?)?;
+        m.add_function(wrap_pyfunction!(dilithium_verify, m)?)?;
+        
+        // AES functions
+        m.add_function(wrap_pyfunction!(aes_gcm_encrypt, m)?)?;
+        m.add_function(wrap_pyfunction!(aes_gcm_decrypt, m)?)?;
+        
+        Ok(())
+    }
+    
+    /// Initialize the cryptography module
+    #[pyfunction]
+    fn init() -> PyResult<()> {
+        to_py_result(crate::init())
+    }
+    
+    /// Generate a Kyber key pair
+    #[pyfunction]
+    fn kyber_keygen(variant: u32) -> PyResult<(Vec<u8>, Vec<u8>)> {
+        let kyber_variant = match variant {
+            512 => KyberVariant::Kyber512,
+            768 => KyberVariant::Kyber768,
+            1024 => KyberVariant::Kyber1024,
+            _ => return Err(PyValueError::new_err(format!("Invalid Kyber variant: {}", variant))),
+        };
+        
+        let key_pair = to_py_result(KyberKeyPair::generate(kyber_variant))?;
+        Ok((key_pair.public_key, key_pair.secret_key))
+    }
+    
+    /// Encapsulate a shared secret using a Kyber public key
+    #[pyfunction]
+    fn kyber_encapsulate(variant: u32, public_key: Vec<u8>) -> PyResult<(Vec<u8>, Vec<u8>)> {
+        let kyber_variant = match variant {
+            512 => KyberVariant::Kyber512,
+            768 => KyberVariant::Kyber768,
+            1024 => KyberVariant::Kyber1024,
+            _ => return Err(PyValueError::new_err(format!("Invalid Kyber variant: {}", variant))),
+        };
+        
+        let result = to_py_result(KyberKeyPair::encapsulate_with_public_key(
+            kyber_variant,
+            &public_key,
+        ))?;
+        
+        Ok((result.0, result.1))
+    }
+    
+    /// Decapsulate a shared secret using a Kyber secret key
+    #[pyfunction]
+    fn kyber_decapsulate(variant: u32, secret_key: Vec<u8>, ciphertext: Vec<u8>) -> PyResult<Vec<u8>> {
+        let kyber_variant = match variant {
+            512 => KyberVariant::Kyber512,
+            768 => KyberVariant::Kyber768,
+            1024 => KyberVariant::Kyber1024,
+            _ => return Err(PyValueError::new_err(format!("Invalid Kyber variant: {}", variant))),
+        };
+        
+        let result = to_py_result(KyberKeyPair::decapsulate_with_secret_key(
+            kyber_variant,
+            &secret_key,
+            &ciphertext,
+        ))?;
+        
+        Ok(result)
+    }
+    
+    /// Generate a Dilithium key pair
+    #[pyfunction]
+    fn dilithium_keygen(variant: u32) -> PyResult<(Vec<u8>, Vec<u8>)> {
+        let dilithium_variant = match variant {
+            2 => DilithiumVariant::Dilithium2,
+            3 => DilithiumVariant::Dilithium3,
+            5 => DilithiumVariant::Dilithium5,
+            _ => return Err(PyValueError::new_err(format!("Invalid Dilithium variant: {}", variant))),
+        };
+        
+        let key_pair = to_py_result(DilithiumKeyPair::generate(dilithium_variant))?;
+        Ok((key_pair.public_key, key_pair.secret_key))
+    }
+    
+    /// Sign a message using a Dilithium secret key
+    #[pyfunction]
+    fn dilithium_sign(variant: u32, secret_key: Vec<u8>, message: Vec<u8>) -> PyResult<Vec<u8>> {
+        let dilithium_variant = match variant {
+            2 => DilithiumVariant::Dilithium2,
+            3 => DilithiumVariant::Dilithium3,
+            5 => DilithiumVariant::Dilithium5,
+            _ => return Err(PyValueError::new_err(format!("Invalid Dilithium variant: {}", variant))),
+        };
+        
+        let key_pair = DilithiumKeyPair {
+            public_key: Vec::new(), // Not needed for signing
+            secret_key,
+            algorithm: dilithium_variant,
+        };
+        
+        to_py_result(key_pair.sign(&message))
+    }
+    
+    /// Verify a signature using a Dilithium public key
+    #[pyfunction]
+    fn dilithium_verify(variant: u32, public_key: Vec<u8>, message: Vec<u8>, signature: Vec<u8>) -> PyResult<bool> {
+        let dilithium_variant = match variant {
+            2 => DilithiumVariant::Dilithium2,
+            3 => DilithiumVariant::Dilithium3,
+            5 => DilithiumVariant::Dilithium5,
+            _ => return Err(PyValueError::new_err(format!("Invalid Dilithium variant: {}", variant))),
+        };
+        
+        to_py_result(DilithiumKeyPair::verify_with_public_key(
+            dilithium_variant,
+            &public_key,
+            &message,
+            &signature,
+        ))
+    }
+    
+    /// Encrypt data using AES-GCM
+    #[pyfunction]
+    fn aes_gcm_encrypt(key: Vec<u8>, plaintext: Vec<u8>, associated_data: Option<Vec<u8>>) -> PyResult<(Vec<u8>, Vec<u8>)> {
+        if key.len() != 16 && key.len() != 24 && key.len() != 32 {
+            return Err(PyValueError::new_err("AES key must be 16, 24, or 32 bytes"));
+        }
+        
+        let aes = to_py_result(crate::aes::AesGcm::new(&key))?;
+        let nonce = crate::aes::AesGcm::generate_nonce();
+        
+        let ad_ref = associated_data.as_deref();
+        let ciphertext = to_py_result(aes.encrypt(&plaintext, &nonce, ad_ref))?;
+        
+        Ok((ciphertext, nonce.to_vec()))
+    }
+    
+    /// Decrypt data using AES-GCM
+    #[pyfunction]
+    fn aes_gcm_decrypt(key: Vec<u8>, ciphertext: Vec<u8>, nonce: Vec<u8>, associated_data: Option<Vec<u8>>) -> PyResult<Vec<u8>> {
+        if key.len() != 16 && key.len() != 24 && key.len() != 32 {
+            return Err(PyValueError::new_err("AES key must be 16, 24, or 32 bytes"));
+        }
+        
+        if nonce.len() != 12 {
+            return Err(PyValueError::new_err("AES-GCM nonce must be 12 bytes"));
+        }
+        
+        let aes = to_py_result(crate::aes::AesGcm::new(&key))?;
+        let mut nonce_array = [0u8; 12];
+        nonce_array.copy_from_slice(&nonce);
+        
+        let ad_ref = associated_data.as_deref();
+        to_py_result(aes.decrypt(&ciphertext, &nonce_array, ad_ref))
+    }
+}
+
 // Helper function to convert an FFI result to a C return code and message
 fn handle_result<T>(
     result: Result<T, CryptoError>,

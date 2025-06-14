@@ -13,18 +13,23 @@ pub mod x86_simd;
 #[cfg(target_arch = "aarch64")]
 pub mod arm_simd;
 
+#[cfg(target_arch = "wasm32")]
+pub mod wasm_simd;
+
 /// Available SIMD algorithm implementations
 #[derive(Debug, Clone, PartialEq)]
 pub enum SimdAlgorithm {
     Scalar, // Fallback implementation
     AVX2,   // Intel/AMD AVX2 (stable)
     NEON,   // ARM NEON
+    WASM,   // WebAssembly SIMD
 }
 
 /// Hardware feature detection and capability reporting
 pub struct SimdCapabilities {
     pub has_avx2: bool,
     pub has_neon: bool,
+    pub has_wasm_simd: bool,
     pub vector_width: usize,
     pub preferred_algorithm: SimdAlgorithm,
 }
@@ -37,6 +42,7 @@ pub fn detect_simd_capabilities() -> SimdCapabilities {
         SimdCapabilities {
             has_avx2: caps.has_avx2,
             has_neon: false,
+            has_wasm_simd: false,
             vector_width: if caps.has_avx2 { 8 } else { 1 },
             preferred_algorithm: if caps.has_avx2 {
                 SimdAlgorithm::AVX2
@@ -52,16 +58,35 @@ pub fn detect_simd_capabilities() -> SimdCapabilities {
         SimdCapabilities {
             has_avx2: false,
             has_neon: true, // Assume NEON is available on aarch64
+            has_wasm_simd: false,
             vector_width: 4,
             preferred_algorithm: SimdAlgorithm::NEON,
         }
     }
 
-    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+    #[cfg(target_arch = "wasm32")]
+    {
+        // Check for WASM SIMD support
+        let has_wasm_simd = wasm_simd::has_wasm_simd();
+        SimdCapabilities {
+            has_avx2: false,
+            has_neon: false,
+            has_wasm_simd,
+            vector_width: if has_wasm_simd { 4 } else { 1 },
+            preferred_algorithm: if has_wasm_simd {
+                SimdAlgorithm::WASM
+            } else {
+                SimdAlgorithm::Scalar
+            },
+        }
+    }
+
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64", target_arch = "wasm32")))]
     {
         SimdCapabilities {
             has_avx2: false,
             has_neon: false,
+            has_wasm_simd: false,
             vector_width: 1,
             preferred_algorithm: SimdAlgorithm::Scalar,
         }
@@ -103,6 +128,7 @@ pub mod polynomial {
                 SimdAlgorithm::Scalar => true,
                 SimdAlgorithm::AVX2 => capabilities.has_avx2,
                 SimdAlgorithm::NEON => capabilities.has_neon,
+                SimdAlgorithm::WASM => capabilities.has_wasm_simd,
             };
 
             if !is_available {
@@ -157,6 +183,25 @@ pub mod polynomial {
                 SimdAlgorithm::NEON => {
                     // ARM NEON implementation would go here
                     self.ntt_scalar(&mut data)?;
+                }
+
+                #[cfg(target_arch = "wasm32")]
+                SimdAlgorithm::WASM => {
+                    // WebAssembly SIMD implementation would go here
+                    if wasm_simd::has_wasm_simd() {
+                        wasm_simd::ntt_wasm(&mut data)?;
+                    } else {
+                        self.ntt_scalar(&mut data)?;
+                    }
+                }
+
+                #[cfg(not(target_arch = "wasm32"))]
+                SimdAlgorithm::WASM => {
+                    return Err(CryptoError::invalid_parameter(
+                        "WebAssembly SIMD operations",
+                        "wasm32",
+                        std::env::consts::ARCH,
+                    ));
                 }
             }
 
@@ -238,6 +283,24 @@ pub mod polynomial {
                     "aarch64",
                     std::env::consts::ARCH,
                 )),
+
+                #[cfg(target_arch = "wasm32")]
+                SimdAlgorithm::WASM => {
+                    // WebAssembly SIMD implementation would go here
+                    let result = self.multiply_scalar(other)?;
+                    Ok(Self {
+                        coefficients: result,
+                        algorithm: self.algorithm.clone(),
+                        vector_width: self.vector_width,
+                    })
+                }
+
+                #[cfg(not(target_arch = "wasm32"))]
+                SimdAlgorithm::WASM => Err(CryptoError::invalid_parameter(
+                    "WebAssembly SIMD operations",
+                    "wasm32",
+                    std::env::consts::ARCH,
+                )),
             }
         }
 
@@ -290,6 +353,24 @@ pub mod polynomial {
                 SimdAlgorithm::NEON => Err(CryptoError::invalid_parameter(
                     "ARM NEON operations",
                     "aarch64",
+                    std::env::consts::ARCH,
+                )),
+
+                #[cfg(target_arch = "wasm32")]
+                SimdAlgorithm::WASM => {
+                    // WebAssembly SIMD implementation would go here
+                    let result = self.add_scalar(other)?;
+                    Ok(Self {
+                        coefficients: result,
+                        algorithm: self.algorithm.clone(),
+                        vector_width: self.vector_width,
+                    })
+                }
+
+                #[cfg(not(target_arch = "wasm32"))]
+                SimdAlgorithm::WASM => Err(CryptoError::invalid_parameter(
+                    "WebAssembly SIMD operations",
+                    "wasm32",
                     std::env::consts::ARCH,
                 )),
             }
@@ -364,6 +445,7 @@ pub mod polynomial {
                 SimdAlgorithm::Scalar => 1.0,
                 SimdAlgorithm::AVX2 => 8.0,
                 SimdAlgorithm::NEON => 4.0,
+                SimdAlgorithm::WASM => 1.0,
             }
         }
 
