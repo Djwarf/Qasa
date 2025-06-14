@@ -14,6 +14,8 @@ use std::fs;
 use std::path::Path;
 use std::io::Write;
 use sha3::Digest;
+use std::env;
+use std::fs::File;
 
 // Function to export test vectors to JSON files
 fn export_test_vectors() -> std::io::Result<()> {
@@ -223,4 +225,31 @@ fn test_all_vectors() {
     
     // Export all test vectors to JSON files
     export_test_vectors().expect("Failed to export test vectors");
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Initialize QaSa
+    qasa::init()?;
+    
+    // Get output file path from command line arguments or use default
+    let args: Vec<String> = env::args().collect();
+    let output_path = if args.len() > 1 {
+        &args[1]
+    } else {
+        "test_vectors.txt"
+    };
+    
+    println!("Generating test vectors...");
+    
+    // Generate all test vectors
+    let test_vectors = test_vectors::generate_all_test_vectors()?;
+    
+    // Write test vectors to file
+    let path = Path::new(output_path);
+    let mut file = File::create(&path)?;
+    file.write_all(&test_vectors)?;
+    
+    println!("Test vectors written to {}", output_path);
+    
+    Ok(())
 } 

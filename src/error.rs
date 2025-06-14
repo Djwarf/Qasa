@@ -50,6 +50,14 @@ pub enum CryptoError {
         error_code: u32,
         context: HashMap<String, String>,
     },
+    
+    #[error("ChaCha20-Poly1305 operation failed: {operation} - {cause}")]
+    ChaCha20Poly1305Error {
+        operation: String,
+        cause: String,
+        error_code: u32,
+        context: HashMap<String, String>,
+    },
 
     #[error("Key management error: {operation} - {cause}")]
     KeyManagementError {
@@ -224,6 +232,45 @@ pub mod error_codes {
     pub const BIKE_INVALID_KEY_SIZE: u32 = 10005;
     pub const BIKE_COMPRESSION_FAILED: u32 = 10006;
     pub const BIKE_DECOMPRESSION_FAILED: u32 = 10007;
+    
+    // ChaCha20-Poly1305 errors: 12000-12999
+    pub const CHACHA20POLY1305_ENCRYPTION_FAILED: u32 = 12001;
+    pub const CHACHA20POLY1305_DECRYPTION_FAILED: u32 = 12002;
+    pub const CHACHA20POLY1305_AUTHENTICATION_FAILED: u32 = 12003;
+    pub const CHACHA20POLY1305_INVALID_KEY_SIZE: u32 = 12004;
+    pub const CHACHA20POLY1305_INVALID_NONCE_SIZE: u32 = 12005;
+    pub const CHACHA20POLY1305_INVALID_TAG: u32 = 12006;
+    pub const CHACHA20POLY1305_INVALID_CIPHERTEXT: u32 = 12007;
+}
+
+/// Error codes for the hybrid module
+pub mod hybrid_error_codes {
+    /// Base error code for hybrid module errors
+    pub const HYBRID_BASE_ERROR: u32 = 11000;
+
+    /// Error during hybrid KEM key generation
+    pub const HYBRID_KEM_KEY_GENERATION_ERROR: u32 = HYBRID_BASE_ERROR + 1;
+
+    /// Error during hybrid KEM encapsulation
+    pub const HYBRID_KEM_ENCAPSULATION_ERROR: u32 = HYBRID_BASE_ERROR + 2;
+
+    /// Error during hybrid KEM decapsulation
+    pub const HYBRID_KEM_DECAPSULATION_ERROR: u32 = HYBRID_BASE_ERROR + 3;
+
+    /// Error during hybrid signature key generation
+    pub const HYBRID_SIGNATURE_KEY_GENERATION_ERROR: u32 = HYBRID_BASE_ERROR + 11;
+
+    /// Error during hybrid signature signing
+    pub const HYBRID_SIGNATURE_SIGNING_ERROR: u32 = HYBRID_BASE_ERROR + 12;
+
+    /// Error during hybrid signature verification
+    pub const HYBRID_SIGNATURE_VERIFICATION_ERROR: u32 = HYBRID_BASE_ERROR + 13;
+
+    /// Error during hybrid encryption
+    pub const HYBRID_ENCRYPTION_ERROR: u32 = HYBRID_BASE_ERROR + 21;
+
+    /// Error during hybrid decryption
+    pub const HYBRID_DECRYPTION_ERROR: u32 = HYBRID_BASE_ERROR + 22;
 }
 
 impl CryptoError {
@@ -505,6 +552,26 @@ impl CryptoError {
             CryptoError::OqsError { .. } => "OqsError",
         }
     }
+
+    /// Create a BIKE-specific error
+    pub fn bike_error(operation: &str, message: &str, code: u32) -> Self {
+        Self {
+            module: "BIKE".to_string(),
+            operation: operation.to_string(),
+            message: message.to_string(),
+            code,
+        }
+    }
+
+    /// Create a hybrid-specific error
+    pub fn hybrid_error(operation: &str, message: &str, code: u32) -> Self {
+        Self {
+            module: "Hybrid".to_string(),
+            operation: operation.to_string(),
+            message: message.to_string(),
+            code,
+        }
+    }
 }
 
 /// Convenience constructors for common error types
@@ -559,6 +626,17 @@ impl CryptoError {
             context: HashMap::new(),
         }
     }
+    
+    pub fn chacha20poly1305_error(operation: &str, cause: &str, error_code: u32) -> Self {
+        let mut context = HashMap::new();
+        context.insert("algorithm".to_string(), "ChaCha20-Poly1305".to_string());
+        CryptoError::ChaCha20Poly1305Error {
+            operation: operation.to_string(),
+            cause: cause.to_string(),
+            error_code,
+            context,
+        }
+    }
 
     pub fn security_violation(policy: &str, details: &str, severity: SecuritySeverity) -> Self {
         CryptoError::SecurityPolicyViolation {
@@ -609,6 +687,27 @@ impl CryptoError {
             cause: cause.to_string(),
             error_code: error_codes::AES_DECRYPTION_FAILED,
             context: HashMap::new(),
+        }
+    }
+    
+    pub fn authentication_error(operation: &str, cause: &str, error_code: u32) -> Self {
+        let mut context = HashMap::new();
+        context.insert("operation_type".to_string(), "authentication".to_string());
+        
+        if error_code >= 12000 && error_code < 13000 {
+            CryptoError::ChaCha20Poly1305Error {
+                operation: operation.to_string(),
+                cause: cause.to_string(),
+                error_code,
+                context,
+            }
+        } else {
+            CryptoError::AesError {
+                operation: operation.to_string(),
+                cause: cause.to_string(),
+                error_code: error_codes::AES_AUTHENTICATION_FAILED,
+                context,
+            }
         }
     }
 

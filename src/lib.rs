@@ -56,6 +56,9 @@ pub mod security;
 /// High-level user-friendly API
 pub mod simple;
 
+/// Hybrid encryption module
+pub mod hybrid;
+
 // Re-export main types for convenience
 pub use dilithium::DilithiumKeyPair;
 pub use dilithium::DilithiumPublicKey;
@@ -74,6 +77,31 @@ pub use error::{CryptoError, CryptoResult};
 pub use kyber::KyberKeyPair;
 pub use kyber::KyberPublicKey;
 pub use kyber::KyberVariant;
+
+// Re-export hybrid module types
+pub use hybrid::hybrid_kem::{
+    HybridKemKeyPair, 
+    HybridKemPublicKey, 
+    HybridKemVariant,
+    HybridKemCiphertext,
+    ClassicalKemAlgorithm,
+    PostQuantumKemAlgorithm
+};
+
+pub use hybrid::hybrid_signature::{
+    HybridSignatureKeyPair,
+    HybridSignaturePublicKey,
+    HybridSignatureVariant,
+    HybridSignature,
+    ClassicalSignatureAlgorithm,
+    PostQuantumSignatureAlgorithm
+};
+
+pub use hybrid::hybrid_encryption::{
+    encrypt_hybrid,
+    decrypt_hybrid,
+    HybridEncryptionParameters
+};
 
 /// Initialize the cryptography module.
 ///
@@ -163,6 +191,15 @@ pub mod prelude {
     pub use crate::KyberKeyPair;
     pub use crate::KyberPublicKey;
     pub use crate::KyberVariant;
+    pub use crate::HybridKemKeyPair;
+    pub use crate::HybridKemPublicKey;
+    pub use crate::HybridKemVariant;
+    pub use crate::HybridKemCiphertext;
+    pub use crate::HybridSignatureKeyPair;
+    pub use crate::HybridSignaturePublicKey;
+    pub use crate::HybridSignatureVariant;
+    pub use crate::HybridSignature;
+    pub use crate::HybridEncryptionParameters;
 
     /// Creates an end-to-end encrypted message ready for sending
     ///
