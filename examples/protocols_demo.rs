@@ -116,16 +116,16 @@ fn demo_secure_messaging() -> Result<(), Box<dyn std::error::Error>> {
         enable_forward_secrecy: true,
     };
     
-    // Create three users: Alice, Bob, and Charlie
-    let mut alice = SecureMessaging::new(
-        "alice@quantum.safe".to_string(),
-        "Alice".to_string(),
+    // Create three users: Mary, Elena, and Charlie
+    let mut mary = SecureMessaging::new(
+        "mary@quantum.safe".to_string(),
+        "Mary".to_string(),
         config.clone()
     )?;
     
-    let mut bob = SecureMessaging::new(
-        "bob@quantum.safe".to_string(),
-        "Bob".to_string(),
+    let mut elena = SecureMessaging::new(
+        "elena@quantum.safe".to_string(),
+        "Elena".to_string(),
         config.clone()
     )?;
     
@@ -135,113 +135,113 @@ fn demo_secure_messaging() -> Result<(), Box<dyn std::error::Error>> {
         config
     )?;
     
-    println!("✓ Created secure messaging instances for Alice, Bob, and Charlie");
+    println!("✓ Created secure messaging instances for Mary, Elena, and Charlie");
     
     // Exchange public keys
-    let (alice_kyber, alice_dilithium) = alice.get_own_public_keys();
-    let (bob_kyber, bob_dilithium) = bob.get_own_public_keys();
+    let (mary_kyber, mary_dilithium) = mary.get_own_public_keys();
+    let (elena_kyber, elena_dilithium) = elena.get_own_public_keys();
     let (charlie_kyber, charlie_dilithium) = charlie.get_own_public_keys();
     
-    // Alice adds Bob and Charlie as contacts
-    println!("\n→ Alice adding contacts...");
-    alice.add_contact(
-        "bob@quantum.safe".to_string(),
-        "Bob".to_string(),
-        bob_kyber.clone(),
-        bob_dilithium.clone(),
+    // Mary adds Elena and Charlie as contacts
+    println!("\n→ Mary adding contacts...");
+    mary.add_contact(
+        "elena@quantum.safe".to_string(),
+        "Elena".to_string(),
+        elena_kyber.clone(),
+        elena_dilithium.clone(),
     )?;
     
-    alice.add_contact(
+    mary.add_contact(
         "charlie@quantum.safe".to_string(),
         "Charlie".to_string(),
         charlie_kyber.clone(),
         charlie_dilithium.clone(),
     )?;
     
-    // Bob adds Alice
-    bob.add_contact(
-        "alice@quantum.safe".to_string(),
-        "Alice".to_string(),
-        alice_kyber.clone(),
-        alice_dilithium.clone(),
+    // Elena adds Mary
+    elena.add_contact(
+        "mary@quantum.safe".to_string(),
+        "Mary".to_string(),
+        mary_kyber.clone(),
+        mary_dilithium.clone(),
     )?;
     
-    // List Alice's contacts
-    let contacts = alice.list_contacts();
-    println!("  - Alice's contacts:");
+    // List Mary's contacts
+    let contacts = mary.list_contacts();
+    println!("  - Mary's contacts:");
     for (id, name, trust) in &contacts {
         println!("    • {} ({}) - Trust: {:?}", name, id, trust);
     }
     
-    // Alice verifies Bob
-    println!("\n→ Alice verifying Bob's identity...");
-    alice.verify_contact(&"bob@quantum.safe".to_string())?;
-    let contacts = alice.list_contacts();
-    let bob_contact = contacts.iter().find(|(id, _, _)| id == "bob@quantum.safe").unwrap();
-    println!("  - Bob's trust level updated to: {:?}", bob_contact.2);
+    // Mary verifies Elena
+    println!("\n→ Mary verifying Elena's identity...");
+    mary.verify_contact(&"elena@quantum.safe".to_string())?;
+    let contacts = mary.list_contacts();
+    let elena_contact = contacts.iter().find(|(id, _, _)| id == "elena@quantum.safe").unwrap();
+    println!("  - Elena's trust level updated to: {:?}", elena_contact.2);
     
     // Send messages
     println!("\n↔ Exchanging secure messages...");
     
-    // Alice sends to Bob
-    let message1 = "Hey Bob! This is a quantum-safe message.";
-    println!("\n  Alice → Bob: \"{}\"", message1);
-    let encrypted1 = alice.send_message(&"bob@quantum.safe".to_string(), message1.as_bytes())?;
+    // Mary sends to Elena
+    let message1 = "Hey Elena! This is a quantum-safe message.";
+    println!("\n  Mary → Elena: \"{}\"", message1);
+    let encrypted1 = mary.send_message(&"elena@quantum.safe".to_string(), message1.as_bytes())?;
     println!("  - Message ID: {}", hex::encode(&encrypted1.message_id[..8]));
     println!("  - Encrypted size: {} bytes", encrypted1.encrypted_content.len());
     
-    // Bob receives from Alice
-    let decrypted1 = bob.receive_message(&encrypted1)?;
+    // Elena receives from Mary
+    let decrypted1 = elena.receive_message(&encrypted1)?;
     let decrypted1_str = String::from_utf8(decrypted1)?;
-    println!("  - Bob decrypted: \"{}\"", decrypted1_str);
+    println!("  - Elena decrypted: \"{}\"", decrypted1_str);
     
-    // Bob replies to Alice
-    let message2 = "Hi Alice! Got your message loud and clear!";
-    println!("\n  Bob → Alice: \"{}\"", message2);
-    let encrypted2 = bob.send_message(&"alice@quantum.safe".to_string(), message2.as_bytes())?;
+    // Elena replies to Mary
+    let message2 = "Hi Mary! Got your message loud and clear!";
+    println!("\n  Elena → Mary: \"{}\"", message2);
+    let encrypted2 = elena.send_message(&"mary@quantum.safe".to_string(), message2.as_bytes())?;
     
-    // Alice receives from Bob
-    let decrypted2 = alice.receive_message(&encrypted2)?;
+    // Mary receives from Elena
+    let decrypted2 = mary.receive_message(&encrypted2)?;
     let decrypted2_str = String::from_utf8(decrypted2)?;
-    println!("  - Alice decrypted: \"{}\"", decrypted2_str);
+    println!("  - Mary decrypted: \"{}\"", decrypted2_str);
     
     // Test replay protection
     println!("\n→ Testing replay protection...");
-    match bob.receive_message(&encrypted1) {
+    match elena.receive_message(&encrypted1) {
         Err(e) => println!("  ✓ Replay attack blocked: {}", e),
         Ok(_) => panic!("Replay attack should have been blocked!"),
     }
     
     // Export/Import contact
     println!("\n→ Testing contact export/import...");
-    let bob_export = alice.export_contact(&"bob@quantum.safe".to_string())?;
-    println!("  - Exported Bob's contact: {} bytes", bob_export.len());
+    let elena_export = mary.export_contact(&"elena@quantum.safe".to_string())?;
+    println!("  - Exported Elena's contact: {} bytes", elena_export.len());
     
-    // Charlie imports Bob's contact from Alice
-    charlie.import_contact(&bob_export)?;
+    // Charlie imports Elena's contact from Mary
+    charlie.import_contact(&elena_export)?;
     let charlie_contacts = charlie.list_contacts();
     println!("  - Charlie's contacts after import:");
     for (id, name, trust) in &charlie_contacts {
         println!("    • {} ({}) - Trust: {:?}", name, id, trust);
     }
     
-    // Charlie adds Alice to send her a message
+    // Charlie adds Mary to send her a message
     charlie.add_contact(
-        "alice@quantum.safe".to_string(),
-        "Alice".to_string(),
-        alice_kyber,
-        alice_dilithium,
+        "mary@quantum.safe".to_string(),
+        "Mary".to_string(),
+        mary_kyber,
+        mary_dilithium,
     )?;
     
-    // Charlie sends to Alice
-    let message3 = "Hi Alice! Bob shared your contact with me.";
-    println!("\n  Charlie → Alice: \"{}\"", message3);
-    let encrypted3 = charlie.send_message(&"alice@quantum.safe".to_string(), message3.as_bytes())?;
+    // Charlie sends to Mary
+    let message3 = "Hi Mary! Elena shared your contact with me.";
+    println!("\n  Charlie → Mary: \"{}\"", message3);
+    let encrypted3 = charlie.send_message(&"mary@quantum.safe".to_string(), message3.as_bytes())?;
     
-    // Alice receives from Charlie
-    let decrypted3 = alice.receive_message(&encrypted3)?;
+    // Mary receives from Charlie
+    let decrypted3 = mary.receive_message(&encrypted3)?;
     let decrypted3_str = String::from_utf8(decrypted3)?;
-    println!("  - Alice decrypted: \"{}\"", decrypted3_str);
+    println!("  - Mary decrypted: \"{}\"", decrypted3_str);
     
     println!("\n✓ Secure messaging successful!");
     

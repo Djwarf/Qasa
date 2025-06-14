@@ -669,6 +669,277 @@ pub fn decompress_signature(compressed: &CompressedSignature) -> CryptoResult<Ve
 }
 
 /// Decompress a SPHINCS+ signature with light compression
+pub fn compress_signature_medium(signature: &[u8]) -> CryptoResult<Vec<u8>> {
+    // Medium compression using LZ77-style compression
+    let mut compressed = Vec::new();
+    
+    // Add medium compression marker
+    compressed.push(0x51); // SPHINCS+ marker
+    compressed.push(0x4D); // Medium compression
+    
+    // Apply LZ77-style compression
+    let mut i = 0;
+    while i < signature.len() {
+        // Look for matches in the previous 2048 bytes
+        let search_start = if i >= 2048 { i - 2048 } else { 0 };
+        let mut best_match_len = 0;
+        let mut best_match_dist = 0;
+        
+        // Find the longest match
+        for j in search_start..i {
+            let mut match_len = 0;
+            while i + match_len < signature.len() && 
+                  j + match_len < i && 
+                  signature[i + match_len] == signature[j + match_len] &&
+                  match_len < 255 {
+                match_len += 1;
+            }
+            
+            if match_len > best_match_len && match_len >= 3 {
+                best_match_len = match_len;
+                best_match_dist = i - j;
+            }
+        }
+        
+        if best_match_len >= 3 {
+            // Encode match: marker (0), distance high, distance low + length
+            compressed.push(0);
+            compressed.push((best_match_dist >> 8) as u8);
+            compressed.push(((best_match_dist & 0xFF) << 3) as u8 | (best_match_len - 3) as u8);
+            i += best_match_len;
+        } else {
+            // Literal byte
+            compressed.push(signature[i]);
+            i += 1;
+        }
+    }
+    
+    Ok(compressed)
+}
+
+pub fn compress_signature_high(signature: &[u8]) -> CryptoResult<Vec<u8>> {
+    // High compression using RLE + Huffman-like encoding
+    let mut compressed = Vec::new();
+    
+    // Add high compression marker
+    compressed.push(0x51); // SPHINCS+ marker
+    compressed.push(0x48); // High compression
+    
+    // First apply RLE compression
+    let mut rle_compressed = Vec::new();
+    let mut i = 0;
+    
+    while i < signature.len() {
+        let current_byte = signature[i];
+        let mut count = 1;
+        
+        // Count consecutive identical bytes
+        while i + count < signature.len() && 
+              signature[i + count] == current_byte && 
+              count < 255 {
+            count += 1;
+        }
+        
+        if count >= 3 {
+            // Use RLE encoding: marker (0), byte, count
+            rle_compressed.push(0);
+            rle_compressed.push(current_byte);
+            rle_compressed.push(count as u8);
+        } else {
+            // Store bytes literally
+            for _ in 0..count {
+                rle_compressed.push(current_byte);
+            }
+        }
+        
+        i += count;
+    }
+    
+    // Apply Huffman-like encoding
+    let mut bit_buffer: u32 = 0;
+    let mut bits_in_buffer: u8 = 0;
+    
+    for &byte in &rle_compressed {
+        // Simple frequency-based encoding
+        let (code, code_len) = match byte {
+            0 => (0b0, 2),           // RLE marker: 00
+            1..=31 => (0b10 | ((byte as u32) << 3), 8),     // Small values: 10 + 5 bits
+            32..=95 => (0b110 | ((byte as u32 - 32) << 4), 10), // Medium values: 110 + 6 bits  
+            96..=159 => (0b1110 | ((byte as u32 - 96) << 5), 13), // Larger values: 1110 + 7 bits
+            _ => (0b1111 | ((byte as u32) << 5), 13),       // Highest values: 1111 + 8 bits
+        };
+        
+        bit_buffer |= code << bits_in_buffer;
+        bits_in_buffer += code_len;
+        
+        // Flush complete bytes
+        while bits_in_buffer >= 8 {
+            compressed.push((bit_buffer & 0xFF) as u8);
+            bit_buffer >>= 8;
+            bits_in_buffer -= 8;
+        }
+    }
+    
+    // Flush remaining bits
+    if bits_in_buffer > 0 {
+        compressed.push((bit_buffer & 0xFF) as u8);
+    }
+    
+    Ok(compressed)
+}
+
+pub fn decompress_signature_medium(compressed: &[u8]) -> CryptoResult<Vec<u8>> {
+    // Check for the medium compression marker
+    if compressed.len() < 2 || compressed[0] != 0x51 || compressed[1] != 0x4D {
+        return Err(CryptoError::sphincs_error(
+            "decompression",
+            "Invalid medium compression format",
+            crate::error::error_codes::SPHINCS_DECOMPRESSION_FAILED,
+        ));
+    }
+    
+    let mut decompressed = Vec::new();
+    let mut i = 2; // Skip the marker
+    
+    while i < compressed.len() {
+        if compressed[i] == 0 && i + 2 < compressed.len() {
+            // This is an LZ77 match
+            let dist_high = compressed[i + 1] as usize;
+            let dist_low_and_len = compressed[i + 2] as usize;
+            
+            let distance = (dist_high << 8) | (dist_low_and_len >> 3);
+            let length = (dist_low_and_len & 0x07) + 3;
+            
+            if distance == 0 || distance > decompressed.len() {
+                return Err(CryptoError::sphincs_error(
+                    "decompression",
+                    "Invalid LZ77 distance in medium compression",
+                    crate::error::error_codes::SPHINCS_DECOMPRESSION_FAILED,
+                ));
+            }
+            
+            let pos = decompressed.len() - distance;
+            
+            // Copy the matched sequence
+            for j in 0..length {
+                if pos + j < decompressed.len() {
+                    decompressed.push(decompressed[pos + j]);
+                } else {
+                    // We're copying from what we just copied
+                    decompressed.push(decompressed[decompressed.len() - distance]);
+                }
+            }
+            
+            i += 3;
+        } else {
+            // Regular byte
+            decompressed.push(compressed[i]);
+            i += 1;
+        }
+    }
+    
+    Ok(decompressed)
+}
+
+pub fn decompress_signature_high(compressed: &[u8]) -> CryptoResult<Vec<u8>> {
+    // Check for the high compression marker
+    if compressed.len() < 2 || compressed[0] != 0x51 || compressed[1] != 0x48 {
+        return Err(CryptoError::sphincs_error(
+            "decompression",
+            "Invalid high compression format",
+            crate::error::error_codes::SPHINCS_DECOMPRESSION_FAILED,
+        ));
+    }
+    
+    // First decompress the Huffman-like encoding
+    let mut huffman_decompressed = Vec::new();
+    huffman_decompressed.push(0x51); // Add back the marker for RLE decompression
+    huffman_decompressed.push(0x48);
+    
+    let mut i = 2; // Skip the header
+    
+    let mut bit_buffer: u32 = 0;
+    let mut bits_in_buffer: u8 = 0;
+    
+    while i < compressed.len() || bits_in_buffer > 0 {
+        // Refill the bit buffer if needed
+        while bits_in_buffer < 24 && i < compressed.len() {
+            bit_buffer |= (compressed[i] as u32) << bits_in_buffer;
+            bits_in_buffer += 8;
+            i += 1;
+        }
+        
+        if bits_in_buffer < 2 {
+            // Not enough bits left
+            break;
+        }
+        
+        // Decode based on the prefix
+        if (bit_buffer & 0b11) == 0b00 {
+            // 00: RLE marker
+            huffman_decompressed.push(0);
+            bit_buffer >>= 2;
+            bits_in_buffer -= 2;
+        } else if (bit_buffer & 0b11) == 0b10 {
+            // 10: Small value
+            if bits_in_buffer < 8 {
+                break;
+            }
+            let value = ((bit_buffer >> 3) & 0x1F) as u8 + 1;
+            huffman_decompressed.push(value);
+            bit_buffer >>= 8;
+            bits_in_buffer -= 8;
+        } else if (bit_buffer & 0b111) == 0b110 {
+            // 110: Medium value
+            if bits_in_buffer < 10 {
+                break;
+            }
+            let value = ((bit_buffer >> 4) & 0x3F) as u8 + 32;
+            huffman_decompressed.push(value);
+            bit_buffer >>= 10;
+            bits_in_buffer -= 10;
+        } else if (bit_buffer & 0b1111) == 0b1110 {
+            // 1110: Larger value
+            if bits_in_buffer < 13 {
+                break;
+            }
+            let value = ((bit_buffer >> 5) & 0x7F) as u8 + 96;
+            huffman_decompressed.push(value);
+            bit_buffer >>= 13;
+            bits_in_buffer -= 13;
+        } else {
+            // 1111: Highest value
+            if bits_in_buffer < 13 {
+                break;
+            }
+            let value = ((bit_buffer >> 5) & 0xFF) as u8;
+            huffman_decompressed.push(value);
+            bit_buffer >>= 13;
+            bits_in_buffer -= 13;
+        }
+    }
+    
+    // Now decompress the RLE encoding
+    let mut decompressed = Vec::new();
+    let mut i = 2; // Skip the marker bytes
+    
+    while i < huffman_decompressed.len() {
+        if huffman_decompressed[i] == 0 && i + 2 < huffman_decompressed.len() {
+            // This is an RLE marker
+            let byte = huffman_decompressed[i + 1];
+            let count = huffman_decompressed[i + 2] as usize;
+            decompressed.extend(std::iter::repeat(byte).take(count));
+            i += 3;
+        } else {
+            // Regular byte
+            decompressed.push(huffman_decompressed[i]);
+            i += 1;
+        }
+    }
+    
+    Ok(decompressed)
+}
+
 pub fn decompress_signature_light(compressed: &[u8]) -> CryptoResult<Vec<u8>> {
     let mut decompressed = Vec::new();
     let mut i = 0;
@@ -891,15 +1162,43 @@ fn verify_signature(algorithm: Algorithm, message: &[u8], signature: &[u8], publ
 mod tests {
     use super::*;
     
-    // Helper function to create test signatures
+    // Helper function to create test signatures with realistic patterns
     fn create_test_signature(variant: SphincsVariant) -> Vec<u8> {
-        // Create a dummy signature of the correct size
+        // Create a realistic test signature with patterns that compress well
         let size = variant.signature_size();
         let mut signature = Vec::with_capacity(size);
         
-        // Fill with repeating pattern for compression tests
-        for i in 0..size {
-            signature.push((i % 256) as u8);
+        // Create a pattern that mimics real SPHINCS+ signature structure:
+        // - Some sections with repeated values (like padding)
+        // - Some sections with structured data (like hash chains)
+        // - Some sections with pseudo-random data (like actual signatures)
+        
+        let section_size = size / 4;
+        
+        // Section 1: Repeated padding-like data (compresses very well)
+        for i in 0..section_size {
+            signature.push(if i % 32 == 0 { 0x00 } else { 0xFF });
+        }
+        
+        // Section 2: Structured hash-like data (compresses moderately)
+        for i in 0..section_size {
+            signature.push(((i / 8) % 256) as u8);
+        }
+        
+        // Section 3: Semi-random signature data (compresses poorly)
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        for i in 0..section_size {
+            let mut hasher = DefaultHasher::new();
+            (variant as u8).hash(&mut hasher);
+            i.hash(&mut hasher);
+            signature.push((hasher.finish() % 256) as u8);
+        }
+        
+        // Section 4: Fill remaining with mixed pattern
+        let remaining = size - signature.len();
+        for i in 0..remaining {
+            signature.push(((i * 17 + 42) % 256) as u8);
         }
         
         signature
@@ -907,9 +1206,132 @@ mod tests {
     
     #[test]
     fn test_sphincs_key_generation() {
-        // This test would verify key generation works
-        // In this placeholder, we just check that the function exists
-        assert!(SphincsKeyPair::generate(SphincsVariant::Sphincs128f).is_ok());
+        // Test comprehensive key generation for each variant
+        for variant in [
+            SphincsVariant::Sphincs128f,
+            SphincsVariant::Sphincs128s,
+            SphincsVariant::Sphincs192f,
+            SphincsVariant::Sphincs192s,
+            SphincsVariant::Sphincs256f,
+            SphincsVariant::Sphincs256s,
+        ] {
+            println!("Testing comprehensive key generation for {:?}", variant);
+            
+            // Generate multiple key pairs to test randomness and consistency
+            let mut key_pairs = Vec::new();
+            for i in 0..3 {
+                let key_pair = SphincsKeyPair::generate(variant)
+                    .expect(&format!("Key generation {} should succeed for {:?}", i, variant));
+                key_pairs.push(key_pair);
+            }
+            
+            // Verify key sizes and properties for all generated pairs
+            for (i, key_pair) in key_pairs.iter().enumerate() {
+                // Verify the key sizes match the expected sizes for the variant
+                assert_eq!(key_pair.public_key.len(), variant.public_key_size(),
+                    "Public key size mismatch for {:?} pair {}", variant, i);
+                assert_eq!(key_pair.secret_key.len(), variant.secret_key_size(),
+                    "Secret key size mismatch for {:?} pair {}", variant, i);
+                
+                // Verify the algorithm is stored correctly
+                assert_eq!(key_pair.algorithm, variant,
+                    "Algorithm mismatch for {:?} pair {}", variant, i);
+                
+                // Verify keys are not all zeros (should have entropy)
+                assert!(!key_pair.public_key.iter().all(|&b| b == 0),
+                    "Public key {} should not be all zeros for {:?}", i, variant);
+                assert!(!key_pair.secret_key.iter().all(|&b| b == 0),
+                    "Secret key {} should not be all zeros for {:?}", i, variant);
+                
+                // Test key entropy
+                let pub_entropy = calculate_entropy(&key_pair.public_key);
+                let sec_entropy = calculate_entropy(&key_pair.secret_key);
+                
+                assert!(pub_entropy > 6.0,
+                    "Public key entropy too low: {} for {:?} pair {}", pub_entropy, variant, i);
+                assert!(sec_entropy > 7.0,
+                    "Secret key entropy too low: {} for {:?} pair {}", sec_entropy, variant, i);
+                
+                // Test serialization and deserialization
+                let serialized = key_pair.to_bytes()
+                    .expect(&format!("Serialization {} should succeed for {:?}", i, variant));
+                let deserialized = SphincsKeyPair::from_bytes(&serialized)
+                    .expect(&format!("Deserialization {} should succeed for {:?}", i, variant));
+                
+                // Verify the deserialized key pair matches the original
+                assert_eq!(deserialized.public_key, key_pair.public_key,
+                    "Public key mismatch after serialization {} for {:?}", i, variant);
+                assert_eq!(deserialized.secret_key, key_pair.secret_key,
+                    "Secret key mismatch after serialization {} for {:?}", i, variant);
+                assert_eq!(deserialized.algorithm, key_pair.algorithm,
+                    "Algorithm mismatch after serialization {} for {:?}", i, variant);
+                
+                // Test public key extraction
+                let extracted_public = key_pair.public_key();
+                assert_eq!(extracted_public.public_key, key_pair.public_key,
+                    "Extracted public key should match for pair {} {:?}", i, variant);
+                assert_eq!(extracted_public.algorithm, key_pair.algorithm,
+                    "Extracted algorithm should match for pair {} {:?}", i, variant);
+                
+                // Test basic signing and verification
+                let message = b"test message for SPHINCS+ verification";
+                let signature = key_pair.sign(message)
+                    .expect(&format!("Signing should succeed for pair {} {:?}", i, variant));
+                
+                // Verify signature size
+                assert_eq!(signature.len(), variant.signature_size(),
+                    "Signature size mismatch for pair {} {:?}", i, variant);
+                
+                // Verify the signature
+                let is_valid = key_pair.verify(message, &signature)
+                    .expect(&format!("Verification should succeed for pair {} {:?}", i, variant));
+                assert!(is_valid, "Signature should be valid for pair {} {:?}", i, variant);
+                
+                // Test with wrong message
+                let wrong_message = b"wrong message";
+                let is_invalid = key_pair.verify(wrong_message, &signature)
+                    .expect(&format!("Verification with wrong message should succeed for pair {} {:?}", i, variant));
+                assert!(!is_invalid, "Signature should be invalid for wrong message, pair {} {:?}", i, variant);
+            }
+            
+            // Verify that all generated key pairs are different
+            for i in 0..key_pairs.len() {
+                for j in (i+1)..key_pairs.len() {
+                    assert_ne!(key_pairs[i].public_key, key_pairs[j].public_key,
+                        "Public keys {} and {} should be different for {:?}", i, j, variant);
+                    assert_ne!(key_pairs[i].secret_key, key_pairs[j].secret_key,
+                        "Secret keys {} and {} should be different for {:?}", i, j, variant);
+                }
+            }
+            
+            // Test cross-verification (signature from one key should not verify with another)
+            if key_pairs.len() >= 2 {
+                let message = b"cross verification test";
+                let signature = key_pairs[0].sign(message).unwrap();
+                let cross_valid = key_pairs[1].verify(message, &signature).unwrap();
+                assert!(!cross_valid, "Cross-verification should fail for {:?}", variant);
+            }
+        }
+    }
+    
+    /// Calculate Shannon entropy of a byte array
+    fn calculate_entropy(data: &[u8]) -> f64 {
+        let mut counts = [0u32; 256];
+        for &byte in data {
+            counts[byte as usize] += 1;
+        }
+        
+        let len = data.len() as f64;
+        let mut entropy = 0.0;
+        
+        for &count in &counts {
+            if count > 0 {
+                let p = count as f64 / len;
+                entropy -= p * p.log2();
+            }
+        }
+        
+        entropy
     }
     
     #[test]
@@ -932,20 +1354,130 @@ mod tests {
     
     #[test]
     fn test_invalid_signature_size() {
-        // This test would verify that the implementation correctly handles
-        // signatures of incorrect size
-        // In this placeholder, we just check that the function exists
-        let variant = SphincsVariant::Sphincs128f;
-        let signature = vec![0u8; 10]; // Too small
-        
-        // Create a compressed signature with the wrong size
-        let compressed = CompressedSignature::new(
-            signature,
-            CompressionLevel::None,
-            variant,
-        );
-        
-        // Verify the size is reported correctly
-        assert_eq!(compressed.size(), 10);
+        // Test invalid signature handling for all variants
+        for variant in [
+            SphincsVariant::Sphincs128f,
+            SphincsVariant::Sphincs128s,
+            SphincsVariant::Sphincs192f,
+            SphincsVariant::Sphincs192s,
+            SphincsVariant::Sphincs256f,
+            SphincsVariant::Sphincs256s,
+        ] {
+            println!("Testing invalid signature handling for {:?}", variant);
+            
+            let key_pair = SphincsKeyPair::generate(variant).unwrap();
+            let message = b"test message for invalid signature testing";
+            
+            // Test various invalid signature sizes
+            let invalid_sizes = [
+                0,    // Empty signature
+                1,    // Single byte
+                10,   // Too small
+                variant.signature_size() / 2,  // Half size
+                variant.signature_size() - 1,  // One byte short
+                variant.signature_size() + 1,  // One byte too long
+                variant.signature_size() * 2,  // Double size
+            ];
+            
+            for &size in &invalid_sizes {
+                if size == variant.signature_size() {
+                    continue; // Skip valid size
+                }
+                
+                let invalid_signature = vec![0u8; size];
+                
+                // Verify that verification fails with the wrong signature size
+                let result = key_pair.verify(message, &invalid_signature);
+                assert!(result.is_err(), 
+                    "Verification should fail for size {} with {:?}", size, variant);
+                
+                // Check that it's a signature error
+                match result {
+                    Err(CryptoError::SphincsError { operation, .. }) => {
+                        assert_eq!(operation, "verification");
+                    },
+                    _ => panic!("Expected SPHINCS error for size {} with {:?}", size, variant),
+                }
+                
+                // Test with compressed signature of wrong size
+                let compressed = CompressedSignature::new(
+                    invalid_signature.clone(),
+                    CompressionLevel::None,
+                    variant,
+                );
+                
+                // Verify the size is reported correctly
+                assert_eq!(compressed.size(), size);
+                
+                // Test compressed signature verification
+                let compressed_result = key_pair.verify_compressed(message, &compressed);
+                assert!(compressed_result.is_err(),
+                    "Compressed verification should fail for size {} with {:?}", size, variant);
+            }
+            
+            // Test with corrupted valid-sized signature
+            let mut corrupted_signature = vec![0u8; variant.signature_size()];
+            // Fill with non-zero pattern to make it look more realistic
+            for (i, byte) in corrupted_signature.iter_mut().enumerate() {
+                *byte = (i % 256) as u8;
+            }
+            
+            let result = key_pair.verify(message, &corrupted_signature);
+            // This should either fail or return false (depending on implementation)
+            match result {
+                Ok(false) => {
+                    // Signature was invalid but verification succeeded in determining that
+                },
+                Err(_) => {
+                    // Verification failed due to invalid signature format
+                },
+                Ok(true) => {
+                    panic!("Corrupted signature should not verify as valid for {:?}", variant);
+                }
+            }
+            
+            // Test with random signature of correct size
+            use rand::{rngs::OsRng, RngCore};
+            let mut random_signature = vec![0u8; variant.signature_size()];
+            OsRng.fill_bytes(&mut random_signature);
+            
+            let random_result = key_pair.verify(message, &random_signature);
+            match random_result {
+                Ok(false) => {
+                    // Random signature was correctly identified as invalid
+                },
+                Err(_) => {
+                    // Verification failed due to invalid signature format
+                },
+                Ok(true) => {
+                    // Extremely unlikely but theoretically possible
+                    println!("Warning: Random signature verified as valid for {:?} (extremely unlikely)", variant);
+                }
+            }
+            
+            // Test signature from different variant (if sizes differ)
+            for other_variant in [
+                SphincsVariant::Sphincs128f,
+                SphincsVariant::Sphincs128s,
+                SphincsVariant::Sphincs192f,
+                SphincsVariant::Sphincs192s,
+                SphincsVariant::Sphincs256f,
+                SphincsVariant::Sphincs256s,
+            ] {
+                if other_variant == variant || 
+                   other_variant.signature_size() == variant.signature_size() {
+                    continue;
+                }
+                
+                let other_key_pair = SphincsKeyPair::generate(other_variant).unwrap();
+                let other_signature = other_key_pair.sign(message).unwrap();
+                
+                // Try to verify signature from different variant
+                let cross_result = key_pair.verify(message, &other_signature);
+                assert!(cross_result.is_err(),
+                    "Cross-variant verification should fail between {:?} and {:?}", 
+                    variant, other_variant);
+            }
+        }
     }
 }

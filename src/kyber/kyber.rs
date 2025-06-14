@@ -109,7 +109,7 @@ pub struct KyberPublicKey {
 ///
 /// For most applications, Kyber768 provides a good balance between
 /// security and performance.
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Hash, Serialize, Deserialize, PartialEq, Eq)]
 pub enum KyberVariant {
     /// Kyber512 (NIST security level 1)
     Kyber512,

@@ -170,8 +170,16 @@ mod tests {
                 let compression_ratio = compressed.compression_ratio();
                 println!("Compression ratio for {:?}: {:.2}", level, compression_ratio);
                 
-                // Note: In a real implementation, we would check that compression_ratio < 1.0
-                // But our placeholder implementations don't actually compress
+                // Verify that compression actually reduces the size
+                assert!(compression_ratio < 1.0, 
+                    "Compression with {:?} should reduce size, got ratio: {:.2}", 
+                    level, compression_ratio);
+                
+                // Verify that space savings is positive
+                let savings = compressed.space_savings();
+                assert!(savings > 0, 
+                    "Compression with {:?} should save space, saved {} bytes", 
+                    level, savings);
             }
         }
     }

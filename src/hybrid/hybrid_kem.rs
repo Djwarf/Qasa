@@ -160,13 +160,39 @@ impl HybridKemKeyPair {
                 pkcs8.as_ref().to_vec()
             },
             ClassicalKemAlgorithm::Rsa2048 | ClassicalKemAlgorithm::Rsa3072 => {
-                // For RSA, we'd use a proper RSA implementation
-                // This is a placeholder
-                return Err(CryptoError::UnsupportedOperation {
-                    operation: "RSA key generation".to_string(),
-                    platform: "current platform".to_string(),
-                    error_code: 12345, // Use proper error code in real implementation
-                });
+                // For RSA, use the rsa crate for key generation
+                use rsa::{RsaPrivateKey, RsaPublicKey, pkcs8::EncodePrivateKey};
+                use rand::rngs::OsRng;
+                
+                // Determine the key size
+                let bits = match variant.classical {
+                    ClassicalKemAlgorithm::Rsa2048 => 2048,
+                    ClassicalKemAlgorithm::Rsa3072 => 3072,
+                    _ => unreachable!(),
+                };
+                
+                // Generate the RSA key pair
+                let private_key = RsaPrivateKey::new(&mut OsRng, bits).map_err(|e| {
+                    CryptoError::key_management_error(
+                        "RSA key generation",
+                        &format!("Failed to generate RSA key: {}", e),
+                        "RSA",
+                    )
+                })?;
+                
+                // Extract the public key
+                let _public_key = RsaPublicKey::from(&private_key);
+                
+                // Convert to PKCS#8 format
+                let pkcs8 = private_key.to_pkcs8_der().map_err(|e| {
+                    CryptoError::key_management_error(
+                        "RSA encoding",
+                        &format!("Failed to encode RSA key: {}", e),
+                        "RSA",
+                    )
+                })?;
+                
+                pkcs8.as_bytes().to_vec()
             },
         };
         
@@ -239,13 +265,31 @@ impl HybridKemKeyPair {
                 (public_key, post_quantum_public_key)
             },
             ClassicalKemAlgorithm::Rsa2048 | ClassicalKemAlgorithm::Rsa3072 => {
-                // For RSA, we'd extract the public key properly
-                // This is a placeholder
-                return Err(CryptoError::UnsupportedOperation {
-                    operation: "RSA public key extraction".to_string(),
-                    platform: "current platform".to_string(),
-                    error_code: 12345, // Use proper error code in real implementation
-                });
+                // Extract public key from PKCS#8 format
+                use rsa::{RsaPrivateKey, RsaPublicKey, pkcs8::{DecodePrivateKey, EncodePublicKey}};
+                
+                // Parse the private key from PKCS#8
+                let private_key = RsaPrivateKey::from_pkcs8_der(&self.classical_key).map_err(|e| {
+                    CryptoError::key_management_error(
+                        "RSA decoding",
+                        &format!("Failed to decode RSA private key: {}", e),
+                        "RSA",
+                    )
+                })?;
+                
+                // Extract the public key
+                let public_key = RsaPublicKey::from(&private_key);
+                
+                // Encode the public key in SPKI format
+                let spki = public_key.to_public_key_der().map_err(|e| {
+                    CryptoError::key_management_error(
+                        "RSA encoding",
+                        &format!("Failed to encode RSA public key: {}", e),
+                        "RSA",
+                    )
+                })?;
+                
+                (spki.as_bytes().to_vec(), post_quantum_public_key)
             },
         };
         
@@ -348,13 +392,35 @@ impl HybridKemKeyPair {
                 shared_secret
             },
             ClassicalKemAlgorithm::Rsa2048 | ClassicalKemAlgorithm::Rsa3072 => {
-                // For RSA, we'd decrypt the ciphertext properly
-                // This is a placeholder
-                return Err(CryptoError::UnsupportedOperation {
-                    operation: "RSA decryption".to_string(),
-                    platform: "current platform".to_string(),
-                    error_code: 12345, // Use proper error code in real implementation
-                });
+                // Decrypt the ciphertext using RSA-OAEP
+                use rsa::{RsaPrivateKey, pkcs8::DecodePrivateKey, Oaep, Hash};
+                use rand::rngs::OsRng;
+                
+                // Parse the private key from PKCS#8
+                let private_key = RsaPrivateKey::from_pkcs8_der(&self.classical_key).map_err(|e| {
+                    CryptoError::key_management_error(
+                        "RSA decoding",
+                        &format!("Failed to decode RSA private key: {}", e),
+                        "RSA",
+                    )
+                })?;
+                
+                // Create a padding scheme (OAEP with SHA-256)
+                let padding = Oaep::new::<sha2::Sha256>();
+                
+                // Decrypt the ciphertext
+                let shared_secret = private_key.decrypt(
+                    &padding, 
+                    &ciphertext.classical_ciphertext
+                ).map_err(|e| {
+                    CryptoError::key_management_error(
+                        "RSA-OAEP decryption",
+                        &format!("Failed to decrypt RSA ciphertext: {}", e),
+                        "RSA",
+                    )
+                })?;
+                
+                shared_secret
             },
         };
         
@@ -611,13 +677,36 @@ impl HybridKemPublicKey {
                 (ephemeral_public_key_bytes.as_ref().to_vec(), shared_secret)
             },
             ClassicalKemAlgorithm::Rsa2048 | ClassicalKemAlgorithm::Rsa3072 => {
-                // For RSA, we'd encrypt a random secret
-                // This is a placeholder
-                return Err(CryptoError::UnsupportedOperation {
-                    operation: "RSA encryption".to_string(),
-                    platform: "current platform".to_string(),
-                    error_code: 12345, // Use proper error code in real implementation
-                });
+                // Encrypt a random secret using RSA-OAEP
+                use rsa::{RsaPublicKey, pkcs8::DecodePublicKey, Oaep, Hash};
+                use rand::{rngs::OsRng, RngCore};
+                
+                // Generate a random shared secret
+                let mut shared_secret = vec![0u8; 32]; // 256-bit shared secret
+                OsRng.fill_bytes(&mut shared_secret);
+                
+                // Parse the public key from SPKI format
+                let public_key = RsaPublicKey::from_public_key_der(&self.classical_key).map_err(|e| {
+                    CryptoError::key_management_error(
+                        "RSA decoding",
+                        &format!("Failed to decode RSA public key: {}", e),
+                        "RSA",
+                    )
+                })?;
+                
+                // Create a padding scheme (OAEP with SHA-256)
+                let padding = Oaep::new::<sha2::Sha256>();
+                
+                // Encrypt the shared secret
+                let ciphertext = public_key.encrypt(&mut OsRng, &padding, &shared_secret).map_err(|e| {
+                    CryptoError::key_management_error(
+                        "RSA-OAEP encryption",
+                        &format!("Failed to encrypt shared secret: {}", e),
+                        "RSA",
+                    )
+                })?;
+                
+                (ciphertext, shared_secret)
             },
         };
         

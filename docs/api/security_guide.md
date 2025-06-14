@@ -302,7 +302,7 @@ let mary_sig_pub = mary_sig_keys.public_key();
 let elena_enc_pub = elena_enc_keys.public_key();
 let elena_sig_pub = elena_sig_keys.public_key();
 
-// [ALICE SENDS TO BOB]
+// [MARY SENDS TO ELENA]
 // Create a secure message from Mary to Elena
 let message = b"Hello Elena, this is a secure message from Mary!";
 let secure_message = create_secure_message(
@@ -311,7 +311,7 @@ let secure_message = create_secure_message(
     &mary_sig_keys,
 )?;
 
-// [BOB RECEIVES FROM ALICE]
+// [ELENA RECEIVES FROM MARY]
 // Elena opens the secure message from Mary
 let decrypted = open_secure_message(
     &secure_message,

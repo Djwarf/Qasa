@@ -1044,7 +1044,7 @@ mod tests {
     #[test]
     fn test_secure_messaging_creation() {
         let config = MessagingConfig::default();
-        let messaging = SecureMessaging::new("alice@example.com".to_string(), "Alice".to_string(), config);
+        let messaging = SecureMessaging::new("mary@example.com".to_string(), "Mary".to_string(), config);
         assert!(messaging.is_ok());
 
         let messaging = messaging.unwrap();
@@ -1082,7 +1082,7 @@ mod tests {
     #[test]
     fn test_message_id_generation() {
         let config = MessagingConfig::default();
-        let messaging = SecureMessaging::new("alice@example.com".to_string(), "Alice".to_string(), config).unwrap();
+        let messaging = SecureMessaging::new("mary@example.com".to_string(), "Mary".to_string(), config).unwrap();
 
         let id1 = messaging.generate_message_id().unwrap();
         let id2 = messaging.generate_message_id().unwrap();
@@ -1094,86 +1094,86 @@ mod tests {
     #[test]
     fn test_contact_management() {
         let config = MessagingConfig::default();
-        let mut alice = SecureMessaging::new("alice@example.com".to_string(), "Alice".to_string(), config.clone()).unwrap();
-        let bob = SecureMessaging::new("bob@example.com".to_string(), "Bob".to_string(), config).unwrap();
+        let mut mary = SecureMessaging::new("mary@example.com".to_string(), "Mary".to_string(), config.clone()).unwrap();
+        let elena = SecureMessaging::new("elena@example.com".to_string(), "Elena".to_string(), config).unwrap();
 
-        // Get Bob's public keys
-        let (bob_kyber_key, bob_dilithium_key) = bob.get_own_public_keys();
+        // Get Elena's public keys
+        let (elena_kyber_key, elena_dilithium_key) = elena.get_own_public_keys();
 
-        // Alice adds Bob as a contact
-        let result = alice.add_contact(
-            "bob@example.com".to_string(),
-            "Bob".to_string(),
-            bob_kyber_key,
-            bob_dilithium_key,
+        // Mary adds Elena as a contact
+        let result = mary.add_contact(
+            "elena@example.com".to_string(),
+            "Elena".to_string(),
+            elena_kyber_key,
+            elena_dilithium_key,
         );
         assert!(result.is_ok());
 
         // List contacts
-        let contacts = alice.list_contacts();
+        let contacts = mary.list_contacts();
         assert_eq!(contacts.len(), 1);
-        assert_eq!(contacts[0].0, "bob@example.com");
-        assert_eq!(contacts[0].1, "Bob");
+        assert_eq!(contacts[0].0, "elena@example.com");
+        assert_eq!(contacts[0].1, "Elena");
         assert_eq!(contacts[0].2, TrustLevel::Untrusted);
 
-        // Verify Bob
-        alice.verify_contact(&"bob@example.com".to_string()).unwrap();
-        let contacts = alice.list_contacts();
+        // Verify Elena
+        mary.verify_contact(&"elena@example.com".to_string()).unwrap();
+        let contacts = mary.list_contacts();
         assert_eq!(contacts[0].2, TrustLevel::Verified);
 
-        // Remove Bob
-        let result = alice.remove_contact(&"bob@example.com".to_string());
+        // Remove Elena
+        let result = mary.remove_contact(&"elena@example.com".to_string());
         assert!(result.is_ok());
-        assert!(alice.list_contacts().is_empty());
+        assert!(mary.list_contacts().is_empty());
     }
 
     #[test]
     fn test_message_exchange() {
         let config = MessagingConfig::default();
-        let mut alice = SecureMessaging::new("alice@example.com".to_string(), "Alice".to_string(), config.clone()).unwrap();
-        let mut bob = SecureMessaging::new("bob@example.com".to_string(), "Bob".to_string(), config).unwrap();
+        let mut mary = SecureMessaging::new("mary@example.com".to_string(), "Mary".to_string(), config.clone()).unwrap();
+        let mut elena = SecureMessaging::new("elena@example.com".to_string(), "Elena".to_string(), config).unwrap();
 
         // Exchange public keys
-        let (alice_kyber, alice_dilithium) = alice.get_own_public_keys();
-        let (bob_kyber, bob_dilithium) = bob.get_own_public_keys();
+        let (mary_kyber, mary_dilithium) = mary.get_own_public_keys();
+        let (elena_kyber, elena_dilithium) = elena.get_own_public_keys();
 
         // Add each other as contacts
-        alice.add_contact("bob@example.com".to_string(), "Bob".to_string(), bob_kyber, bob_dilithium).unwrap();
-        bob.add_contact("alice@example.com".to_string(), "Alice".to_string(), alice_kyber, alice_dilithium).unwrap();
+        mary.add_contact("elena@example.com".to_string(), "Elena".to_string(), elena_kyber, elena_dilithium).unwrap();
+        elena.add_contact("mary@example.com".to_string(), "Mary".to_string(), mary_kyber, mary_dilithium).unwrap();
 
-        // Alice sends a message to Bob
-        let message = b"Hello Bob!";
-        let encrypted = alice.send_message(&"bob@example.com".to_string(), message).unwrap();
+        // Mary sends a message to Elena
+        let message = b"Hello Elena!";
+        let encrypted = mary.send_message(&"elena@example.com".to_string(), message).unwrap();
 
-        // Bob receives and decrypts the message
-        let decrypted = bob.receive_message(&encrypted).unwrap();
+        // Elena receives and decrypts the message
+        let decrypted = elena.receive_message(&encrypted).unwrap();
         assert_eq!(decrypted, message);
     }
 
     #[test]
     fn test_replay_protection() {
         let config = MessagingConfig::default();
-        let mut alice = SecureMessaging::new("alice@example.com".to_string(), "Alice".to_string(), config.clone()).unwrap();
-        let mut bob = SecureMessaging::new("bob@example.com".to_string(), "Bob".to_string(), config).unwrap();
+        let mut mary = SecureMessaging::new("mary@example.com".to_string(), "Mary".to_string(), config.clone()).unwrap();
+        let mut elena = SecureMessaging::new("elena@example.com".to_string(), "Elena".to_string(), config).unwrap();
 
         // Exchange public keys
-        let (alice_kyber, alice_dilithium) = alice.get_own_public_keys();
-        let (bob_kyber, bob_dilithium) = bob.get_own_public_keys();
+        let (mary_kyber, mary_dilithium) = mary.get_own_public_keys();
+        let (elena_kyber, elena_dilithium) = elena.get_own_public_keys();
 
         // Add each other as contacts
-        alice.add_contact("bob@example.com".to_string(), "Bob".to_string(), bob_kyber, bob_dilithium).unwrap();
-        bob.add_contact("alice@example.com".to_string(), "Alice".to_string(), alice_kyber, alice_dilithium).unwrap();
+        mary.add_contact("elena@example.com".to_string(), "Elena".to_string(), elena_kyber, elena_dilithium).unwrap();
+        elena.add_contact("mary@example.com".to_string(), "Mary".to_string(), mary_kyber, mary_dilithium).unwrap();
 
-        // Alice sends a message to Bob
-        let message = b"Hello Bob!";
-        let encrypted = alice.send_message(&"bob@example.com".to_string(), message).unwrap();
+        // Mary sends a message to Elena
+        let message = b"Hello Elena!";
+        let encrypted = mary.send_message(&"elena@example.com".to_string(), message).unwrap();
 
-        // Bob receives the message successfully
-        let decrypted = bob.receive_message(&encrypted).unwrap();
+        // Elena receives the message successfully
+        let decrypted = elena.receive_message(&encrypted).unwrap();
         assert_eq!(decrypted, message);
 
         // Attempting to receive the same message again should fail
-        let replay_result = bob.receive_message(&encrypted);
+        let replay_result = elena.receive_message(&encrypted);
         assert!(replay_result.is_err());
         
         if let Err(CryptoError::SecurityPolicyViolation { policy, .. }) = replay_result {
@@ -1186,32 +1186,32 @@ mod tests {
     #[test]
     fn test_contact_export_import() {
         let config = MessagingConfig::default();
-        let mut alice = SecureMessaging::new("alice@example.com".to_string(), "Alice".to_string(), config.clone()).unwrap();
+        let mut mary = SecureMessaging::new("mary@example.com".to_string(), "Mary".to_string(), config.clone()).unwrap();
         let mut charlie = SecureMessaging::new("charlie@example.com".to_string(), "Charlie".to_string(), config.clone()).unwrap();
-        let bob = SecureMessaging::new("bob@example.com".to_string(), "Bob".to_string(), config).unwrap();
+        let elena = SecureMessaging::new("elena@example.com".to_string(), "Elena".to_string(), config).unwrap();
 
-        // Get Bob's public keys
-        let (bob_kyber_key, bob_dilithium_key) = bob.get_own_public_keys();
+        // Get Elena's public keys
+        let (elena_kyber_key, elena_dilithium_key) = elena.get_own_public_keys();
 
-        // Alice adds Bob as a contact
-        alice.add_contact(
-            "bob@example.com".to_string(),
-            "Bob".to_string(),
-            bob_kyber_key,
-            bob_dilithium_key,
+        // Mary adds Elena as a contact
+        mary.add_contact(
+            "elena@example.com".to_string(),
+            "Elena".to_string(),
+            elena_kyber_key,
+            elena_dilithium_key,
         ).unwrap();
 
-        // Alice exports Bob's contact
-        let exported = alice.export_contact(&"bob@example.com".to_string()).unwrap();
+        // Mary exports Elena's contact
+        let exported = mary.export_contact(&"elena@example.com".to_string()).unwrap();
 
-        // Charlie imports Bob's contact
+        // Charlie imports Elena's contact
         let imported_id = charlie.import_contact(&exported).unwrap();
-        assert_eq!(imported_id, "bob@example.com");
+        assert_eq!(imported_id, "elena@example.com");
 
-        // Verify Charlie has Bob as a contact
+        // Verify Charlie has Elena as a contact
         let contacts = charlie.list_contacts();
         assert_eq!(contacts.len(), 1);
-        assert_eq!(contacts[0].0, "bob@example.com");
+        assert_eq!(contacts[0].0, "elena@example.com");
     }
 
     #[test]
@@ -1219,21 +1219,21 @@ mod tests {
         let mut config = MessagingConfig::default();
         config.key_rotation_interval = Duration::from_millis(100); // Short interval for testing
         
-        let mut alice = SecureMessaging::new("alice@example.com".to_string(), "Alice".to_string(), config).unwrap();
+        let mut mary = SecureMessaging::new("mary@example.com".to_string(), "Mary".to_string(), config).unwrap();
 
         // Create ephemeral key
-        alice.create_ephemeral_key(&"bob@example.com".to_string()).unwrap();
-        let initial_key_count = alice.ephemeral_keys.len();
+        mary.create_ephemeral_key(&"elena@example.com".to_string()).unwrap();
+        let initial_key_count = mary.ephemeral_keys.len();
         assert_eq!(initial_key_count, 1);
 
         // Wait for rotation interval
         std::thread::sleep(Duration::from_millis(150));
 
         // Rotate keys
-        alice.rotate_ephemeral_keys().unwrap();
+        mary.rotate_ephemeral_keys().unwrap();
 
         // Key should have been rotated (replaced)
-        assert_eq!(alice.ephemeral_keys.len(), 1);
+        assert_eq!(mary.ephemeral_keys.len(), 1);
     }
 
     #[test]

@@ -369,21 +369,49 @@ mod tests {
 
     #[test]
     fn test_timing_analysis() {
-        // Create some mock timing measurements
-        let measurements = vec![
-            Duration::from_nanos(1000),
-            Duration::from_nanos(1001),
-            Duration::from_nanos(1002),
-            Duration::from_nanos(999),
-            Duration::from_nanos(1000),
-        ];
+        // Create realistic timing measurements that simulate constant-time behavior
+        let base_time = 1000u64;
+        let measurements: Vec<Duration> = (0..100)
+            .map(|i| {
+                // Add small, realistic timing variations (±2% jitter)
+                let jitter = ((i * 17 + 42) % 40) as u64; // Deterministic "random" jitter 0-39ns
+                let time_ns = base_time + jitter - 20; // Center around base_time
+                Duration::from_nanos(time_ns)
+            })
+            .collect();
 
         let config = ConstantTimeConfig::default();
         let result = analyze_timing_measurements(&measurements, &config);
 
-        assert!(result.is_ok());
+        assert!(result.is_ok(), "Timing analysis should succeed");
         let analysis = result.unwrap();
-        assert!(analysis.confidence_level > 0.5);
+        
+        // Verify the analysis results are reasonable
+        assert!(analysis.confidence_level > 0.5, "Confidence level should be reasonable");
+        assert!(analysis.mean_time_ns > 900.0 && analysis.mean_time_ns < 1100.0, 
+            "Mean time should be around base time: {}", analysis.mean_time_ns);
+        assert!(analysis.std_deviation < 50.0, 
+            "Standard deviation should be small for constant-time: {}", analysis.std_deviation);
+        assert_eq!(analysis.sample_count, 100, "Sample count should match input");
+        
+        // Test with highly variable timing (should have lower confidence)
+        let variable_measurements: Vec<Duration> = (0..50)
+            .map(|i| {
+                // Add large timing variations (±50% jitter)
+                let jitter = ((i * 23 + 17) % 1000) as u64; // Large jitter 0-999ns
+                let time_ns = base_time + jitter;
+                Duration::from_nanos(time_ns)
+            })
+            .collect();
+            
+        let variable_result = analyze_timing_measurements(&variable_measurements, &config);
+        assert!(variable_result.is_ok(), "Variable timing analysis should succeed");
+        let variable_analysis = variable_result.unwrap();
+        
+        // Variable timing should have lower confidence than constant timing
+        assert!(variable_analysis.confidence_level < analysis.confidence_level,
+            "Variable timing should have lower confidence: {} vs {}", 
+            variable_analysis.confidence_level, analysis.confidence_level);
     }
 
     #[test]

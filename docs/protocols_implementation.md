@@ -108,44 +108,44 @@ let decrypted = server.decrypt_data(&encrypted, &server_session)?;
 
 ```rust
 // Create messaging instances
-let mut alice = SecureMessaging::new(
-    "alice@example.com".to_string(),
-    "Alice".to_string(),
+let mut mary = SecureMessaging::new(
+    "mary@example.com".to_string(),
+    "Mary".to_string(),
     MessagingConfig::default()
 )?;
 
-let mut bob = SecureMessaging::new(
-    "bob@example.com".to_string(),
-    "Bob".to_string(),
+let mut elena = SecureMessaging::new(
+    "elena@example.com".to_string(),
+    "Elena".to_string(),
     MessagingConfig::default()
 )?;
 
 // Exchange public keys and add contacts
-let (alice_kyber, alice_dilithium) = alice.get_own_public_keys();
-let (bob_kyber, bob_dilithium) = bob.get_own_public_keys();
+let (mary_kyber, mary_dilithium) = mary.get_own_public_keys();
+let (elena_kyber, elena_dilithium) = elena.get_own_public_keys();
 
-alice.add_contact(
-    "bob@example.com".to_string(),
-    "Bob".to_string(),
-    bob_kyber,
-    bob_dilithium,
+mary.add_contact(
+    "elena@example.com".to_string(),
+    "Elena".to_string(),
+    elena_kyber,
+    elena_dilithium,
 )?;
 
-bob.add_contact(
-    "alice@example.com".to_string(),
-    "Alice".to_string(),
-    alice_kyber,
-    alice_dilithium,
+elena.add_contact(
+    "mary@example.com".to_string(),
+    "Mary".to_string(),
+    mary_kyber,
+    mary_dilithium,
 )?;
 
 // Send encrypted message
-let encrypted = alice.send_message(
-    &"bob@example.com".to_string(),
-    b"Hello Bob!"
+let encrypted = mary.send_message(
+    &"elena@example.com".to_string(),
+    b"Hello Elena!"
 )?;
 
 // Receive and decrypt
-let decrypted = bob.receive_message(&encrypted)?;
+let decrypted = elena.receive_message(&encrypted)?;
 ```
 
 ## Security Considerations

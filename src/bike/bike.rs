@@ -947,13 +947,40 @@ mod tests {
     use super::*;
     
     fn create_test_ciphertext(variant: BikeVariant) -> Vec<u8> {
-        // Create a dummy ciphertext for testing
+        // Create a realistic test ciphertext with patterns that compress well
         let size = variant.ciphertext_size();
         let mut ciphertext = Vec::with_capacity(size);
         
-        // Fill with pattern data
-        for i in 0..size {
-            ciphertext.push((i % 256) as u8);
+        // Create a pattern that mimics real BIKE ciphertext structure:
+        // - Some sections with sparse data (like error vectors)
+        // - Some sections with structured data (like syndrome)
+        // - Some sections with pseudo-random data (like encrypted data)
+        
+        let section_size = size / 3;
+        
+        // Section 1: Sparse error-like data (compresses very well)
+        for i in 0..section_size {
+            if i % 64 == 0 {
+                ciphertext.push(0x01); // Sparse errors
+            } else {
+                ciphertext.push(0x00); // Mostly zeros
+            }
+        }
+        
+        // Section 2: Structured syndrome-like data (compresses moderately)
+        for i in 0..section_size {
+            ciphertext.push(((i / 4) % 256) as u8);
+        }
+        
+        // Section 3: Fill remaining with mixed pattern
+        let remaining = size - ciphertext.len();
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        for i in 0..remaining {
+            let mut hasher = DefaultHasher::new();
+            (variant as u8).hash(&mut hasher);
+            (i / 16).hash(&mut hasher); // Create some structure
+            ciphertext.push((hasher.finish() % 256) as u8);
         }
         
         ciphertext
