@@ -10,12 +10,23 @@ The cryptography module provides quantum-resistant cryptographic primitives for:
 - Digital signatures (using CRYSTALS-Dilithium and SPHINCS+)
 - Symmetric encryption (using AES-GCM)
 - Key management
+- Hardware Security Module (HSM) integration
+- WebAssembly support
+- Python bindings
+- Formal verification
 
 ## Installation
 
 ```toml
 [dependencies]
-qasa = "0.0.4"
+qasa = "0.0.5"
+```
+
+With optional features:
+
+```toml
+[dependencies]
+qasa = { version = "0.0.5", features = ["simd", "python", "wasm", "formal-verification"] }
 ```
 
 ## Core Types
@@ -214,6 +225,197 @@ let key_pair = key_management::load_key("my-key", "password")?;
 let new_key_pair = key_management::rotate_key("my-key", "password")?;
 ```
 
+## Hardware Security Module (HSM) Integration
+
+QaSa provides integration with Hardware Security Modules (HSMs) for enhanced key security.
+
+### HSM Provider Types
+
+```rust
+pub enum HsmProvider {
+    SoftHsm,    // SoftHSM implementation (for testing)
+    Pkcs11,     // Standard PKCS#11 interface
+    CloudHsm,   // AWS CloudHSM
+    Custom(String), // Custom HSM provider
+}
+```
+
+### HSM Configuration
+
+```rust
+// Configure HSM connection
+let config = HsmConfig {
+    library_path: "/usr/lib/softhsm/libsofthsm2.so".to_string(),
+    slot_id: Some(0),
+    token_label: Some("qasa".to_string()),
+    user_pin: Some(SecureBytes::from(b"1234".to_vec())),
+    provider_config: HashMap::new(),
+};
+```
+
+### Connecting to HSM
+
+```rust
+// Connect to an HSM
+let hsm = connect_hsm(HsmProvider::SoftHsm, config)?;
+```
+
+### Key Generation in HSM
+
+```rust
+// Define key attributes
+let attributes = HsmKeyAttributes {
+    label: "my-dilithium-key".to_string(),
+    id: vec![1, 2, 3, 4],
+    extractable: false,
+    sensitive: true,
+    allowed_operations: vec![HsmOperation::Sign, HsmOperation::Verify],
+    provider_attributes: HashMap::new(),
+};
+
+// Generate key in HSM
+let key_handle = generate_key_in_hsm(
+    HsmProvider::SoftHsm,
+    config.clone(),
+    HsmKeyType::Dilithium(DilithiumVariant::Dilithium3),
+    attributes
+)?;
+```
+
+### Cryptographic Operations with HSM
+
+```rust
+// Sign using HSM
+let signature = sign_with_hsm(
+    HsmProvider::SoftHsm,
+    config.clone(),
+    &key_handle,
+    message,
+    HsmMechanism::Dilithium(DilithiumVariant::Dilithium3)
+)?;
+
+// Verify using HSM
+let is_valid = verify_with_hsm(
+    HsmProvider::SoftHsm,
+    config.clone(),
+    &key_handle,
+    message,
+    &signature,
+    HsmMechanism::Dilithium(DilithiumVariant::Dilithium3)
+)?;
+```
+
+## WebAssembly Support
+
+QaSa provides WebAssembly (WASM) support for browser and Node.js environments.
+
+### WASM Configuration
+
+```rust
+// Enable WASM support in Cargo.toml
+// qasa = { version = "0.0.5", features = ["wasm"] }
+
+// Configure WASM-specific options
+let wasm_config = WasmConfig {
+    use_simd: true,
+    memory_limit: 16 * 1024 * 1024, // 16MB
+    enable_threading: false,
+};
+
+// Initialize WASM environment
+init_wasm(Some(wasm_config))?;
+```
+
+### WASM-Optimized Operations
+
+```rust
+// Use WASM-optimized implementations
+let key_pair = KyberKeyPair::generate_optimized(
+    KyberVariant::Kyber768,
+    OptimizationTarget::Wasm
+)?;
+
+// WASM-specific memory handling
+let secure_buffer = WasmSecureBuffer::new(32)?;
+```
+
+## Python Bindings
+
+QaSa provides Python bindings for easy integration with Python applications.
+
+### Python API
+
+```python
+# Import the QaSa Python module
+import qasa
+
+# Initialize the module
+qasa.init()
+
+# Key generation
+public_key, secret_key = qasa.kyber_keygen(768)  # Kyber-768
+ciphertext, shared_secret = qasa.kyber_encapsulate(768, public_key)
+decapsulated = qasa.kyber_decapsulate(768, secret_key, ciphertext)
+
+# Signatures
+public_key, secret_key = qasa.dilithium_keygen(3)  # Dilithium-3
+signature = qasa.dilithium_sign(3, secret_key, b"Hello, quantum-safe world!")
+is_valid = qasa.dilithium_verify(3, public_key, b"Hello, quantum-safe world!", signature)
+
+# Encryption
+ciphertext, nonce = qasa.aes_encrypt(plaintext, key, associated_data)
+decrypted = qasa.aes_decrypt(ciphertext, key, nonce, associated_data)
+
+# Key management
+key_id = qasa.store_key("my-key", public_key, secret_key, "password")
+pub, sec = qasa.load_key("my-key", "password")
+```
+
+## Formal Verification
+
+QaSa includes formal verification tools to verify security properties of the cryptographic implementations.
+
+### Verification Properties
+
+```rust
+pub enum VerificationProperty {
+    ConstantTime,           // Constant-time implementation
+    AlgorithmCorrectness,   // Mathematical correctness
+    MemorySafety,           // Memory safety properties
+    SideChannelResistance,  // Side-channel attack resistance
+    ProtocolSecurity,       // Security of the protocol
+}
+```
+
+### Verifying Properties
+
+```rust
+// Create a formal verifier
+let verifier = FormalVerifier::default();
+
+// Verify Kyber implementation
+let result = verifier.verify_kyber(
+    KyberVariant::Kyber768,
+    VerificationProperty::ConstantTime
+)?;
+
+// Verify Dilithium implementation
+let result = verifier.verify_dilithium(
+    DilithiumVariant::Dilithium3,
+    VerificationProperty::ConstantTime
+)?;
+
+// Generate a comprehensive verification report
+let report = generate_verification_report(
+    "Kyber768",
+    &[
+        VerificationProperty::ConstantTime,
+        VerificationProperty::AlgorithmCorrectness
+    ],
+    None
+)?;
+```
+
 ## Error Handling
 
 All functions return a `Result` type with `CryptoError` for error cases:
@@ -230,6 +432,10 @@ pub enum CryptoError {
     DecryptionError(String),
     SerializationError(String),
     KeyManagementError(String),
+    HsmError(String),
+    WasmError(String),
+    PythonBindingError(String),
+    VerificationError(String),
     IoError(std::io::Error),
     InvalidParameterError(String),
     RandomGenerationError(String),
@@ -280,4 +486,43 @@ let shared_secret = recipient_key_pair.decapsulate(&ciphertext)?;
 
 // Recipient decrypts the message
 let decrypted = aes::decrypt(&encrypted, &shared_secret, &nonce, b"")?;
+```
+
+## Example: HSM-Based Signing
+
+```rust
+// Connect to HSM
+let hsm = connect_hsm(HsmProvider::Pkcs11, config)?;
+
+// Generate or load key in HSM
+let key_handle = generate_key_in_hsm(
+    HsmProvider::Pkcs11,
+    config.clone(),
+    HsmKeyType::Dilithium(DilithiumVariant::Dilithium3),
+    attributes
+)?;
+
+// Sign message using HSM
+let message = b"Sign this with HSM-protected key";
+let signature = sign_with_hsm(
+    HsmProvider::Pkcs11,
+    config.clone(),
+    &key_handle,
+    message,
+    HsmMechanism::Dilithium(DilithiumVariant::Dilithium3)
+)?;
+
+// Verify signature
+let public_key = get_public_key_from_hsm(
+    HsmProvider::Pkcs11,
+    config.clone(),
+    &key_handle
+)?;
+
+let is_valid = verify_signature(
+    message,
+    &signature,
+    &public_key,
+    SignatureAlgorithm::Dilithium(DilithiumVariant::Dilithium3)
+)?;
 ```
