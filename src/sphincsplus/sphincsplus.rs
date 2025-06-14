@@ -178,17 +178,17 @@ impl SphincsKeyPair {
     /// Generate a new SPHINCS+ key pair
     pub fn generate(variant: SphincsVariant) -> CryptoResult<Self> {
         let sig = Sig::new(variant.oqs_algorithm())
-            .map_err(|e| CryptoError::dilithium_error(
+            .map_err(|e| CryptoError::sphincs_error(
                 "key_generation",
                 &format!("Failed to initialize SPHINCS+ algorithm: {}", e),
-                crate::error::error_codes::DILITHIUM_KEY_GENERATION_FAILED,
+                crate::error::error_codes::SPHINCS_KEY_GENERATION_FAILED,
             ))?;
         
         let (public_key, secret_key) = sig.keypair()
-            .map_err(|e| CryptoError::dilithium_error(
+            .map_err(|e| CryptoError::sphincs_error(
                 "key_generation",
                 &format!("Failed to generate SPHINCS+ keypair: {}", e),
-                crate::error::error_codes::DILITHIUM_KEY_GENERATION_FAILED,
+                crate::error::error_codes::SPHINCS_KEY_GENERATION_FAILED,
             ))?;
         
         Ok(Self {
