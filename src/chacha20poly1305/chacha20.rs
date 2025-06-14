@@ -31,7 +31,7 @@ pub struct ChaCha20Nonce {
 }
 
 /// ChaCha20 state (16 32-bit words)
-#[derive(Debug, Clone, Copy, ZeroizeOnDrop)]
+#[derive(Debug, Clone, ZeroizeOnDrop)]
 struct ChaCha20State {
     state: [u32; 16],
 }

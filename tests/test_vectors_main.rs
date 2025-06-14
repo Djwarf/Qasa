@@ -8,8 +8,9 @@ use qasa::dilithium::{DilithiumKeyPair, DilithiumPublicKey, CompressedSignature 
 use qasa::sphincsplus::{SphincsKeyPair, SphincsPublicKey, CompressedSignature as SphincsCompressedSignature};
 use qasa::bike::{BikeKeyPair, BikePublicKey, CompressedCiphertext as BikeCompressedCiphertext};
 use qasa::aes;
+use qasa::chacha20poly1305::{ChaCha20Poly1305Key, ChaCha20Poly1305Nonce, encrypt as chacha20poly1305_encrypt, decrypt as chacha20poly1305_decrypt};
 use qasa::secure_memory::LockedMemory;
-use test_vectors::{kyber, dilithium, sphincsplus, bike, aes_gcm, secure_memory};
+use test_vectors::{kyber, dilithium, sphincsplus, bike, aes_gcm, secure_memory, chacha20poly1305};
 use std::fs;
 use std::path::Path;
 use std::io::Write;
@@ -89,6 +90,12 @@ fn export_test_vectors() -> std::io::Result<()> {
         .expect("Failed to serialize Canary Buffer test vectors");
     fs::write(output_dir.join("canary_buffer_standard.json"), canary_buffer_json)?;
     
+    // Export ChaCha20-Poly1305 test vectors
+    let chacha_vectors = chacha20poly1305::get_test_vectors();
+    let chacha_json = serde_json::to_string_pretty(&chacha_vectors)
+        .expect("Failed to serialize ChaCha20-Poly1305 test vectors");
+    fs::write(output_dir.join("chacha20poly1305_standard.json"), chacha_json)?;
+    
     // Create a README file with instructions
     let readme_content = r#"# QaSa Cryptography Module Test Vectors
 
@@ -108,6 +115,7 @@ This directory contains test vectors for the QaSa cryptography module, designed 
 - `aes_gcm_special.json`: Special case test vectors for AES-GCM encryption
 - `secure_memory_standard.json`: Test vectors for secure memory operations
 - `canary_buffer_standard.json`: Test vectors for canary buffer operations
+- `chacha20poly1305_standard.json`: Standard test vectors for ChaCha20-Poly1305 encryption
 
 ## Usage
 
@@ -221,6 +229,44 @@ fn test_all_vectors() {
         let hash = hasher.finalize().to_vec();
         
         assert_eq!(hash, vector.expected_hash, "Secure memory hash mismatch");
+    }
+    
+    // Test ChaCha20-Poly1305 vectors
+    let chacha_vectors = chacha20poly1305::get_test_vectors();
+    for vector in chacha_vectors {
+        // Create key and nonce
+        let key = ChaCha20Poly1305Key::new(&vector.key)
+            .expect("Failed to create ChaCha20-Poly1305 key");
+        let nonce = ChaCha20Poly1305Nonce::new(&vector.nonce)
+            .expect("Failed to create ChaCha20-Poly1305 nonce");
+        
+        // Combine ciphertext and tag for verification
+        let mut full_ciphertext = vector.ciphertext.clone();
+        full_ciphertext.extend_from_slice(&vector.tag);
+        
+        // Decrypt
+        let decrypted = chacha20poly1305_decrypt(
+            &full_ciphertext,
+            vector.aad.as_deref(),
+            &key,
+            &nonce,
+        ).expect("Failed to decrypt ChaCha20-Poly1305 ciphertext");
+        
+        assert_eq!(decrypted, vector.plaintext, 
+                  "ChaCha20-Poly1305 decrypted text doesn't match original plaintext");
+        
+        // Test encryption
+        let encrypted = chacha20poly1305_encrypt(
+            &vector.plaintext,
+            vector.aad.as_deref(),
+            &key,
+            &nonce,
+        ).expect("Failed to encrypt with ChaCha20-Poly1305");
+        
+        assert_eq!(&encrypted[..vector.ciphertext.len()], vector.ciphertext.as_slice(),
+                  "ChaCha20-Poly1305 ciphertext doesn't match expected value");
+        assert_eq!(&encrypted[vector.ciphertext.len()..], vector.tag.as_slice(),
+                  "ChaCha20-Poly1305 tag doesn't match expected value");
     }
     
     // Export all test vectors to JSON files

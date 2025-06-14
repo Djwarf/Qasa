@@ -7,6 +7,7 @@ pub mod dilithium;
 pub mod sphincsplus;
 pub mod bike;
 pub mod hybrid;
+pub mod chacha20poly1305;
 pub mod aes_gcm;
 pub mod secure_memory;
 
@@ -128,6 +129,48 @@ pub fn generate_all_test_vectors() -> CryptoResult<Vec<u8>> {
     result.extend_from_slice(b"HYBRID TEST VECTORS\n");
     result.extend_from_slice(b"=================\n\n");
     result.extend_from_slice(&hybrid::generate_hybrid_kem_test_vectors()?);
+    
+    // Generate ChaCha20-Poly1305 test vectors
+    result.extend_from_slice(b"CHACHA20-POLY1305 TEST VECTORS\n");
+    result.extend_from_slice(b"===========================\n\n");
+    
+    // Convert ChaCha20-Poly1305 test vectors to text format
+    let chacha_vectors = chacha20poly1305::get_test_vectors();
+    for (i, vector) in chacha_vectors.iter().enumerate() {
+        result.extend_from_slice(format!("Test Vector {}\n", i + 1).as_bytes());
+        result.extend_from_slice(b"Key: ");
+        for byte in &vector.key {
+            result.extend_from_slice(format!("{:02x}", byte).as_bytes());
+        }
+        result.extend_from_slice(b"\n");
+        result.extend_from_slice(b"Nonce: ");
+        for byte in &vector.nonce {
+            result.extend_from_slice(format!("{:02x}", byte).as_bytes());
+        }
+        result.extend_from_slice(b"\n");
+        if let Some(aad) = &vector.aad {
+            result.extend_from_slice(b"AAD: ");
+            for byte in aad {
+                result.extend_from_slice(format!("{:02x}", byte).as_bytes());
+            }
+            result.extend_from_slice(b"\n");
+        }
+        result.extend_from_slice(b"Plaintext: ");
+        for byte in &vector.plaintext {
+            result.extend_from_slice(format!("{:02x}", byte).as_bytes());
+        }
+        result.extend_from_slice(b"\n");
+        result.extend_from_slice(b"Ciphertext: ");
+        for byte in &vector.ciphertext {
+            result.extend_from_slice(format!("{:02x}", byte).as_bytes());
+        }
+        result.extend_from_slice(b"\n");
+        result.extend_from_slice(b"Tag: ");
+        for byte in &vector.tag {
+            result.extend_from_slice(format!("{:02x}", byte).as_bytes());
+        }
+        result.extend_from_slice(b"\n\n");
+    }
     
     Ok(result)
 }

@@ -93,7 +93,7 @@ impl Poly1305State {
     }
 
     /// Process a block of data
-    fn process_block(&mut self, block: &[u8; 16]) {
+    fn process_block(&mut self, block: [u8; 16]) {
         // Convert block to little-endian 32-bit words and add 2^128
         let mut n = [0u32; 5];
         n[0] = u32::from_le_bytes(block[0..4].try_into().unwrap());
@@ -175,7 +175,8 @@ impl Poly1305State {
             offset += to_copy;
 
             if self.buffer_size == 16 {
-                self.process_block(&self.buffer);
+                let buffer_copy = self.buffer;
+                self.process_block(buffer_copy);
                 self.buffer_size = 0;
             }
         }
@@ -184,7 +185,7 @@ impl Poly1305State {
         while offset + 16 <= data.len() {
             let mut block = [0u8; 16];
             block.copy_from_slice(&data[offset..offset + 16]);
-            self.process_block(&block);
+            self.process_block(block);
             offset += 16;
         }
 
