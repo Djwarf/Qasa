@@ -83,8 +83,8 @@ impl SideChannelTester {
         tests.push(self.test_cache_timing_attacks()?);
 
         let vulnerabilities_found = tests.iter().filter(|t| t.potential_vulnerability).count();
-        let overall_score = self.calculate_overall_score(&tests);
-        let recommendations = self.generate_recommendations(&tests);
+        let _overall_score = self.calculate_overall_score(&tests);
+        let _recommendations = self.generate_recommendations(&tests);
 
         Ok(SideChannelResults {
             test_name: "Side-Channel Tests".to_string(),

@@ -3,9 +3,13 @@
 //! This module provides an implementation of hybrid KEMs that combine
 //! classical and post-quantum algorithms for enhanced security.
 
-use std::fmt;
-use std::fmt::Display;
+use std::fmt::{self, Display};
+use std::cmp::PartialEq;
+use std::hash::{Hash, Hasher};
+use rand::rngs::OsRng;
+use rand::RngCore;
 use zeroize::{Zeroize, ZeroizeOnDrop};
+use arrayref::array_ref;
 
 use crate::error::{CryptoError, CryptoResult};
 use crate::kyber::{KyberKeyPair, KyberPublicKey, KyberVariant};
@@ -122,13 +126,23 @@ impl HybridKemKeyPair {
         let classical_key = match variant.classical {
             ClassicalKemAlgorithm::X25519 => {
                 // Generate X25519 key pair
-                let secret_key = x25519_dalek::StaticSecret::random_from_rng(rand::thread_rng());
-                let public_key = x25519_dalek::PublicKey::from(&secret_key);
+                let mut rng = rand::thread_rng();
+                
+                // Use the x25519 function directly
+                let mut secret_key = [0u8; 32];
+                rng.fill_bytes(&mut secret_key);
+                // Apply clamping as per RFC 7748
+                secret_key[0] &= 248;
+                secret_key[31] &= 127;
+                secret_key[31] |= 64;
+                
+                // Generate public key
+                let public_key = x25519_dalek::x25519(secret_key, x25519_dalek::X25519_BASEPOINT_BYTES);
                 
                 // Combine secret and public key for storage
                 let mut key_data = Vec::with_capacity(32 + 32);
-                key_data.extend_from_slice(secret_key.as_bytes());
-                key_data.extend_from_slice(public_key.as_bytes());
+                key_data.extend_from_slice(&secret_key);
+                key_data.extend_from_slice(&public_key);
                 key_data
             },
             ClassicalKemAlgorithm::P256 => {
@@ -148,11 +162,11 @@ impl HybridKemKeyPair {
             ClassicalKemAlgorithm::Rsa2048 | ClassicalKemAlgorithm::Rsa3072 => {
                 // For RSA, we'd use a proper RSA implementation
                 // This is a placeholder
-                return Err(CryptoError::unsupported_operation(
-                    "RSA key generation",
-                    "current platform",
-                    12345, // Use proper error code in real implementation
-                ));
+                return Err(CryptoError::UnsupportedOperation {
+                    operation: "RSA key generation".to_string(),
+                    platform: "current platform".to_string(),
+                    error_code: 12345, // Use proper error code in real implementation
+                });
             },
         };
         
@@ -226,11 +240,11 @@ impl HybridKemKeyPair {
             ClassicalKemAlgorithm::Rsa2048 | ClassicalKemAlgorithm::Rsa3072 => {
                 // For RSA, we'd extract the public key properly
                 // This is a placeholder
-                return Err(CryptoError::unsupported_operation(
-                    "RSA public key extraction",
-                    "current platform",
-                    12345, // Use proper error code in real implementation
-                ));
+                return Err(CryptoError::UnsupportedOperation {
+                    operation: "RSA public key extraction".to_string(),
+                    platform: "current platform".to_string(),
+                    error_code: 12345, // Use proper error code in real implementation
+                });
             },
         };
         
@@ -265,7 +279,7 @@ impl HybridKemKeyPair {
                 }
                 
                 let secret_key_bytes = &self.classical_key[0..32];
-                let secret_key = x25519_dalek::StaticSecret::from(*array_ref!(secret_key_bytes, 0, 32));
+                let secret_key = *array_ref!(secret_key_bytes, 0, 32);
                 
                 // Check ciphertext size
                 if ciphertext.classical_ciphertext.len() != 32 {
@@ -278,11 +292,11 @@ impl HybridKemKeyPair {
                 
                 // Convert ciphertext to public key and perform DH
                 let public_key_bytes = array_ref!(ciphertext.classical_ciphertext.as_slice(), 0, 32);
-                let public_key = x25519_dalek::PublicKey::from(*public_key_bytes);
+                let public_key = *public_key_bytes;
                 
-                // Compute shared secret
-                let shared_secret = secret_key.diffie_hellman(&public_key);
-                shared_secret.as_bytes().to_vec()
+                // Compute shared secret using the x25519 function
+                let shared_secret = x25519_dalek::x25519(secret_key, public_key);
+                shared_secret.to_vec()
             },
             ClassicalKemAlgorithm::P256 => {
                 // For P-256, we'd perform ECDH properly
@@ -292,11 +306,11 @@ impl HybridKemKeyPair {
             ClassicalKemAlgorithm::Rsa2048 | ClassicalKemAlgorithm::Rsa3072 => {
                 // For RSA, we'd decrypt the ciphertext properly
                 // This is a placeholder
-                return Err(CryptoError::unsupported_operation(
-                    "RSA decryption",
-                    "current platform",
-                    12345, // Use proper error code in real implementation
-                ));
+                return Err(CryptoError::UnsupportedOperation {
+                    operation: "RSA decryption".to_string(),
+                    platform: "current platform".to_string(),
+                    error_code: 12345, // Use proper error code in real implementation
+                });
             },
         };
         
@@ -479,8 +493,16 @@ impl HybridKemPublicKey {
         let (classical_ciphertext, classical_shared_secret) = match self.algorithm.classical {
             ClassicalKemAlgorithm::X25519 => {
                 // Generate ephemeral key pair
-                let ephemeral_secret = x25519_dalek::StaticSecret::random_from_rng(rand::thread_rng());
-                let ephemeral_public = x25519_dalek::PublicKey::from(&ephemeral_secret);
+                let mut rng = rand::thread_rng();
+                let mut ephemeral_secret = [0u8; 32];
+                rng.fill_bytes(&mut ephemeral_secret);
+                // Apply clamping as per RFC 7748
+                ephemeral_secret[0] &= 248;
+                ephemeral_secret[31] &= 127;
+                ephemeral_secret[31] |= 64;
+                
+                // Generate ephemeral public key
+                let ephemeral_public = x25519_dalek::x25519(ephemeral_secret, x25519_dalek::X25519_BASEPOINT_BYTES);
                 
                 // Convert public key from bytes
                 if self.classical_key.len() != 32 {
@@ -492,13 +514,13 @@ impl HybridKemPublicKey {
                 }
                 
                 let public_key_bytes = array_ref!(self.classical_key.as_slice(), 0, 32);
-                let public_key = x25519_dalek::PublicKey::from(*public_key_bytes);
+                let public_key = *public_key_bytes;
                 
                 // Compute shared secret
-                let shared_secret = ephemeral_secret.diffie_hellman(&public_key);
+                let shared_secret = x25519_dalek::x25519(ephemeral_secret, public_key);
                 
                 // Return ephemeral public key as ciphertext and the shared secret
-                (ephemeral_public.as_bytes().to_vec(), shared_secret.as_bytes().to_vec())
+                (ephemeral_public.to_vec(), shared_secret.to_vec())
             },
             ClassicalKemAlgorithm::P256 => {
                 // For P-256, we'd perform ECDH properly
@@ -508,11 +530,11 @@ impl HybridKemPublicKey {
             ClassicalKemAlgorithm::Rsa2048 | ClassicalKemAlgorithm::Rsa3072 => {
                 // For RSA, we'd encrypt a random secret
                 // This is a placeholder
-                return Err(CryptoError::unsupported_operation(
-                    "RSA encryption",
-                    "current platform",
-                    12345, // Use proper error code in real implementation
-                ));
+                return Err(CryptoError::UnsupportedOperation {
+                    operation: "RSA encryption".to_string(),
+                    platform: "current platform".to_string(),
+                    error_code: 12345, // Use proper error code in real implementation
+                });
             },
         };
         

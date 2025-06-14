@@ -8,13 +8,14 @@
 
 use std::fmt;
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 
 use crate::error::{CryptoError, CryptoResult, error_codes};
 use crate::kyber::KyberVariant;
 use crate::dilithium::DilithiumVariant;
 
 /// Formal verification property types
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum VerificationProperty {
     /// Constant-time implementation (no timing side channels)
     ConstantTime,

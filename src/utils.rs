@@ -220,6 +220,71 @@ pub fn copy_bytes(src: &[u8], dst: &mut [u8]) -> Result<(), CryptoError> {
     Ok(())
 }
 
+/// Compute the SHA-256 hash of the input data
+///
+/// This function computes the SHA-256 cryptographic hash of the input data.
+/// SHA-256 is a secure hash function that produces a 32-byte (256-bit) digest.
+///
+/// # Arguments
+///
+/// * `data` - The input data to hash
+///
+/// # Returns
+///
+/// A 32-byte vector containing the SHA-256 hash
+pub fn sha256(data: &[u8]) -> Vec<u8> {
+    use sha2::{Sha256, Digest};
+    
+    let mut hasher = Sha256::new();
+    hasher.update(data);
+    hasher.finalize().to_vec()
+}
+
+/// Perform HKDF key derivation using SHA-256
+///
+/// This function implements HKDF (HMAC-based Key Derivation Function) using SHA-256
+/// as the underlying hash function. HKDF is used to derive one or more keys from
+/// input key material in a secure way.
+///
+/// # Arguments
+///
+/// * `ikm` - Input key material
+/// * `salt` - Optional salt value (can be empty)
+/// * `info` - Optional context and application specific information (can be empty)
+/// * `length` - Length of the output key material in bytes
+///
+/// # Returns
+///
+/// * `Ok(Vec<u8>)` - The derived key material of the requested length
+/// * `Err(CryptoError)` - If key derivation fails
+///
+/// # Security Considerations
+///
+/// HKDF is suitable for deriving keys from high-entropy sources (like shared secrets
+/// from key exchange) as well as from low-entropy sources (like passwords, when
+/// combined with a proper password hashing function).
+pub fn hkdf_sha256(
+    ikm: &[u8],
+    salt: &[u8],
+    info: &[u8],
+    length: usize,
+) -> Result<Vec<u8>, crate::error::CryptoError> {
+    use hkdf::Hkdf;
+    use sha2::Sha256;
+    
+    let hkdf = Hkdf::<Sha256>::new(Some(salt), ikm);
+    let mut okm = vec![0u8; length];
+    
+    hkdf.expand(info, &mut okm)
+        .map_err(|_| crate::error::CryptoError::key_management_error(
+            "hkdf_expand",
+            "HKDF expansion failed, requested output too long",
+            "HKDF",
+        ))?;
+    
+    Ok(okm)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -296,5 +361,44 @@ mod tests {
         let mut small_dst = [0; 2];
         let result = copy_bytes(&src, &mut small_dst);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_sha256() {
+        let data = b"test data for hashing";
+        let hash = sha256(data);
+        
+        // SHA-256 always produces a 32-byte output
+        assert_eq!(hash.len(), 32);
+        
+        // Verify deterministic output
+        let hash2 = sha256(data);
+        assert_eq!(hash, hash2);
+        
+        // Verify different input produces different output
+        let hash3 = sha256(b"different data");
+        assert_ne!(hash, hash3);
+    }
+    
+    #[test]
+    fn test_hkdf_sha256() {
+        let ikm = b"input key material";
+        let salt = b"salt value";
+        let info = b"context info";
+        
+        let key1 = hkdf_sha256(ikm, salt, info, 32).unwrap();
+        let key2 = hkdf_sha256(ikm, salt, info, 32).unwrap();
+        
+        // Verify deterministic output
+        assert_eq!(key1, key2);
+        assert_eq!(key1.len(), 32);
+        
+        // Verify different parameters produce different output
+        let key3 = hkdf_sha256(ikm, b"different salt", info, 32).unwrap();
+        assert_ne!(key1, key3);
+        
+        // Verify different length output
+        let key4 = hkdf_sha256(ikm, salt, info, 64).unwrap();
+        assert_eq!(key4.len(), 64);
     }
 }

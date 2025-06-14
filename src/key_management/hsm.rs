@@ -184,7 +184,7 @@ impl HsmConnection {
     /// # Returns
     ///
     /// Ok(()) if login succeeded, or an error
-    pub fn login(&mut self, pin: &[u8]) -> CryptoResult<()> {
+    pub fn login(&mut self, _pin: &[u8]) -> CryptoResult<()> {
         if self.is_logged_in {
             return Ok(());
         }
@@ -260,7 +260,7 @@ impl HsmConnection {
     ///
     /// # Arguments
     ///
-    /// * `key_handle` - Handle to the key to use
+    /// * `key_handle` - Handle to the key to use for signing
     /// * `data` - Data to sign
     /// * `mechanism` - Signing mechanism to use
     ///
@@ -269,9 +269,9 @@ impl HsmConnection {
     /// The signature or an error
     pub fn sign(
         &mut self,
-        key_handle: &HsmKeyHandle,
-        data: &[u8],
-        mechanism: HsmMechanism,
+        _key_handle: &HsmKeyHandle,
+        _data: &[u8],
+        _mechanism: HsmMechanism,
     ) -> CryptoResult<Vec<u8>> {
         if !self.is_logged_in {
             return Err(CryptoError::key_management_error(
@@ -281,9 +281,9 @@ impl HsmConnection {
             ));
         }
         
-        // This is a placeholder - real implementation would call C_SignInit and C_Sign
+        // This is a placeholder - real implementation would call C_Sign
         
-        // For now, return a dummy signature
+        // For now, just return a dummy signature
         Ok(vec![0u8; 64])
     }
     
@@ -291,20 +291,20 @@ impl HsmConnection {
     ///
     /// # Arguments
     ///
-    /// * `key_handle` - Handle to the key to use
+    /// * `key_handle` - Handle to the key to use for verification
     /// * `data` - Data that was signed
     /// * `signature` - Signature to verify
-    /// * `mechanism` - Signing mechanism used
+    /// * `mechanism` - Signing mechanism that was used
     ///
     /// # Returns
     ///
-    /// true if the signature is valid, false otherwise
+    /// true if the signature is valid, false otherwise, or an error
     pub fn verify(
         &mut self,
-        key_handle: &HsmKeyHandle,
-        data: &[u8],
-        signature: &[u8],
-        mechanism: HsmMechanism,
+        _key_handle: &HsmKeyHandle,
+        _data: &[u8],
+        _signature: &[u8],
+        _mechanism: HsmMechanism,
     ) -> CryptoResult<bool> {
         if !self.is_logged_in {
             return Err(CryptoError::key_management_error(
@@ -314,9 +314,9 @@ impl HsmConnection {
             ));
         }
         
-        // This is a placeholder - real implementation would call C_VerifyInit and C_Verify
+        // This is a placeholder - real implementation would call C_Verify
         
-        // For now, always return true
+        // For now, just return success
         Ok(true)
     }
     

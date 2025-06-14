@@ -309,6 +309,15 @@ impl CryptoError {
             CryptoError::DilithiumError { operation, .. } => {
                 format!("Digital signature operation '{}' failed. Message authenticity cannot be verified.", operation)
             }
+            CryptoError::SphincsError { operation, .. } => {
+                format!("SPHINCS+ signature operation '{}' failed. Message authenticity cannot be verified.", operation)
+            }
+            CryptoError::BikeError { operation, .. } => {
+                format!("BIKE key exchange operation '{}' failed. This may affect secure communication setup.", operation)
+            }
+            CryptoError::ChaCha20Poly1305Error { operation, .. } => {
+                format!("ChaCha20-Poly1305 operation '{}' failed. Data security may be compromised.", operation)
+            }
             CryptoError::AesError { operation, .. } => {
                 format!(
                     "Encryption operation '{}' failed. Data security may be compromised.",
@@ -536,6 +545,9 @@ impl CryptoError {
         match self {
             CryptoError::KyberError { .. } => "KyberError",
             CryptoError::DilithiumError { .. } => "DilithiumError",
+            CryptoError::SphincsError { .. } => "SphincsError",
+            CryptoError::BikeError { .. } => "BikeError",
+            CryptoError::ChaCha20Poly1305Error { .. } => "ChaCha20Poly1305Error",
             CryptoError::AesError { .. } => "AesError",
             CryptoError::KeyManagementError { .. } => "KeyManagementError",
             CryptoError::SecurityPolicyViolation { .. } => "SecurityPolicyViolation",
@@ -554,24 +566,16 @@ impl CryptoError {
         }
     }
 
-    /// Create a BIKE-specific error
-    // This function is now replaced by the more detailed version below
-    // pub fn bike_error(operation: &str, message: &str, code: u32) -> Self {
-    //     Self {
-    //         module: "BIKE".to_string(),
-    //         operation: operation.to_string(),
-    //         message: message.to_string(),
-    //         code,
-    //     }
-    // }
-
     /// Create a hybrid-specific error
     pub fn hybrid_error(operation: &str, message: &str, code: u32) -> Self {
-        Self {
-            module: "Hybrid".to_string(),
+        let mut context = HashMap::new();
+        context.insert("module".to_string(), "Hybrid".to_string());
+        
+        CryptoError::KeyManagementError {
             operation: operation.to_string(),
-            message: message.to_string(),
-            code,
+            cause: message.to_string(),
+            error_code: code,
+            context,
         }
     }
 }
@@ -670,11 +674,11 @@ impl CryptoError {
         }
     }
 
-    pub fn io_error(cause: &str, error_code: u32) -> Self {
+    pub fn io_error(cause: &str, _error_code: u32) -> Self {
         CryptoError::IoError(cause.to_string())
     }
 
-    pub fn encryption_error(algorithm: &str, cause: &str) -> Self {
+    pub fn encryption_error(_algorithm: &str, cause: &str) -> Self {
         CryptoError::AesError {
             operation: "encryption".to_string(),
             cause: cause.to_string(),
@@ -683,7 +687,7 @@ impl CryptoError {
         }
     }
 
-    pub fn decryption_error(algorithm: &str, cause: &str) -> Self {
+    pub fn decryption_error(_algorithm: &str, cause: &str) -> Self {
         CryptoError::AesError {
             operation: "decryption".to_string(),
             cause: cause.to_string(),

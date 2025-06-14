@@ -471,7 +471,7 @@ impl SecureMessaging {
         message: &[u8],
     ) -> CryptoResult<EncryptedMessage> {
         // Get or create ephemeral key for this contact
-        let ephemeral_key = self.get_or_create_ephemeral_key(recipient)?;
+        let _ephemeral_key = self.get_or_create_ephemeral_key(recipient)?;
 
         // Perform key encapsulation with recipient's public key
         // In practice, you'd fetch the recipient's public key from a key server

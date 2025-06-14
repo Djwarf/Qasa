@@ -6,10 +6,10 @@
 //! transition to post-quantum cryptography while maintaining compatibility with
 //! existing systems.
 
-mod hybrid_kem;
-mod hybrid_signature;
-mod hybrid_encryption;
-mod composite;
+pub mod hybrid_kem;
+pub mod hybrid_signature;
+pub mod hybrid_encryption;
+pub mod composite;
 mod tests;
 
 pub use hybrid_kem::{

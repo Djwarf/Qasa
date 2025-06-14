@@ -116,6 +116,7 @@ pub fn decrypt_hybrid(
 fn derive_encryption_key(shared_secret: &[u8], aes_mode: AesMode) -> CryptoResult<(Vec<u8>, Vec<u8>)> {
     // Use HKDF to derive key material
     let info = b"QaSa Hybrid Encryption";
+    let salt = b""; // Empty salt
     
     // Derive key
     let key_size = match aes_mode {
@@ -144,15 +145,16 @@ fn derive_encryption_key(shared_secret: &[u8], aes_mode: AesMode) -> CryptoResul
     };
     
     // Derive key material
-    let mut key_material = utils::hkdf_sha256(
+    let key_material = utils::hkdf_sha256(
         shared_secret,
-        None,
+        salt,
         info,
         key_size + nonce_size,
-    );
+    )?;
     
     // Split into key and nonce
-    let nonce = key_material.split_off(key_size);
+    let mut key = key_material[..key_size].to_vec();
+    let nonce = key_material[key_size..].to_vec();
     
-    Ok((key_material, nonce))
+    Ok((key, nonce))
 } 

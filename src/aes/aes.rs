@@ -4,11 +4,147 @@ use aes_gcm::{
 };
 use std::sync::Arc;
 use std::io::{Read, Write, Result as IoResult};
+use rand;
+use rand::RngCore;
 
 use crate::error::{error_codes, CryptoError};
 
 /// Default chunk size for streaming operations (1MB)
 pub const DEFAULT_CHUNK_SIZE: usize = 1_048_576;
+
+/// AES mode for encryption operations
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AesMode {
+    /// AES-GCM with 128-bit key
+    Gcm128,
+    /// AES-GCM with 256-bit key
+    Gcm256,
+    /// AES-CTR with 128-bit key
+    Ctr128,
+    /// AES-CTR with 256-bit key
+    Ctr256,
+}
+
+/// AES key for encryption operations
+#[derive(Clone)]
+pub struct AesKey {
+    /// Key data
+    key_data: Vec<u8>,
+    /// Key size in bytes
+    key_size: usize,
+}
+
+impl AesKey {
+    /// Create a new 128-bit AES key
+    pub fn new_128(key_data: &[u8]) -> Result<Self, CryptoError> {
+        if key_data.len() != 16 {
+            return Err(CryptoError::invalid_parameter(
+                "key_data",
+                "16 bytes",
+                &format!("{} bytes", key_data.len()),
+            ));
+        }
+        
+        Ok(Self {
+            key_data: key_data.to_vec(),
+            key_size: 16,
+        })
+    }
+    
+    /// Create a new 256-bit AES key
+    pub fn new_256(key_data: &[u8]) -> Result<Self, CryptoError> {
+        if key_data.len() != 32 {
+            return Err(CryptoError::invalid_parameter(
+                "key_data",
+                "32 bytes",
+                &format!("{} bytes", key_data.len()),
+            ));
+        }
+        
+        Ok(Self {
+            key_data: key_data.to_vec(),
+            key_size: 32,
+        })
+    }
+    
+    /// Get the key data
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.key_data
+    }
+    
+    /// Encrypt data using AES-GCM
+    pub fn encrypt_gcm(&self, plaintext: &[u8], nonce: &AesNonce, associated_data: Option<&[u8]>) -> Result<Vec<u8>, CryptoError> {
+        let cipher = AesGcm::new(&self.key_data)?;
+        cipher.encrypt(plaintext, nonce.as_bytes(), associated_data)
+    }
+    
+    /// Decrypt data using AES-GCM
+    pub fn decrypt_gcm(&self, ciphertext: &[u8], nonce: &AesNonce, associated_data: Option<&[u8]>) -> Result<Vec<u8>, CryptoError> {
+        let cipher = AesGcm::new(&self.key_data)?;
+        cipher.decrypt(ciphertext, nonce.as_bytes(), associated_data)
+    }
+    
+    /// Encrypt data using AES-CTR
+    pub fn encrypt_ctr(&self, plaintext: &[u8], nonce: &AesNonce) -> Result<Vec<u8>, CryptoError> {
+        // This is a placeholder - in a real implementation, we would use AES-CTR
+        // For now, we'll just use AES-GCM without authentication
+        let cipher = AesGcm::new(&self.key_data)?;
+        cipher.encrypt(plaintext, nonce.as_bytes(), None)
+    }
+    
+    /// Decrypt data using AES-CTR
+    pub fn decrypt_ctr(&self, ciphertext: &[u8], nonce: &AesNonce) -> Result<Vec<u8>, CryptoError> {
+        // This is a placeholder - in a real implementation, we would use AES-CTR
+        // For now, we'll just use AES-GCM without authentication
+        let cipher = AesGcm::new(&self.key_data)?;
+        cipher.decrypt(ciphertext, nonce.as_bytes(), None)
+    }
+}
+
+/// AES nonce for encryption operations
+#[derive(Clone)]
+pub struct AesNonce {
+    /// Nonce data
+    nonce_data: Vec<u8>,
+}
+
+impl AesNonce {
+    /// Create a new nonce
+    pub fn new(nonce_data: &[u8]) -> Result<Self, CryptoError> {
+        if nonce_data.len() != 12 && nonce_data.len() != 16 {
+            return Err(CryptoError::invalid_parameter(
+                "nonce_data",
+                "12 or 16 bytes",
+                &format!("{} bytes", nonce_data.len()),
+            ));
+        }
+        
+        Ok(Self {
+            nonce_data: nonce_data.to_vec(),
+        })
+    }
+    
+    /// Generate a random nonce
+    pub fn generate(size: usize) -> Result<Self, CryptoError> {
+        if size != 12 && size != 16 {
+            return Err(CryptoError::invalid_parameter(
+                "size",
+                "12 or 16",
+                &format!("{}", size),
+            ));
+        }
+        
+        let mut nonce_data = vec![0u8; size];
+        rand::thread_rng().fill_bytes(&mut nonce_data);
+        
+        Ok(Self { nonce_data })
+    }
+    
+    /// Get the nonce data
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.nonce_data
+    }
+}
 
 /// AES-256-GCM cipher for authenticated encryption
 ///

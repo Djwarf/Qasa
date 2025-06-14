@@ -60,7 +60,7 @@ mod tests {
         let message = b"Test message for SPHINCS+ signature";
         
         // Create an invalid signature
-        let mut invalid_signature = vec![0u8; variant.signature_size()];
+        let invalid_signature = vec![0u8; variant.signature_size()];
         
         // Verify the invalid signature
         let is_valid = key_pair.verify(message, &invalid_signature).unwrap();
