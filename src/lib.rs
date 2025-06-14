@@ -29,6 +29,9 @@ pub mod bike;
 /// AES-GCM implementation for symmetric encryption
 pub mod aes;
 
+/// ChaCha20-Poly1305 implementation for symmetric encryption
+pub mod chacha20poly1305;
+
 /// Key management system for storing and loading keys
 pub mod key_management;
 
@@ -73,6 +76,13 @@ pub use bike::BikePublicKey;
 pub use bike::BikeVariant;
 pub use bike::CompressionLevel as BikeCompressionLevel;
 pub use bike::CompressedCiphertext as BikeCompressedCiphertext;
+pub use chacha20poly1305::{
+    ChaCha20Poly1305,
+    ChaCha20Poly1305Key,
+    ChaCha20Poly1305Nonce,
+    encrypt as chacha20poly1305_encrypt,
+    decrypt as chacha20poly1305_decrypt,
+};
 pub use error::{CryptoError, CryptoResult};
 pub use kyber::KyberKeyPair;
 pub use kyber::KyberPublicKey;
@@ -198,6 +208,11 @@ pub mod prelude {
     pub use crate::HybridSignatureKeyPair;
     pub use crate::HybridSignaturePublicKey;
     pub use crate::HybridSignatureVariant;
+    pub use crate::ChaCha20Poly1305;
+    pub use crate::ChaCha20Poly1305Key;
+    pub use crate::ChaCha20Poly1305Nonce;
+    pub use crate::chacha20poly1305_encrypt;
+    pub use crate::chacha20poly1305_decrypt;
     pub use crate::HybridSignature;
     pub use crate::HybridEncryptionParameters;
 

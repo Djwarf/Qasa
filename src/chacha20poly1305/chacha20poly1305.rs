@@ -4,7 +4,7 @@
 //! with associated data (AEAD) cipher as specified in RFC 8439.
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
-use crate::error::{CryptoError, CryptoResult};
+use crate::error::{CryptoError, CryptoResult, error_codes};
 use crate::utils;
 
 use super::chacha20::{
