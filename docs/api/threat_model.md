@@ -4,8 +4,8 @@
 
 This document describes the threat model for the QaSa cryptography module, which provides post-quantum cryptographic primitives for secure communication applications. Understanding the threats, attack vectors, and security boundaries is essential for properly implementing and using the module.
 
-**Last Updated:** February 2024
-**Current Version:** 0.0.4
+**Last Updated:** May 2024
+**Current Version:** 0.0.5
 
 ## System Context
 
@@ -15,6 +15,10 @@ The QaSa cryptography module is designed to be a component in end-to-end secure 
 2. Post-quantum digital signatures (CRYSTALS-Dilithium and SPHINCS+)
 3. Authenticated symmetric encryption (AES-GCM)
 4. Secure key management
+5. Hardware Security Module (HSM) integration
+6. WebAssembly (WASM) support
+7. Python language bindings
+8. Formal verification tools
 
 The module is implemented in Rust, chosen for its memory safety guarantees and performance. It relies on the following external dependencies:
 
@@ -22,6 +26,9 @@ The module is implemented in Rust, chosen for its memory safety guarantees and p
 - The Rust `aes-gcm` crate for symmetric encryption
 - The Rust `argon2` crate for password-based key derivation
 - The Rust `zeroize` crate for secure memory handling
+- The Rust `pkcs11` crate for HSM integration
+- The Rust `pyo3` crate for Python bindings
+- The Rust `wasm-bindgen` crate for WebAssembly support
 
 ## Assets to Protect
 
@@ -32,6 +39,7 @@ The primary assets the cryptography module aims to protect are:
    - Dilithium signing keys
    - Shared secrets derived from key exchange
    - Password-derived encryption keys
+   - HSM-protected keys and credentials
 
 2. **User Data**
    - Message plaintext
@@ -42,6 +50,7 @@ The primary assets the cryptography module aims to protect are:
    - Ensuring communications are not tampered with
    - Verifying the authenticity of messages
    - Maintaining key rotation schedules
+   - Preserving security properties across platforms (native, WASM, etc.)
 
 ## Threat Actors
 
@@ -110,6 +119,19 @@ The primary assets the cryptography module aims to protect are:
 - Bypassing disk encryption by capturing keys from RAM
 - Circumventing secure key storage mechanisms
 
+### Web/Browser-Based Adversary
+
+**Capabilities:**
+- Access to browser debugging tools
+- Ability to inspect WebAssembly memory
+- Can execute JavaScript in the same context
+- Can manipulate DOM and browser environment
+
+**Motivations:**
+- Extracting cryptographic keys from browser memory
+- Intercepting sensitive data in web applications
+- Bypassing client-side security controls
+
 ## Attack Vectors and Mitigations
 
 ### Network-Based Attacks
@@ -126,15 +148,15 @@ The primary assets the cryptography module aims to protect are:
 | Attack Vector | Description | Mitigation |
 |---------------|-------------|------------|
 | Quantum Computing | Using quantum algorithms to break cryptography | Use of post-quantum algorithms (Kyber, Dilithium, SPHINCS+); algorithm diversity; sufficiently large AES-256 keys |
-| Side-Channel Analysis | Extracting keys by analyzing timing, power, etc. | Constant-time operations where possible; memory zeroization; secure comparison functions |
-| Implementation Flaws | Bugs in cryptographic implementation | Use of well-vetted libraries; comprehensive test suite; security audits |
+| Side-Channel Analysis | Extracting keys by analyzing timing, power, etc. | Constant-time operations where possible; memory zeroization; secure comparison functions; formal verification of constant-time properties |
+| Implementation Flaws | Bugs in cryptographic implementation | Use of well-vetted libraries; comprehensive test suite; security audits; formal verification of algorithm correctness |
 | Random Number Generation Flaws | Predictable "random" values used for keys/nonces | Use of OS-provided secure random number generation; entropy checking |
 
 ### Key Management Attacks
 
 | Attack Vector | Description | Mitigation |
 |---------------|-------------|------------|
-| Key Extraction from Storage | Accessing stored key material | Encrypted key storage with password protection; key material never stored in plaintext |
+| Key Extraction from Storage | Accessing stored key material | Encrypted key storage with password protection; key material never stored in plaintext; HSM integration for critical keys |
 | Memory Dumping | Extracting keys from process memory | Secure memory handling with zeroization; minimizing key lifetime in memory; use of SecureBuffer and SecureBytes containers |
 | Weak Passwords | Brute-forcing password-protected keys | Argon2id with strong parameters; encouraging strong passwords (application responsibility) |
 | Key Reuse | Using the same key for too long | Key rotation policies; tracking key age; automatic rotation capabilities |
@@ -145,9 +167,27 @@ The primary assets the cryptography module aims to protect are:
 | Attack Vector | Description | Mitigation |
 |---------------|-------------|------------|
 | Malicious Dependencies | Supply chain attacks in dependencies | Dependency vetting and pinning; minimizing dependency count |
-| Operating System Compromise | Attacker controls the OS | Limited scope; cryptographic operations protect data even on compromised systems to the extent possible |
-| Cold Boot Attacks | Extracting keys from RAM after power-off | Memory zeroization; minimizing key material in memory; use of SecureBytes for sensitive data |
+| Operating System Compromise | Attacker controls the OS | Limited scope; cryptographic operations protect data even on compromised systems to the extent possible; HSM integration for critical keys |
+| Cold Boot Attacks | Extracting keys from RAM after power-off | Memory zeroization; minimizing key material in memory; use of SecureBytes for sensitive data; HSM integration |
 | Process Memory Scanning | Scanning process memory for key patterns | Memory zeroization; use of Zeroize and ZeroizeOnDrop traits; with_secure_scope function |
+
+### WebAssembly-Specific Attacks
+
+| Attack Vector | Description | Mitigation |
+|---------------|-------------|------------|
+| WASM Memory Inspection | Inspecting WebAssembly memory directly | Secure memory handling in WASM context; minimizing key lifetime in memory |
+| JavaScript Interception | Intercepting data passed between JS and WASM | Minimizing data transfer; secure handling of sensitive data in JavaScript |
+| Browser Developer Tools | Using browser tools to inspect memory | Memory zeroization; minimizing key lifetime; avoiding console logging of sensitive data |
+| Cross-Site Scripting (XSS) | Injecting malicious code that can access WASM memory | Not directly addressed; application must implement proper XSS protections |
+
+### HSM-Related Attacks
+
+| Attack Vector | Description | Mitigation |
+|---------------|-------------|------------|
+| PIN/Credential Theft | Stealing HSM access credentials | Secure handling of HSM PINs; minimizing PIN lifetime in memory |
+| HSM Library Manipulation | Replacing or manipulating HSM library | Library path verification; integrity checking of HSM libraries |
+| HSM API Attacks | Exploiting vulnerabilities in HSM API | Proper error handling; input validation for HSM operations |
+| Physical HSM Attacks | Physical tampering with HSM hardware | Outside scope; rely on HSM physical security features |
 
 ## Memory Security Mitigations
 
@@ -178,6 +218,16 @@ The module implements several layers of defense against memory-based attacks:
    - Patterns for securely passing sensitive data between functions
    - Documentation of memory security considerations
 
+6. **WebAssembly Memory Protection**
+   - Special handling for WASM memory environment
+   - WASM-specific secure memory containers
+   - Minimizing data transfer between JavaScript and WASM
+
+7. **HSM Integration**
+   - Critical keys can be stored and used within HSMs
+   - Keys never leave the HSM boundary for operations
+   - Reduces exposure of key material in application memory
+
 ## Key Rotation Security Mitigations
 
 The module implements a comprehensive key rotation system:
@@ -207,6 +257,40 @@ The module implements a comprehensive key rotation system:
    - Secure password handling during automatic rotation
    - Error recovery for failed rotation operations
 
+6. **HSM-Aware Rotation**
+   - Support for rotating keys stored in HSMs
+   - Maintaining HSM security properties during rotation
+   - HSM-specific rotation policies
+
+## Formal Verification Security Mitigations
+
+The module implements formal verification tools to mathematically prove security properties:
+
+1. **Constant-Time Verification**
+   - Mathematical verification of constant-time implementations
+   - Detection of timing side channels in cryptographic operations
+   - Verification of branch-free code paths for sensitive operations
+
+2. **Algorithm Correctness**
+   - Formal verification of cryptographic algorithm correctness
+   - Ensuring implementations match mathematical specifications
+   - Verification of key security properties
+
+3. **Side-Channel Resistance**
+   - Analysis of potential side-channel vulnerabilities
+   - Verification of countermeasures against known attacks
+   - Comprehensive testing of side-channel resistance
+
+4. **Protocol Security**
+   - Verification of cryptographic protocol security properties
+   - Analysis of key exchange and signature protocols
+   - Detection of potential protocol vulnerabilities
+
+5. **Verification Reporting**
+   - Detailed reports on verification results
+   - Confidence metrics for verification findings
+   - Recommendations for addressing identified issues
+
 ## Security Boundaries and Trust Assumptions
 
 ### Within Security Boundary
@@ -220,18 +304,20 @@ The module aims to protect against:
 5. Quantum computer attacks against the cryptography
 6. Memory dumping attacks targeting sensitive data
 7. Key overuse through automatic rotation mechanisms
+8. Side-channel attacks through constant-time implementations and formal verification
 
 ### Outside Security Boundary
 
 The module cannot protect against:
 
-1. Physical attacks on the hardware
+1. Physical attacks on the hardware (except when using HSMs)
 2. Compromise of the operating system or runtime environment
 3. Malware on the user's device
 4. Social engineering attacks against users
 5. Attacks against the application using this module incorrectly
 6. Side-channel attacks specific to the hardware/environment
 7. Users choosing extremely weak passwords
+8. Browser/JavaScript environment compromise when using WASM
 
 ### Trust Assumptions
 
@@ -244,6 +330,8 @@ The module assumes:
 5. The execution environment prevents other processes from accessing the application's memory
 6. The platform supports proper memory zeroization (not defeated by compiler optimizations)
 7. The diverse set of cryptographic algorithms (lattice-based and hash-based) provides protection against future cryptanalytic breakthroughs
+8. HSM providers properly implement security boundaries
+9. The browser environment properly isolates WASM memory when using WebAssembly
 
 ## Specific Scenarios and Mitigations
 
@@ -272,6 +360,7 @@ The module assumes:
 - Keys are encrypted with password-derived keys using Argon2id
 - Strong Argon2id parameters increase resistance to brute-force attacks
 - Automatic key rotation ensures stolen keys have limited utility
+- Critical keys can be stored in HSMs, preventing direct access
 
 ### Scenario 3: Memory Extraction Attack
 
@@ -285,6 +374,7 @@ The module assumes:
 - SecureBuffer and SecureBytes containers automatically zeroize on drop
 - with_secure_scope function ensures zeroization even on early returns
 - Key material kept in memory only as long as necessary
+- HSM integration keeps critical keys outside of process memory
 
 ### Scenario 4: Side-Channel Attack
 
@@ -298,6 +388,7 @@ The module assumes:
 - Reliance on libraries that implement algorithms with side-channel resistance
 - Minimizing branches based on secret data
 - Warning developers about potential side channels in documentation
+- Formal verification of constant-time implementations
 
 ### Scenario 5: Key Overuse Attack
 
@@ -312,19 +403,47 @@ The module assumes:
 - Secure handling of key history for compatibility with old messages
 - Limiting the retention of old keys to reduce exposure
 
+### Scenario 6: WebAssembly Memory Inspection
+
+**Attack Path:**
+1. Adversary uses browser developer tools to inspect WASM memory
+2. Locates cryptographic keys or sensitive data in memory
+3. Extracts keys to decrypt communications
+
+**Mitigations:**
+- WASM-specific secure memory handling
+- Minimizing key lifetime in WASM memory
+- Zeroization of sensitive data after use
+- Avoiding direct exposure of key material to JavaScript
+
+### Scenario 7: HSM Credential Theft
+
+**Attack Path:**
+1. Adversary gains access to HSM PIN or credentials
+2. Uses credentials to access keys stored in HSM
+3. Performs unauthorized cryptographic operations
+
+**Mitigations:**
+- Secure handling of HSM credentials
+- Minimizing credential lifetime in memory
+- Role-based access control for HSM operations
+- Audit logging of HSM access attempts
+
 ## Risk Analysis
 
 | Risk | Likelihood | Impact | Mitigation Effectiveness | Residual Risk |
 |------|------------|--------|--------------------------|---------------|
 | Quantum Computing Attack | Medium | High | High (Post-quantum cryptography) | Low |
-| Side-Channel Attack | Medium | High | Medium (Some mitigations in place) | Medium |
-| Key Storage Compromise | Medium | High | High (Password-protected, encrypted storage) | Low |
+| Side-Channel Attack | Medium | High | High (Formal verification, constant-time ops) | Low |
+| Key Storage Compromise | Medium | High | High (Password-protected, encrypted storage, HSM) | Low |
 | Memory Extraction | Medium | High | High (Secure memory handling) | Low |
-| Implementation Flaws | Medium | High | Medium (Testing, audits) | Medium |
+| Implementation Flaws | Medium | High | High (Testing, audits, formal verification) | Low |
 | Weak Password Selection | High | High | Low (Outside module control) | High |
 | Random Number Generator Compromise | Low | High | Medium (OS RNG dependency) | Medium |
 | Key Overuse | Medium | Medium | High (Automatic rotation) | Low |
-| Cold Boot Attack | Low | High | Medium (Memory zeroization) | Medium |
+| Cold Boot Attack | Low | High | Medium (Memory zeroization, HSM) | Low |
+| WASM Memory Inspection | Medium | High | Medium (WASM memory protection) | Medium |
+| HSM API Attacks | Low | High | Medium (Input validation, error handling) | Medium |
 
 ## Continuous Improvement
 
@@ -336,6 +455,8 @@ The threat model is a living document and should be updated as:
 4. Additional features are added to the module
 5. New memory protection techniques become available
 6. Key rotation policies need adjustment based on threat intelligence
+7. WebAssembly security best practices evolve
+8. HSM integration capabilities expand
 
 Regular security reviews and updates to this threat model are recommended, with a minimum annual review cycle.
 
@@ -358,4 +479,7 @@ Responsible disclosure is requested - please allow time for issues to be address
 7. STRIDE Threat Model
 8. Open Quantum Safe Project Documentation
 9. "Secure Memory Handling in Rust" (Rust Security Working Group, 2024)
-10. "Best Practices for Key Management Systems" (NIST, 2023) 
+10. "Best Practices for Key Management Systems" (NIST, 2023)
+11. PKCS#11 v2.40: Cryptographic Token Interface Standard
+12. "WebAssembly Security Guidelines" (W3C, 2023)
+13. "Formal Verification of Cryptographic Implementations" (CryptoVerif, 2023) 

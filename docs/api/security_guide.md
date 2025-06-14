@@ -4,8 +4,8 @@
 
 This security guide is designed to help developers understand and properly implement the security features of the QaSa cryptography module. The module provides post-quantum cryptographic protection for secure communications through a carefully selected set of cryptographic primitives and security-focused implementation details.
 
-**Last Updated:** February 2024
-**Current Version:** 0.0.4
+**Last Updated:** May 2024
+**Current Version:** 0.0.5
 
 ## Cryptographic Components Overview
 
@@ -17,6 +17,8 @@ QaSa implements a hybrid cryptographic system combining both post-quantum and tr
    - SPHINCS+ (NIST PQC standard, hash-based)
 3. **Symmetric Encryption**: AES-256-GCM (with authenticated data)
 4. **Key Derivation**: Argon2id (for password-based key derivation)
+5. **Hardware Security**: HSM integration via PKCS#11
+6. **Formal Verification**: Mathematical verification of security properties
 
 This hybrid approach ensures security against both classical and quantum attacks while maintaining good performance characteristics.
 
@@ -84,6 +86,7 @@ The module includes a comprehensive key management system:
 - **Key Rotation**: Automatic or manual key rotation with configurable policies
 - **Key Backup**: Export/import functionality with password protection
 - **Key Verification**: Methods to verify key pair validity
+- **HSM Integration**: Support for storing and using keys in Hardware Security Modules
 
 ### Memory Security
 
@@ -92,6 +95,16 @@ The module implements secure memory handling to protect sensitive data in memory
 - **Zeroization**: All sensitive buffers are zeroed when no longer needed
 - **Secure Containers**: Special container types like `SecureBuffer` and `SecureBytes` for sensitive data
 - **Scope Guards**: The `with_secure_scope` function ensures data is zeroized even if a function returns early or panics
+- **WebAssembly Memory Protection**: Special handling for WASM environments
+
+### Formal Verification
+
+The module includes formal verification tools to mathematically prove security properties:
+
+- **Constant-Time Operations**: Verification that cryptographic operations don't leak timing information
+- **Algorithm Correctness**: Mathematical proofs of cryptographic algorithm correctness
+- **Side-Channel Resistance**: Verification of resistance against various side-channel attacks
+- **Protocol Security**: Analysis of cryptographic protocol security properties
 
 ## Security Best Practices
 
@@ -131,6 +144,26 @@ The module implements secure memory handling to protect sensitive data in memory
    )?;
    ```
 
+4. **Use HSMs for critical keys when available**
+   ```rust
+   // Generate key in HSM instead of in memory
+   let key_handle = generate_key_in_hsm(
+       HsmProvider::Pkcs11,
+       config,
+       HsmKeyType::Dilithium(DilithiumVariant::Dilithium3),
+       attributes
+   )?;
+   
+   // Use the key without extracting it from the HSM
+   let signature = sign_with_hsm(
+       HsmProvider::Pkcs11,
+       config,
+       &key_handle,
+       message,
+       HsmMechanism::Dilithium(DilithiumVariant::Dilithium3)
+   )?;
+   ```
+
 ### Authentication and Integrity
 
 1. **Always verify signatures before processing messages**
@@ -153,6 +186,20 @@ The module implements secure memory handling to protect sensitive data in memory
        &shared_secret, 
        Some(conversation_id.as_bytes())
    )?;
+   ```
+
+3. **Verify formal security properties in critical applications**
+   ```rust
+   // Verify that the implementation has the required security properties
+   let verifier = FormalVerifier::default();
+   let result = verifier.verify_kyber(
+       KyberVariant::Kyber768,
+       VerificationProperty::ConstantTime
+   )?;
+   
+   if !result.verified {
+       return Err(SecurityError::VerificationFailed(result.details));
+   }
    ```
 
 ### Password Handling
@@ -192,6 +239,40 @@ The module implements secure memory handling to protect sensitive data in memory
    
    // CORRECT: Generate a new nonce for each encryption
    let nonce = AesGcm::generate_nonce();
+   ```
+
+### Platform-Specific Security
+
+1. **WebAssembly Security Considerations**
+   ```rust
+   // Initialize with secure WASM configuration
+   let wasm_config = WasmConfig {
+       use_simd: true,
+       memory_limit: 16 * 1024 * 1024, // 16MB limit
+       enable_threading: false, // Disable threading for security
+   };
+   
+   init_wasm(Some(wasm_config))?;
+   
+   // Use WASM-specific secure memory
+   let secure_buffer = WasmSecureBuffer::new(32)?;
+   ```
+
+2. **Mobile Platform Security**
+   ```rust
+   // Use platform-specific security features
+   #[cfg(target_os = "ios")]
+   let keychain = KeychainStorage::new()?;
+   
+   #[cfg(target_os = "android")]
+   let keystore = AndroidKeyStore::new()?;
+   
+   // Store keys in platform secure storage
+   #[cfg(target_os = "ios")]
+   keychain.store_key("my-key", &keypair)?;
+   
+   #[cfg(target_os = "android")]
+   keystore.store_key("my-key", &keypair)?;
    ```
 
 ## Implementation Patterns
@@ -262,6 +343,68 @@ let rotation_policy = RotationPolicy::high_security();
 let new_kyber_key_id = rotate_kyber_keypair(&kyber_key_id, password)?;
 ```
 
+### HSM Integration Pattern
+
+For using Hardware Security Modules:
+
+```rust
+use qasa::prelude::*;
+
+// Configure HSM connection
+let config = HsmConfig {
+    library_path: "/usr/lib/pkcs11/libsofthsm2.so".to_string(),
+    slot_id: Some(0),
+    token_label: Some("qasa".to_string()),
+    user_pin: Some(SecureBytes::from(b"1234".to_vec())),
+    provider_config: HashMap::new(),
+};
+
+// Connect to HSM
+let hsm = connect_hsm(HsmProvider::Pkcs11, config.clone())?;
+
+// Generate key in HSM
+let attributes = HsmKeyAttributes {
+    label: "dilithium-signing-key".to_string(),
+    id: vec![1, 2, 3, 4],
+    extractable: false,
+    sensitive: true,
+    allowed_operations: vec![HsmOperation::Sign, HsmOperation::Verify],
+    provider_attributes: HashMap::new(),
+};
+
+let key_handle = generate_key_in_hsm(
+    HsmProvider::Pkcs11,
+    config.clone(),
+    HsmKeyType::Dilithium(DilithiumVariant::Dilithium3),
+    attributes
+)?;
+
+// Sign using HSM-protected key
+let message = b"Sign this with HSM-protected key";
+let signature = sign_with_hsm(
+    HsmProvider::Pkcs11,
+    config.clone(),
+    &key_handle,
+    message,
+    HsmMechanism::Dilithium(DilithiumVariant::Dilithium3)
+)?;
+
+// Get public key for verification
+let public_key = get_public_key_from_hsm(
+    HsmProvider::Pkcs11,
+    config.clone(),
+    &key_handle
+)?;
+
+// Verify signature
+let is_valid = verify_signature(
+    message,
+    &signature,
+    &public_key,
+    SignatureAlgorithm::Dilithium(DilithiumVariant::Dilithium3)
+)?;
+```
+
 ### Secure Memory Pattern
 
 For handling sensitive data in memory:
@@ -287,6 +430,47 @@ with_secure_scope(&mut key_data, |data| {
 }); // data is zeroized here, even if an error occurred
 ```
 
+### Formal Verification Pattern
+
+For verifying security properties:
+
+```rust
+use qasa::prelude::*;
+
+// Create a formal verifier
+let verifier = FormalVerifier::default();
+
+// Verify constant-time implementation
+let result = verifier.verify_kyber(
+    KyberVariant::Kyber768,
+    VerificationProperty::ConstantTime
+)?;
+
+// Check verification result
+if result.verified {
+    println!("Verification passed with confidence: {}", result.confidence);
+} else {
+    println!("Verification failed: {:?}", result.details);
+}
+
+// Generate a comprehensive verification report
+let report = generate_verification_report(
+    "Kyber768",
+    &[
+        VerificationProperty::ConstantTime,
+        VerificationProperty::AlgorithmCorrectness,
+        VerificationProperty::SideChannelResistance
+    ],
+    None
+)?;
+
+// Log or display the report
+println!("Verification Report: {}", report.summary());
+for finding in &report.findings {
+    println!("- {}: {}", finding.property, finding.result);
+}
+```
+
 ## Security Auditing and Verification
 
 ### Recommendations for Security Reviews
@@ -295,8 +479,9 @@ Before deploying applications using this module in production, we strongly recom
 
 1. **Independent Security Audit**: Engage a third-party security firm to review your implementation
 2. **Penetration Testing**: Conduct thorough penetration testing of the entire application
-3. **Formal Verification**: Consider formal verification of critical security properties
+3. **Formal Verification**: Use the built-in formal verification tools to verify critical security properties
 4. **Side-Channel Analysis**: Test for side-channel vulnerabilities in your specific environment
+5. **HSM Integration**: Consider using HSMs for storing and using critical keys
 
 ### Checklist for Security Review
 
@@ -312,6 +497,9 @@ Use this checklist when reviewing your implementation:
 - [ ] Error messages don't leak sensitive information
 - [ ] No sensitive data appears in logs
 - [ ] Proper entropy sources are used for randomness
+- [ ] HSMs are used for critical keys when available
+- [ ] Formal verification has been performed on security-critical components
+- [ ] WebAssembly security configuration is appropriate if using WASM
 
 ## Security Updates and Reporting
 
@@ -322,6 +510,7 @@ The cryptographic landscape evolves continuously. Follow these practices:
 1. Regularly check for updates to the QaSa cryptography module
 2. Monitor NIST and other standard bodies for algorithm recommendations
 3. Subscribe to security advisories for the underlying libraries (OpenSSL, OQS, etc.)
+4. Use the formal verification tools to verify security properties after updates
 
 ### Reporting Security Issues
 
@@ -343,4 +532,6 @@ The QaSa cryptography module provides strong security guarantees when used corre
 3. RFC 9106: Argon2 Password Hashing
 4. NIST SP 800-175B: Guideline for Using Cryptographic Standards
 5. OWASP Cryptographic Storage Cheat Sheet
-6. [Open Quantum Safe Project](https://openquantumsafe.org/) 
+6. [Open Quantum Safe Project](https://openquantumsafe.org/)
+7. PKCS#11 v2.40: Cryptographic Token Interface Standard
+8. NIST SP 800-131A: Transitioning the Use of Cryptographic Algorithms and Key Lengths 
