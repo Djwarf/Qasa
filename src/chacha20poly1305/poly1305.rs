@@ -208,7 +208,8 @@ impl Poly1305State {
             for i in self.buffer_size + 1..16 {
                 self.buffer[i] = 0;
             }
-            self.process_block(&self.buffer);
+            let buffer_copy = self.buffer;
+            self.process_block(buffer_copy);
         }
 
         // Fully reduce h
