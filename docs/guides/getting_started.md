@@ -16,8 +16,25 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-qasa = "0.0.4
+qasa = "0.0.5"
 ```
+
+### Optional Features
+
+QaSa supports several optional features that can be enabled based on your needs:
+
+```toml
+[dependencies]
+qasa = { version = "0.0.5", features = ["simd", "python", "wasm"] }
+```
+
+Available features:
+- `simd`: Enable SIMD optimizations (enabled by default)
+- `python`: Enable Python bindings via PyO3
+- `wasm`: Enable WebAssembly support
+- `formal-verification`: Enable formal verification tools
+- `hardware-acceleration`: Enable hardware acceleration when available
+- `lean`: Enable optimized implementations for constrained environments
 
 ## Building from Source
 
@@ -154,6 +171,135 @@ let rotation_config = KeyRotation::new()
 key_store.enable_rotation("my-kyber-key", rotation_config)?;
 ```
 
+## Hardware Security Module (HSM) Integration
+
+QaSa now supports integration with Hardware Security Modules (HSMs) for enhanced security:
+
+```rust
+use qasa::key_management::{HsmProvider, HsmConfig, HsmKeyAttributes};
+
+// Create HSM configuration
+let config = HsmConfig {
+    library_path: "/usr/lib/softhsm/libsofthsm2.so".to_string(),
+    slot_id: Some(0),
+    token_label: Some("qasa".to_string()),
+    user_pin: Some(SecureBytes::from(b"1234".to_vec())),
+    provider_config: HashMap::new(),
+};
+
+// Connect to HSM
+let mut hsm = connect_hsm(HsmProvider::SoftHsm, config)?;
+
+// Generate key in HSM
+let attributes = HsmKeyAttributes {
+    label: "my-dilithium-key".to_string(),
+    id: vec![1, 2, 3, 4],
+    extractable: false,
+    sensitive: true,
+    allowed_operations: vec![HsmOperation::Sign, HsmOperation::Verify],
+    provider_attributes: HashMap::new(),
+};
+
+let key_handle = generate_key_in_hsm(
+    HsmProvider::SoftHsm,
+    config.clone(),
+    HsmKeyType::Dilithium(DilithiumVariant::Dilithium3),
+    attributes
+)?;
+
+// Sign using HSM
+let signature = sign_with_hsm(
+    HsmProvider::SoftHsm,
+    config.clone(),
+    &key_handle,
+    message,
+    HsmMechanism::Dilithium(DilithiumVariant::Dilithium3)
+)?;
+```
+
+## WebAssembly Support
+
+QaSa now includes WebAssembly (WASM) support for browser and Node.js environments:
+
+```rust
+// In your Cargo.toml
+// [dependencies]
+// qasa = { version = "0.0.5", features = ["wasm"] }
+
+// In your wasm module
+use qasa::prelude::*;
+
+// The library will automatically detect WASM environment
+// and use appropriate optimizations
+let keypair = KyberKeyPair::generate(KyberVariant::Kyber768)?;
+```
+
+## Python Bindings
+
+QaSa provides Python bindings for easy integration with Python applications:
+
+```python
+# First, install the Python package
+# pip install qasa
+
+import qasa
+
+# Initialize the module
+qasa.init()
+
+# Generate a Kyber key pair
+public_key, secret_key = qasa.kyber_keygen(768)
+
+# Encapsulate a shared secret
+ciphertext, shared_secret = qasa.kyber_encapsulate(768, public_key)
+
+# Decapsulate the shared secret
+decapsulated = qasa.kyber_decapsulate(768, secret_key, ciphertext)
+
+# Generate a Dilithium key pair
+public_key, secret_key = qasa.dilithium_keygen(3)
+
+# Sign a message
+signature = qasa.dilithium_sign(3, secret_key, b"Hello, quantum-safe world!")
+
+# Verify a signature
+is_valid = qasa.dilithium_verify(3, public_key, b"Hello, quantum-safe world!", signature)
+```
+
+## Formal Verification
+
+QaSa includes formal verification tools to verify security properties:
+
+```rust
+use qasa::security::{FormalVerifier, VerificationProperty};
+
+// Create a formal verifier with default configuration
+let verifier = FormalVerifier::default();
+
+// Verify constant-time implementation of Kyber
+let result = verifier.verify_kyber(
+    KyberVariant::Kyber768,
+    VerificationProperty::ConstantTime
+)?;
+
+// Check verification result
+if result.verified {
+    println!("Kyber constant-time verification passed with confidence: {}", 
+             result.confidence);
+} else {
+    println!("Verification failed: {:?}", result.details);
+}
+
+// Generate a comprehensive verification report
+let properties = vec![
+    VerificationProperty::ConstantTime,
+    VerificationProperty::AlgorithmCorrectness,
+    VerificationProperty::ProtocolSecurity
+];
+
+let report = generate_verification_report("Kyber768", &properties, None)?;
+```
+
 ## Examples
 
 The `examples/` directory contains complete usage examples:
@@ -170,6 +316,19 @@ cargo run --example sphincs_signatures
 
 ```bash
 cargo run --example optimized_signatures
+```
+
+### Platform-Specific Examples
+
+```bash
+# WebAssembly example
+cargo run --example wasm_crypto --features wasm
+
+# HSM integration example
+cargo run --example hsm_operations
+
+# Python bindings example
+python examples/python_bindings.py
 ```
 
 ## Configuration
@@ -191,10 +350,16 @@ aes_key_size = 256
 [performance]
 simd = true
 hardware_accel = true
+wasm_simd = true
 
 [memory]
 usage_mode = "optimized"
 max_memory_per_op = 1048576
+
+[hsm]
+provider = "SoftHsm"
+library_path = "/usr/lib/softhsm/libsofthsm2.so"
+slot_id = 0
 ```
 
 ## Performance Optimization
@@ -204,7 +369,7 @@ max_memory_per_op = 1048576
 ```bash
 # Enable all optimizations
 export RUSTFLAGS="-C target-cpu=native -C opt-level=3"
-cargo build --release --features "optimized,simd"
+cargo build --release --features "optimized,simd,hardware-acceleration"
 ```
 
 ### Memory-Constrained Environments
@@ -212,6 +377,14 @@ cargo build --release --features "optimized,simd"
 ```bash
 # Build with minimal features
 cargo build --release --no-default-features --features "lean"
+```
+
+### WebAssembly Optimization
+
+```bash
+# Build optimized WASM module
+cargo build --target wasm32-unknown-unknown --release --features "wasm"
+wasm-opt -O3 -o optimized.wasm target/wasm32-unknown-unknown/release/qasa.wasm
 ```
 
 ## Security Best Practices
@@ -222,6 +395,8 @@ cargo build --release --no-default-features --features "lean"
 4. **Backup keys securely with strong passwords**
 5. **Monitor for side-channel attacks**
 6. **Keep the crypto module updated**
+7. **Use HSMs for storing critical keys when possible**
+8. **Verify formal security properties in security-critical applications**
 
 ## Next Steps
 
