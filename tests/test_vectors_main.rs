@@ -6,9 +6,10 @@ mod test_vectors;
 use qasa::kyber::{KyberKeyPair, KyberPublicKey};
 use qasa::dilithium::{DilithiumKeyPair, DilithiumPublicKey, CompressedSignature as DilithiumCompressedSignature};
 use qasa::sphincsplus::{SphincsKeyPair, SphincsPublicKey, CompressedSignature as SphincsCompressedSignature};
+use qasa::bike::{BikeKeyPair, BikePublicKey, CompressedCiphertext as BikeCompressedCiphertext};
 use qasa::aes;
 use qasa::secure_memory::LockedMemory;
-use test_vectors::{kyber, dilithium, sphincsplus, aes_gcm, secure_memory};
+use test_vectors::{kyber, dilithium, sphincsplus, bike, aes_gcm, secure_memory};
 use std::fs;
 use std::path::Path;
 use std::io::Write;
@@ -53,6 +54,17 @@ fn export_test_vectors() -> std::io::Result<()> {
         .expect("Failed to serialize SPHINCS+ special case test vectors");
     fs::write(output_dir.join("sphincsplus_special.json"), sphincsplus_special_json)?;
     
+    // Export BIKE test vectors
+    let bike_vectors = bike::standard_test_vectors();
+    let bike_json = serde_json::to_string_pretty(&bike_vectors)
+        .expect("Failed to serialize BIKE test vectors");
+    fs::write(output_dir.join("bike_standard.json"), bike_json)?;
+    
+    let bike_special_vectors = bike::special_case_test_vectors();
+    let bike_special_json = serde_json::to_string_pretty(&bike_special_vectors)
+        .expect("Failed to serialize BIKE special case test vectors");
+    fs::write(output_dir.join("bike_special.json"), bike_special_json)?;
+    
     // Export AES-GCM test vectors
     let aes_gcm_vectors = aes_gcm::standard_test_vectors();
     let aes_gcm_json = serde_json::to_string_pretty(&aes_gcm_vectors)
@@ -88,6 +100,8 @@ This directory contains test vectors for the QaSa cryptography module, designed 
 - `dilithium_special.json`: Special case test vectors for Dilithium signatures
 - `sphincsplus_standard.json`: Standard test vectors for SPHINCS+ signatures
 - `sphincsplus_special.json`: Special case test vectors for SPHINCS+ signatures
+- `bike_standard.json`: Standard test vectors for BIKE
+- `bike_special.json`: Special case test vectors for BIKE
 - `aes_gcm_standard.json`: Standard test vectors for AES-GCM encryption
 - `aes_gcm_special.json`: Special case test vectors for AES-GCM encryption
 - `secure_memory_standard.json`: Test vectors for secure memory operations
@@ -154,6 +168,19 @@ fn test_all_vectors() {
             .expect("Failed to verify SPHINCS+ signature");
         
         assert!(is_valid, "SPHINCS+ signature verification failed");
+    }
+    
+    // Test BIKE vectors
+    let bike_vectors = bike::standard_test_vectors();
+    for vector in bike_vectors {
+        let keypair = BikeKeyPair::from_bytes(&vector.secret_key)
+            .expect("Failed to deserialize BIKE keypair");
+        
+        let decapsulated = keypair.decapsulate(&vector.ciphertext)
+            .expect("Failed to decapsulate BIKE ciphertext");
+        
+        assert_eq!(decapsulated, vector.shared_secret, 
+                  "BIKE decapsulated shared secret doesn't match expected value");
     }
     
     // Test AES-GCM vectors

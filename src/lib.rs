@@ -23,6 +23,9 @@ pub mod dilithium;
 /// SPHINCS+ implementation for digital signatures
 pub mod sphincsplus;
 
+/// BIKE implementation for key encapsulation
+pub mod bike;
+
 /// AES-GCM implementation for symmetric encryption
 pub mod aes;
 
@@ -62,6 +65,11 @@ pub use sphincsplus::SphincsPublicKey;
 pub use sphincsplus::SphincsVariant;
 pub use sphincsplus::CompressionLevel as SphincsCompressionLevel;
 pub use sphincsplus::CompressedSignature as SphincsCompressedSignature;
+pub use bike::BikeKeyPair;
+pub use bike::BikePublicKey;
+pub use bike::BikeVariant;
+pub use bike::CompressionLevel as BikeCompressionLevel;
+pub use bike::CompressedCiphertext as BikeCompressedCiphertext;
 pub use error::{CryptoError, CryptoResult};
 pub use kyber::KyberKeyPair;
 pub use kyber::KyberPublicKey;
@@ -147,6 +155,11 @@ pub mod prelude {
     pub use crate::SphincsVariant;
     pub use crate::SphincsCompressionLevel;
     pub use crate::SphincsCompressedSignature;
+    pub use crate::BikeKeyPair;
+    pub use crate::BikePublicKey;
+    pub use crate::BikeVariant;
+    pub use crate::BikeCompressionLevel;
+    pub use crate::BikeCompressedCiphertext;
     pub use crate::KyberKeyPair;
     pub use crate::KyberPublicKey;
     pub use crate::KyberVariant;

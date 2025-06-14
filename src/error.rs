@@ -35,6 +35,14 @@ pub enum CryptoError {
         context: HashMap<String, String>,
     },
 
+    #[error("BIKE operation failed: {operation} - {cause}")]
+    BikeError {
+        operation: String,
+        cause: String,
+        error_code: u32,
+        context: HashMap<String, String>,
+    },
+
     #[error("AES operation failed: {operation} - {cause}")]
     AesError {
         operation: String,
@@ -207,6 +215,15 @@ pub mod error_codes {
     pub const SPHINCS_INVALID_KEY_SIZE: u32 = 9005;
     pub const SPHINCS_COMPRESSION_FAILED: u32 = 9006;
     pub const SPHINCS_DECOMPRESSION_FAILED: u32 = 9007;
+
+    // BIKE errors: 10000-10999
+    pub const BIKE_KEY_GENERATION_FAILED: u32 = 10001;
+    pub const BIKE_ENCAPSULATION_FAILED: u32 = 10002;
+    pub const BIKE_DECAPSULATION_FAILED: u32 = 10003;
+    pub const BIKE_INVALID_CIPHERTEXT: u32 = 10004;
+    pub const BIKE_INVALID_KEY_SIZE: u32 = 10005;
+    pub const BIKE_COMPRESSION_FAILED: u32 = 10006;
+    pub const BIKE_DECOMPRESSION_FAILED: u32 = 10007;
 }
 
 impl CryptoError {
@@ -216,6 +233,7 @@ impl CryptoError {
             CryptoError::KyberError { error_code, .. } => *error_code,
             CryptoError::DilithiumError { error_code, .. } => *error_code,
             CryptoError::SphincsError { error_code, .. } => *error_code,
+            CryptoError::BikeError { error_code, .. } => *error_code,
             CryptoError::AesError { error_code, .. } => *error_code,
             CryptoError::KeyManagementError { error_code, .. } => *error_code,
             CryptoError::SecurityPolicyViolation { error_code, .. } => *error_code,
@@ -515,6 +533,17 @@ impl CryptoError {
         let mut context = HashMap::new();
         context.insert("algorithm".to_string(), "SPHINCS+".to_string());
         Self::SphincsError {
+            operation: operation.to_string(),
+            cause: cause.to_string(),
+            error_code,
+            context,
+        }
+    }
+
+    pub fn bike_error(operation: &str, cause: &str, error_code: u32) -> Self {
+        let mut context = HashMap::new();
+        context.insert("algorithm".to_string(), "BIKE".to_string());
+        Self::BikeError {
             operation: operation.to_string(),
             cause: cause.to_string(),
             error_code,
