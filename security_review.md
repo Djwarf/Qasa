@@ -151,10 +151,8 @@ The cryptography module provides the following security properties:
 
 ### Low Priority
 
-1. Consider additional post-quantum KEM algorithms like BIKE or HQC for further KEM diversity.
-2. Implement side-channel resistance testing for all platforms.
-3. Add formal verification for Python bindings and WebAssembly interfaces.
-4. Develop platform-specific security optimizations for mobile environments.
+1. Implement side-channel resistance testing for all platforms.
+2. Develop platform-specific security optimizations for mobile environments.
 
 ## Post-Quantum Cryptography Considerations
 
