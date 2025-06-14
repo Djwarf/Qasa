@@ -219,9 +219,10 @@ impl HybridKemKeyPair {
                 (public_key, post_quantum_public_key)
             },
             ClassicalKemAlgorithm::P256 => {
-                // Extract public key from PKCS#8
-                // This is a placeholder - in a real implementation, we would extract the public key properly
-                let public_key = self.classical_key.clone(); // Just a placeholder
+                // Extract public key from PKCS#8 format
+                // In a real implementation, we would parse the PKCS#8 format properly
+                // For now, we'll use the entire PKCS#8 document as the public key
+                let public_key = self.classical_key.clone();
                 
                 // Extract post-quantum public key based on algorithm
                 let post_quantum_public_key = match self.algorithm.post_quantum {
@@ -299,9 +300,52 @@ impl HybridKemKeyPair {
                 shared_secret.to_vec()
             },
             ClassicalKemAlgorithm::P256 => {
-                // For P-256, we'd perform ECDH properly
-                // This is a placeholder
-                vec![0u8; 32] // Just a placeholder
+                // Parse the private key from PKCS#8
+                let key_pair = ring::signature::EcdsaKeyPair::from_pkcs8(
+                    &ring::signature::ECDSA_P256_SHA256_ASN1_SIGNING,
+                    &self.classical_key
+                ).map_err(|_| CryptoError::key_management_error(
+                    "decapsulation",
+                    "Failed to parse P-256 key pair",
+                    "ECDSA",
+                ))?;
+                
+                // For ECDH with P-256, we would:
+                // 1. Extract the peer's public key from the ciphertext
+                // 2. Compute the shared secret using ECDH
+                
+                // In Ring, there's no direct ECDH API, but we can use the agreement module
+                let peer_public_key = ring::agreement::UnparsedPublicKey::new(
+                    &ring::agreement::ECDH_P256,
+                    &ciphertext.classical_ciphertext
+                );
+                
+                // Create an ephemeral private key for the agreement
+                let my_private_key = ring::agreement::EphemeralPrivateKey::generate(
+                    &ring::agreement::ECDH_P256,
+                    &ring::rand::SystemRandom::new()
+                ).map_err(|_| CryptoError::key_management_error(
+                    "decapsulation",
+                    "Failed to generate ephemeral P-256 key",
+                    "ECDH",
+                ))?;
+                
+                // Compute the shared secret
+                let shared_secret = ring::agreement::agree_ephemeral(
+                    my_private_key,
+                    &peer_public_key,
+                    ring::error::Unspecified,
+                    |shared_key_material| {
+                        // Copy the shared key material to a new Vec
+                        Ok(shared_key_material.to_vec())
+                    }
+                ).map_err(|_| CryptoError::key_management_error(
+                    "decapsulation",
+                    "Failed to compute P-256 shared secret",
+                    "ECDH",
+                ))?;
+                
+                shared_secret
             },
             ClassicalKemAlgorithm::Rsa2048 | ClassicalKemAlgorithm::Rsa3072 => {
                 // For RSA, we'd decrypt the ciphertext properly
@@ -523,9 +567,48 @@ impl HybridKemPublicKey {
                 (ephemeral_public.to_vec(), shared_secret.to_vec())
             },
             ClassicalKemAlgorithm::P256 => {
-                // For P-256, we'd perform ECDH properly
-                // This is a placeholder
-                (vec![0u8; 65], vec![0u8; 32]) // Just placeholders
+                // For P-256, we'll perform ECDH properly using the ring crate
+                
+                // Parse the peer's public key
+                let peer_public_key = ring::agreement::UnparsedPublicKey::new(
+                    &ring::agreement::ECDH_P256,
+                    &self.classical_key
+                );
+                
+                // Generate an ephemeral key pair
+                let ephemeral_private_key = ring::agreement::EphemeralPrivateKey::generate(
+                    &ring::agreement::ECDH_P256,
+                    &ring::rand::SystemRandom::new()
+                ).map_err(|_| CryptoError::key_management_error(
+                    "encapsulation",
+                    "Failed to generate ephemeral P-256 key",
+                    "ECDH",
+                ))?;
+                
+                // Get the public key to use as ciphertext
+                let ephemeral_public_key_bytes = ephemeral_private_key.compute_public_key()
+                    .map_err(|_| CryptoError::key_management_error(
+                        "encapsulation",
+                        "Failed to compute P-256 public key",
+                        "ECDH",
+                    ))?;
+                
+                // Compute the shared secret
+                let shared_secret = ring::agreement::agree_ephemeral(
+                    ephemeral_private_key,
+                    &peer_public_key,
+                    ring::error::Unspecified,
+                    |shared_key_material| {
+                        // Copy the shared key material to a new Vec
+                        Ok(shared_key_material.to_vec())
+                    }
+                ).map_err(|_| CryptoError::key_management_error(
+                    "encapsulation",
+                    "Failed to compute P-256 shared secret",
+                    "ECDH",
+                ))?;
+                
+                (ephemeral_public_key_bytes.as_ref().to_vec(), shared_secret)
             },
             ClassicalKemAlgorithm::Rsa2048 | ClassicalKemAlgorithm::Rsa3072 => {
                 // For RSA, we'd encrypt a random secret

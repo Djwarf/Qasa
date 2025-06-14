@@ -485,7 +485,7 @@ impl CompressedSignature {
 // Compression functions
 
 /// Compress a SPHINCS+ signature with light compression
-fn compress_signature_light(signature: &[u8]) -> CryptoResult<Vec<u8>> {
+pub fn compress_signature_light(signature: &[u8]) -> CryptoResult<Vec<u8>> {
     // Simple run-length encoding for sequences of repeated bytes
     let mut compressed = Vec::with_capacity(signature.len());
     let mut i = 0;
@@ -516,7 +516,7 @@ fn compress_signature_light(signature: &[u8]) -> CryptoResult<Vec<u8>> {
 }
 
 /// Compress a SPHINCS+ signature with medium compression
-fn compress_signature_medium(signature: &[u8]) -> CryptoResult<Vec<u8>> {
+pub fn compress_signature_medium(signature: &[u8]) -> CryptoResult<Vec<u8>> {
     // Use a dictionary-based compression for medium level
     // This approach uses a sliding window to find repeated patterns
     
@@ -572,7 +572,7 @@ fn compress_signature_medium(signature: &[u8]) -> CryptoResult<Vec<u8>> {
 }
 
 /// Compress a SPHINCS+ signature with high compression
-fn compress_signature_high(signature: &[u8]) -> CryptoResult<Vec<u8>> {
+pub fn compress_signature_high(signature: &[u8]) -> CryptoResult<Vec<u8>> {
     // Use a hybrid approach for high compression:
     // 1. First apply run-length encoding
     // 2. Then apply dictionary-based compression
@@ -659,7 +659,7 @@ fn compress_signature_high(signature: &[u8]) -> CryptoResult<Vec<u8>> {
 }
 
 /// Decompress a SPHINCS+ signature
-fn decompress_signature(compressed: &CompressedSignature) -> CryptoResult<Vec<u8>> {
+pub fn decompress_signature(compressed: &CompressedSignature) -> CryptoResult<Vec<u8>> {
     match compressed.level {
         CompressionLevel::None => Ok(compressed.data.clone()),
         CompressionLevel::Light => decompress_signature_light(&compressed.data),
@@ -669,7 +669,7 @@ fn decompress_signature(compressed: &CompressedSignature) -> CryptoResult<Vec<u8
 }
 
 /// Decompress a SPHINCS+ signature with light compression
-fn decompress_signature_light(compressed: &[u8]) -> CryptoResult<Vec<u8>> {
+pub fn decompress_signature_light(compressed: &[u8]) -> CryptoResult<Vec<u8>> {
     let mut decompressed = Vec::new();
     let mut i = 0;
     
@@ -691,7 +691,7 @@ fn decompress_signature_light(compressed: &[u8]) -> CryptoResult<Vec<u8>> {
 }
 
 /// Decompress a SPHINCS+ signature with medium compression
-fn decompress_signature_medium(compressed: &[u8]) -> CryptoResult<Vec<u8>> {
+pub fn decompress_signature_medium(compressed: &[u8]) -> CryptoResult<Vec<u8>> {
     let mut decompressed = Vec::new();
     let mut i = 0;
     

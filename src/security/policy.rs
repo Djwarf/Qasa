@@ -27,7 +27,18 @@ impl SecurityPolicyEnforcer {
     }
 
     pub fn enforce_policies(&self) -> CryptoResult<()> {
-        // Placeholder implementation
+        // Check if all required policies are enabled
+        for policy in &self.policies {
+            if !policy.enabled {
+                return Err(crate::error::CryptoError::policy_error(
+                    "policy_enforcement",
+                    &format!("Required security policy '{}' is not enabled", policy.name),
+                    crate::error::error_codes::POLICY_ENFORCEMENT_FAILED,
+                ));
+            }
+        }
+        
+        // All policies are enabled
         Ok(())
     }
 }

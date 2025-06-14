@@ -28,6 +28,9 @@ crate-type = ["cdylib", "rlib"]
 oqs = "0.8.0"
 # For AES-GCM implementation
 aes-gcm = "0.10.3"
+# For AES-CTR implementation
+aes = "0.8.3"
+ctr = "0.9.2"
 # For more general cryptographic operations
 rand = "0.8.5"
 getrandom = "0.2.10"

@@ -9,6 +9,11 @@ mod tests {
         CompressionLevel,
     };
     use crate::error::CryptoResult;
+    use super::*;
+    use crate::sphincsplus::compress_signature_medium;
+    use crate::sphincsplus::decompress_signature_medium;
+    use crate::sphincsplus::compress_signature_high;
+    use crate::sphincsplus::decompress_signature_high;
     
     #[test]
     fn test_sphincs_key_generation() {
@@ -209,6 +214,220 @@ mod tests {
                     assert!(result.is_err(), "Expected Err but got Ok for security_level={}, memory_kb={}, prefer_speed={}", 
                            security_level, memory_kb, prefer_speed);
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn test_sphincs_signature_verification() {
+        // Generate a key pair
+        let key_pair = SphincsKeyPair::generate(SphincsVariant::Sphincs128f).unwrap();
+        
+        // Create a test message
+        let message = b"This is a test message for SPHINCS+ signature";
+        
+        // Sign the message
+        let signature = key_pair.sign(message).unwrap();
+        
+        // Verify with the same key pair
+        let result = key_pair.verify(message, &signature).unwrap();
+        assert!(result, "Signature verification failed with the same key pair");
+        
+        // Verify with just the public key
+        let public_key = key_pair.public_key();
+        let result = public_key.verify(message, &signature).unwrap();
+        assert!(result, "Signature verification failed with public key");
+        
+        // Try with a modified message
+        let modified = b"This is a modified test message for SPHINCS+ signature";
+        let result = public_key.verify(modified, &signature).unwrap();
+        assert!(!result, "Signature verification should fail with modified message");
+        
+        // Try with a modified signature
+        let mut modified_sig = signature.clone();
+        if !modified_sig.is_empty() {
+            modified_sig[0] ^= 0xFF; // Flip bits in the first byte
+        }
+        let result = public_key.verify(message, &modified_sig).unwrap();
+        assert!(!result, "Signature verification should fail with modified signature");
+    }
+
+    #[test]
+    fn test_sphincs_serialization() {
+        // Generate a key pair
+        let key_pair = SphincsKeyPair::generate(SphincsVariant::Sphincs128f).unwrap();
+        
+        // Serialize the key pair
+        let serialized = key_pair.to_bytes().unwrap();
+        
+        // Deserialize the key pair
+        let deserialized = SphincsKeyPair::from_bytes(&serialized).unwrap();
+        
+        // Verify the algorithm is preserved
+        assert_eq!(key_pair.algorithm, deserialized.algorithm);
+        
+        // Verify the public key is preserved
+        assert_eq!(key_pair.public_key, deserialized.public_key);
+        
+        // Verify the secret key is preserved
+        assert_eq!(key_pair.secret_key, deserialized.secret_key);
+        
+        // Test public key serialization/deserialization
+        let public_key = key_pair.public_key();
+        let serialized_pub = public_key.to_bytes().unwrap();
+        let deserialized_pub = SphincsPublicKey::from_bytes(&serialized_pub).unwrap();
+        
+        assert_eq!(public_key.algorithm, deserialized_pub.algorithm);
+        assert_eq!(public_key.public_key, deserialized_pub.public_key);
+    }
+
+    #[test]
+    fn test_sphincs_compression_light() {
+        // Generate a signature
+        let key_pair = SphincsKeyPair::generate(SphincsVariant::Sphincs128f).unwrap();
+        let message = b"Test message for compression";
+        let signature = key_pair.sign(message).unwrap();
+        
+        // Compress with light compression
+        let compressed = key_pair.sign_compressed(message, CompressionLevel::Light).unwrap();
+        
+        // Verify the compressed signature
+        let result = key_pair.verify_compressed(message, &compressed).unwrap();
+        assert!(result, "Verification of light-compressed signature failed");
+        
+        // Check compression ratio
+        let ratio = compressed.compression_ratio();
+        println!("Light compression ratio: {:.2}", ratio);
+        assert!(ratio < 1.0, "Light compression should reduce size");
+        
+        // Check space savings
+        let savings = compressed.space_savings();
+        println!("Light compression saved {} bytes", savings);
+        assert!(savings > 0, "Light compression should save space");
+    }
+
+    #[test]
+    fn test_sphincs_compression_medium() {
+        // Generate a signature
+        let key_pair = SphincsKeyPair::generate(SphincsVariant::Sphincs128f).unwrap();
+        let message = b"Test message for medium compression with some repeated patterns";
+        let signature = key_pair.sign(message).unwrap();
+        
+        // Create a signature with patterns that compress well
+        let mut pattern_sig = Vec::with_capacity(signature.len());
+        pattern_sig.extend_from_slice(&signature[0..100]);
+        
+        // Add some repeating patterns
+        for _ in 0..5 {
+            pattern_sig.extend_from_slice(&signature[100..200]);
+        }
+        pattern_sig.extend_from_slice(&signature[200..]);
+        
+        // Compress with medium compression
+        let compressed = compress_signature_medium(&pattern_sig).unwrap();
+        
+        // Decompress
+        let decompressed = decompress_signature_medium(&compressed).unwrap();
+        
+        // Verify the decompression is correct
+        assert_eq!(pattern_sig, decompressed, "Medium decompression failed to restore original");
+        
+        // Check compression ratio
+        let ratio = compressed.len() as f64 / pattern_sig.len() as f64;
+        println!("Medium compression ratio: {:.2}", ratio);
+    }
+
+    #[test]
+    fn test_sphincs_compression_high() {
+        // Generate a signature
+        let key_pair = SphincsKeyPair::generate(SphincsVariant::Sphincs128f).unwrap();
+        let message = b"Test message for high compression with many repeated patterns";
+        let signature = key_pair.sign(message).unwrap();
+        
+        // Create a signature with patterns that compress well
+        let mut pattern_sig = Vec::with_capacity(signature.len());
+        pattern_sig.extend_from_slice(&signature[0..50]);
+        
+        // Add many repeating patterns
+        for _ in 0..10 {
+            pattern_sig.extend_from_slice(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+            pattern_sig.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        }
+        pattern_sig.extend_from_slice(&signature[50..100]);
+        
+        // Compress with high compression
+        let compressed = compress_signature_high(&pattern_sig).unwrap();
+        
+        // Decompress
+        let decompressed = decompress_signature_high(&compressed).unwrap();
+        
+        // Verify the decompression is correct
+        assert_eq!(pattern_sig, decompressed, "High decompression failed to restore original");
+        
+        // Check compression ratio
+        let ratio = compressed.len() as f64 / pattern_sig.len() as f64;
+        println!("High compression ratio: {:.2}", ratio);
+    }
+
+    #[test]
+    fn test_sphincs_fingerprint() {
+        // Generate a key pair
+        let key_pair = SphincsKeyPair::generate(SphincsVariant::Sphincs128f).unwrap();
+        
+        // Get the public key and its fingerprint
+        let public_key = key_pair.public_key();
+        let fingerprint = public_key.fingerprint();
+        
+        // Verify the fingerprint is non-empty
+        assert!(!fingerprint.is_empty(), "Fingerprint should not be empty");
+        
+        // Verify the fingerprint is a hex string of the expected length (16 characters for 8 bytes)
+        assert_eq!(fingerprint.len(), 16, "Fingerprint should be 16 characters long");
+        
+        // Generate another key pair and verify the fingerprint is different
+        let key_pair2 = SphincsKeyPair::generate(SphincsVariant::Sphincs128f).unwrap();
+        let public_key2 = key_pair2.public_key();
+        let fingerprint2 = public_key2.fingerprint();
+        
+        assert_ne!(fingerprint, fingerprint2, "Different keys should have different fingerprints");
+    }
+
+    #[test]
+    fn test_sphincs_all_variants() {
+        // Test all SPHINCS+ variants
+        let variants = [
+            SphincsVariant::Sphincs128f,
+            SphincsVariant::Sphincs128s,
+            SphincsVariant::Sphincs192f,
+            SphincsVariant::Sphincs192s,
+            SphincsVariant::Sphincs256f,
+            SphincsVariant::Sphincs256s,
+        ];
+        
+        for &variant in &variants {
+            // Generate a key pair
+            let key_pair = SphincsKeyPair::generate(variant).unwrap();
+            
+            // Create a test message
+            let message = b"Testing SPHINCS+ variant";
+            
+            // Sign the message
+            let signature = key_pair.sign(message).unwrap();
+            
+            // Verify the signature
+            let result = key_pair.verify(message, &signature).unwrap();
+            assert!(result, "Signature verification failed for variant {:?}", variant);
+            
+            // Check the key sizes
+            assert_eq!(key_pair.public_key.len(), variant.public_key_size());
+            assert_eq!(key_pair.secret_key.len(), variant.secret_key_size());
+            
+            // Check the security level
+            let level = variant.security_level();
+            match variant {
+                SphincsVariant::Sphincs128f | SphincsVariant::Sphincs128s => assert_eq!(level, 1),
+                SphincsVariant::Sphincs192f | SphincsVariant::Sphincs192s => assert_eq!(level, 3),
+                SphincsVariant::Sphincs256f | SphincsVariant::Sphincs256s => assert_eq!(level, 5),
             }
         }
     }

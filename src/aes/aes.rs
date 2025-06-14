@@ -6,6 +6,9 @@ use std::sync::Arc;
 use std::io::{Read, Write, Result as IoResult};
 use rand;
 use rand::RngCore;
+use aes::cipher::{KeyIvInit, StreamCipher};
+use aes::Aes256;
+use ctr::Ctr64BE;
 
 use crate::error::{error_codes, CryptoError};
 
@@ -86,18 +89,44 @@ impl AesKey {
     
     /// Encrypt data using AES-CTR
     pub fn encrypt_ctr(&self, plaintext: &[u8], nonce: &AesNonce) -> Result<Vec<u8>, CryptoError> {
-        // This is a placeholder - in a real implementation, we would use AES-CTR
-        // For now, we'll just use AES-GCM without authentication
-        let cipher = AesGcm::new(&self.key_data)?;
-        cipher.encrypt(plaintext, nonce.as_bytes(), None)
+        // Verify key size
+        if self.key_data.len() != 32 {
+            return Err(CryptoError::invalid_parameter(
+                "key",
+                "32 bytes",
+                &format!("{} bytes", self.key_data.len()),
+            ));
+        }
+        
+        // Verify nonce size
+        if nonce.as_bytes().len() != 16 {
+            return Err(CryptoError::invalid_parameter(
+                "nonce",
+                "16 bytes",
+                &format!("{} bytes", nonce.as_bytes().len()),
+            ));
+        }
+        
+        // Create a mutable copy of the plaintext
+        let mut ciphertext = plaintext.to_vec();
+        
+        // Create the CTR cipher
+        let mut cipher = Ctr64BE::new(
+            self.key_data.as_slice().into(),
+            nonce.as_bytes().into()
+        );
+        
+        // Apply keystream to plaintext (encrypt)
+        cipher.apply_keystream(&mut ciphertext);
+        
+        Ok(ciphertext)
     }
     
     /// Decrypt data using AES-CTR
     pub fn decrypt_ctr(&self, ciphertext: &[u8], nonce: &AesNonce) -> Result<Vec<u8>, CryptoError> {
-        // This is a placeholder - in a real implementation, we would use AES-CTR
-        // For now, we'll just use AES-GCM without authentication
-        let cipher = AesGcm::new(&self.key_data)?;
-        cipher.decrypt(ciphertext, nonce.as_bytes(), None)
+        // AES-CTR encryption and decryption are identical operations
+        // since it's just XORing the keystream with the data
+        self.encrypt_ctr(ciphertext, nonce)
     }
 }
 
@@ -969,6 +998,9 @@ pub fn decrypt_file(
     
     Ok(bytes_processed)
 }
+
+// Define AES-CTR type
+type Aes256Ctr = ctr::Ctr64BE<aes::Aes256>;
 
 #[cfg(test)]
 mod tests {

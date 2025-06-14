@@ -192,19 +192,40 @@ impl BikeKeyPair {
     
     /// Decapsulate a ciphertext to recover the shared secret
     pub fn decapsulate(&self, ciphertext: &[u8]) -> CryptoResult<Vec<u8>> {
-        // This is a stub implementation since we can't directly use the provided secret key bytes
-        // with the OQS API. In a real implementation, we would need to either:
-        // 1. Store the actual OQS objects in our key types, or
-        // 2. Implement our own BIKE algorithm
+        // Create a new BIKE KEM instance
+        let algorithm = self.algorithm.oqs_algorithm();
+        let kem = Kem::new(algorithm).map_err(|e| {
+            CryptoError::bike_error(
+                "initialization",
+                &format!("Failed to initialize BIKE for decapsulation: {}", e),
+                crate::error::error_codes::BIKE_DECAPSULATION_FAILED,
+            )
+        })?;
         
-        // For now, we'll generate a random shared secret of the correct size
-        let shared_secret_size = self.algorithm.shared_secret_size();
-        let mut shared_secret = vec![0u8; shared_secret_size];
+        // Verify ciphertext size
+        let expected_ct_size = self.algorithm.ciphertext_size();
+        if ciphertext.len() != expected_ct_size {
+            return Err(CryptoError::bike_error(
+                "decapsulation",
+                &format!(
+                    "Invalid ciphertext size: expected {}, got {}",
+                    expected_ct_size,
+                    ciphertext.len()
+                ),
+                crate::error::error_codes::BIKE_INVALID_CIPHERTEXT,
+            ));
+        }
         
-        // In a real implementation, we would use the actual BIKE decapsulation
-        // using the provided secret key and ciphertext
+        // Decapsulate the ciphertext using the secret key
+        let shared_secret = kem.decapsulate(&self.secret_key, ciphertext).map_err(|e| {
+            CryptoError::bike_error(
+                "decapsulation",
+                &format!("Failed to decapsulate BIKE ciphertext: {}", e),
+                crate::error::error_codes::BIKE_DECAPSULATION_FAILED,
+            )
+        })?;
         
-        Ok(shared_secret)
+        Ok(shared_secret.into_vec())
     }
     
     /// Get the public key
@@ -329,22 +350,40 @@ impl BikeKeyPair {
 impl BikePublicKey {
     /// Encapsulate to generate a shared secret and ciphertext
     pub fn encapsulate(&self) -> CryptoResult<(Vec<u8>, Vec<u8>)> {
-        // This is a stub implementation since we can't directly use the provided public key bytes
-        // with the OQS API. In a real implementation, we would need to either:
-        // 1. Store the actual OQS objects in our key types, or
-        // 2. Implement our own BIKE algorithm
+        // Create a new BIKE KEM instance
+        let algorithm = self.algorithm.oqs_algorithm();
+        let kem = Kem::new(algorithm).map_err(|e| {
+            CryptoError::bike_error(
+                "initialization",
+                &format!("Failed to initialize BIKE for encapsulation: {}", e),
+                crate::error::error_codes::BIKE_ENCAPSULATION_FAILED,
+            )
+        })?;
         
-        // For now, we'll generate random data of the correct size
-        let ciphertext_size = self.algorithm.ciphertext_size();
-        let shared_secret_size = self.algorithm.shared_secret_size();
+        // Verify public key size
+        let expected_pk_size = self.algorithm.public_key_size();
+        if self.public_key.len() != expected_pk_size {
+            return Err(CryptoError::bike_error(
+                "encapsulation",
+                &format!(
+                    "Invalid public key size: expected {}, got {}",
+                    expected_pk_size,
+                    self.public_key.len()
+                ),
+                crate::error::error_codes::BIKE_INVALID_KEY_SIZE,
+            ));
+        }
         
-        let ciphertext = vec![0u8; ciphertext_size];
-        let shared_secret = vec![0u8; shared_secret_size];
+        // Encapsulate using the public key
+        let (ciphertext, shared_secret) = kem.encapsulate(&self.public_key).map_err(|e| {
+            CryptoError::bike_error(
+                "encapsulation",
+                &format!("Failed to encapsulate BIKE shared secret: {}", e),
+                crate::error::error_codes::BIKE_ENCAPSULATION_FAILED,
+            )
+        })?;
         
-        // In a real implementation, we would use the actual BIKE encapsulation
-        // using the provided public key
-        
-        Ok((ciphertext, shared_secret))
+        Ok((ciphertext.into_vec(), shared_secret.into_vec()))
     }
     
     /// Serialize the public key to bytes
@@ -563,16 +602,156 @@ fn compress_ciphertext_light(ciphertext: &[u8]) -> CryptoResult<Vec<u8>> {
 
 /// Medium compression for BIKE ciphertexts (10-15% reduction)
 fn compress_ciphertext_medium(ciphertext: &[u8]) -> CryptoResult<Vec<u8>> {
-    // In a real implementation, this would use a more sophisticated compression algorithm
-    // For this example, we'll just call the light compression function
-    compress_ciphertext_light(ciphertext)
+    // Use a dictionary-based compression for medium level
+    // This approach uses a sliding window to find repeated patterns
+    
+    let mut compressed = Vec::with_capacity(ciphertext.len());
+    let mut i = 0;
+    
+    // Dictionary size of 2048 bytes (11-bit window)
+    const DICT_SIZE: usize = 2048;
+    const MIN_MATCH: usize = 3;
+    const MAX_MATCH: usize = 258;
+    
+    // Add a marker to identify this as medium compression
+    compressed.push(0xB1); // BIKE medium compression marker
+    compressed.push(0x4B); // 'K' in hex
+    
+    while i < ciphertext.len() {
+        // Look for matches in the previous DICT_SIZE bytes
+        let mut best_match_len = 0;
+        let mut best_match_dist = 0;
+        
+        // Don't look beyond the start of the buffer
+        let start = if i > DICT_SIZE { i - DICT_SIZE } else { 0 };
+        
+        // Find the longest match in the window
+        for j in start..i {
+            let mut match_len = 0;
+            while i + match_len < ciphertext.len() && 
+                  j + match_len < i && 
+                  ciphertext[i + match_len] == ciphertext[j + match_len] && 
+                  match_len < MAX_MATCH {
+                match_len += 1;
+            }
+            
+            if match_len > best_match_len {
+                best_match_len = match_len;
+                best_match_dist = i - j;
+            }
+        }
+        
+        if best_match_len >= MIN_MATCH {
+            // Encode as a length-distance pair
+            compressed.push(0); // Marker for LZ77 encoding
+            
+            // Encode distance (11 bits = 2 bytes)
+            compressed.push((best_match_dist >> 3) as u8);
+            compressed.push(((best_match_dist & 0x07) << 5 | (best_match_len - MIN_MATCH)) as u8);
+            
+            i += best_match_len;
+        } else {
+            // Literal byte
+            compressed.push(ciphertext[i]);
+            i += 1;
+        }
+    }
+    
+    Ok(compressed)
 }
 
 /// High compression for BIKE ciphertexts (15-20% reduction)
 fn compress_ciphertext_high(ciphertext: &[u8]) -> CryptoResult<Vec<u8>> {
-    // In a real implementation, this would use an even more sophisticated compression algorithm
-    // For this example, we'll just call the light compression function
-    compress_ciphertext_light(ciphertext)
+    // Use a hybrid approach for high compression:
+    // 1. First apply run-length encoding
+    // 2. Then apply dictionary-based compression
+    
+    // Step 1: Run-length encoding
+    let mut rle_compressed = Vec::with_capacity(ciphertext.len());
+    
+    // Add a marker to identify this as high compression
+    rle_compressed.push(0xB1); // BIKE high compression marker
+    rle_compressed.push(0x48); // 'H' in hex
+    
+    let mut i = 0;
+    
+    while i < ciphertext.len() {
+        let byte = ciphertext[i];
+        let mut count = 1;
+        
+        // Count repeated bytes
+        while i + count < ciphertext.len() && ciphertext[i + count] == byte && count < 255 {
+            count += 1;
+        }
+        
+        if count >= 4 {
+            // If we have 4 or more repeated bytes, use run-length encoding
+            rle_compressed.push(0); // Marker for RLE
+            rle_compressed.push(byte);
+            rle_compressed.push(count as u8);
+            i += count;
+        } else {
+            // Otherwise, just copy the byte
+            rle_compressed.push(byte);
+            i += 1;
+        }
+    }
+    
+    // Step 2: Apply a Huffman-like encoding with static tables
+    // For simplicity, we'll use a static Huffman table based on typical BIKE ciphertext patterns
+    
+    let mut huffman_compressed = Vec::with_capacity(rle_compressed.len());
+    
+    // Bit buffer for Huffman encoding
+    let mut bit_buffer: u32 = 0;
+    let mut bits_in_buffer: u8 = 0;
+    
+    for &byte in &rle_compressed[2..] { // Skip the marker bytes
+        // Simple encoding: common bytes get shorter codes
+        let (code, code_len) = match byte {
+            0 => (0b0, 2),           // RLE marker gets a very short code
+            0..=31 => (0b10, 3),     // Small values
+            32..=63 => (0b110, 4),   // Medium values
+            64..=127 => (0b1110, 5), // Larger values
+            _ => (0b1111, 5),        // Highest values
+        };
+        
+        // Add the code to the bit buffer
+        bit_buffer |= (code as u32) << bits_in_buffer;
+        bits_in_buffer += code_len;
+        
+        // Add the raw value after the prefix
+        if byte >= 64 {
+            bit_buffer |= ((byte as u32) & 0xFF) << bits_in_buffer;
+            bits_in_buffer += 8;
+        } else if byte >= 32 {
+            bit_buffer |= ((byte as u32 - 32) & 0x3F) << bits_in_buffer;
+            bits_in_buffer += 6;
+        } else if byte > 0 {
+            bit_buffer |= ((byte as u32) & 0x1F) << bits_in_buffer;
+            bits_in_buffer += 5;
+        }
+        
+        // Output full bytes from the bit buffer
+        while bits_in_buffer >= 8 {
+            huffman_compressed.push((bit_buffer & 0xFF) as u8);
+            bit_buffer >>= 8;
+            bits_in_buffer -= 8;
+        }
+    }
+    
+    // Output any remaining bits
+    if bits_in_buffer > 0 {
+        huffman_compressed.push(bit_buffer as u8);
+    }
+    
+    // Add the marker bytes at the beginning
+    let mut final_compressed = Vec::with_capacity(huffman_compressed.len() + 2);
+    final_compressed.push(0xB1);
+    final_compressed.push(0x48);
+    final_compressed.extend_from_slice(&huffman_compressed);
+    
+    Ok(final_compressed)
 }
 
 /// Decompress a BIKE ciphertext
@@ -611,16 +790,156 @@ fn decompress_ciphertext_light(compressed: &[u8]) -> CryptoResult<Vec<u8>> {
 
 /// Decompress a medium compressed BIKE ciphertext
 fn decompress_ciphertext_medium(compressed: &[u8]) -> CryptoResult<Vec<u8>> {
-    // In a real implementation, this would use a more sophisticated decompression algorithm
-    // For this example, we'll just call the light decompression function
-    decompress_ciphertext_light(compressed)
+    // Check for the medium compression marker
+    if compressed.len() < 2 || compressed[0] != 0xB1 || compressed[1] != 0x4B {
+        return Err(CryptoError::bike_error(
+            "decompression",
+            "Invalid medium compression format",
+            crate::error::error_codes::BIKE_DECOMPRESSION_FAILED,
+        ));
+    }
+    
+    let mut decompressed = Vec::new();
+    let mut i = 2; // Skip the marker
+    
+    while i < compressed.len() {
+        if compressed[i] == 0 && i + 2 < compressed.len() {
+            // This is an LZ77 marker
+            let dist_high = compressed[i + 1] as usize;
+            let dist_low_and_len = compressed[i + 2] as usize;
+            
+            let distance = (dist_high << 3) | (dist_low_and_len >> 5);
+            let length = (dist_low_and_len & 0x1F) + MIN_MATCH;
+            
+            if distance == 0 || distance > decompressed.len() {
+                return Err(CryptoError::bike_error(
+                    "decompression",
+                    "Invalid LZ77 distance in medium compression",
+                    crate::error::error_codes::BIKE_DECOMPRESSION_FAILED,
+                ));
+            }
+            
+            let pos = decompressed.len() - distance;
+            
+            // Copy the matched sequence
+            for j in 0..length {
+                if pos + j < decompressed.len() {
+                    decompressed.push(decompressed[pos + j]);
+                } else {
+                    // We're copying from what we just copied
+                    decompressed.push(decompressed[decompressed.len() - distance]);
+                }
+            }
+            
+            i += 3;
+        } else {
+            // Regular byte
+            decompressed.push(compressed[i]);
+            i += 1;
+        }
+    }
+    
+    Ok(decompressed)
 }
 
 /// Decompress a highly compressed BIKE ciphertext
 fn decompress_ciphertext_high(compressed: &[u8]) -> CryptoResult<Vec<u8>> {
-    // In a real implementation, this would use an even more sophisticated decompression algorithm
-    // For this example, we'll just call the light decompression function
-    decompress_ciphertext_light(compressed)
+    // Check for the high compression marker
+    if compressed.len() < 2 || compressed[0] != 0xB1 || compressed[1] != 0x48 {
+        return Err(CryptoError::bike_error(
+            "decompression",
+            "Invalid high compression format",
+            crate::error::error_codes::BIKE_DECOMPRESSION_FAILED,
+        ));
+    }
+    
+    // First decompress the Huffman-like encoding
+    let mut huffman_decompressed = Vec::new();
+    huffman_decompressed.push(0xB1); // Add back the marker for RLE decompression
+    huffman_decompressed.push(0x48);
+    
+    let mut i = 2; // Skip the header
+    
+    let mut bit_buffer: u32 = 0;
+    let mut bits_in_buffer: u8 = 0;
+    
+    while i < compressed.len() || bits_in_buffer > 0 {
+        // Refill the bit buffer if needed
+        while bits_in_buffer < 24 && i < compressed.len() {
+            bit_buffer |= (compressed[i] as u32) << bits_in_buffer;
+            bits_in_buffer += 8;
+            i += 1;
+        }
+        
+        if bits_in_buffer < 2 {
+            // Not enough bits left
+            break;
+        }
+        
+        // Decode based on the prefix
+        if (bit_buffer & 0b1) == 0 {
+            // 0: RLE marker
+            huffman_decompressed.push(0);
+            bit_buffer >>= 2;
+            bits_in_buffer -= 2;
+        } else if (bit_buffer & 0b11) == 0b01 {
+            // 10: Small value
+            if bits_in_buffer < 8 {
+                break;
+            }
+            let value = ((bit_buffer >> 3) & 0x1F) as u8;
+            huffman_decompressed.push(value);
+            bit_buffer >>= 8;
+            bits_in_buffer -= 8;
+        } else if (bit_buffer & 0b111) == 0b011 {
+            // 110: Medium value
+            if bits_in_buffer < 10 {
+                break;
+            }
+            let value = ((bit_buffer >> 4) & 0x3F) as u8 + 32;
+            huffman_decompressed.push(value);
+            bit_buffer >>= 10;
+            bits_in_buffer -= 10;
+        } else if (bit_buffer & 0b1111) == 0b0111 {
+            // 1110: Larger value
+            if bits_in_buffer < 13 {
+                break;
+            }
+            let value = ((bit_buffer >> 5) & 0x7F) as u8 + 64;
+            huffman_decompressed.push(value);
+            bit_buffer >>= 13;
+            bits_in_buffer -= 13;
+        } else {
+            // 1111: Highest value
+            if bits_in_buffer < 13 {
+                break;
+            }
+            let value = ((bit_buffer >> 5) & 0xFF) as u8;
+            huffman_decompressed.push(value);
+            bit_buffer >>= 13;
+            bits_in_buffer -= 13;
+        }
+    }
+    
+    // Now decompress the RLE encoding
+    let mut decompressed = Vec::new();
+    let mut i = 2; // Skip the marker bytes
+    
+    while i < huffman_decompressed.len() {
+        if huffman_decompressed[i] == 0 && i + 2 < huffman_decompressed.len() {
+            // This is an RLE marker
+            let byte = huffman_decompressed[i + 1];
+            let count = huffman_decompressed[i + 2] as usize;
+            decompressed.extend(std::iter::repeat(byte).take(count));
+            i += 3;
+        } else {
+            // Regular byte
+            decompressed.push(huffman_decompressed[i]);
+            i += 1;
+        }
+    }
+    
+    Ok(decompressed)
 }
 
 #[cfg(test)]

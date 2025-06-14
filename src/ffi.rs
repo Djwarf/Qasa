@@ -49,6 +49,12 @@ mod python {
         m.add_function(wrap_pyfunction!(dilithium_sign, m)?)?;
         m.add_function(wrap_pyfunction!(dilithium_verify, m)?)?;
         
+        // SPHINCS+ functions
+        m.add_function(wrap_pyfunction!(sphincs_keygen, m)?)?;
+        m.add_function(wrap_pyfunction!(sphincs_sign, m)?)?;
+        m.add_function(wrap_pyfunction!(sphincs_verify, m)?)?;
+        m.add_function(wrap_pyfunction!(sphincs_sign_compressed, m)?)?;
+        
         // AES functions
         m.add_function(wrap_pyfunction!(aes_gcm_encrypt, m)?)?;
         m.add_function(wrap_pyfunction!(aes_gcm_decrypt, m)?)?;
@@ -198,6 +204,97 @@ mod python {
         let ad_ref = associated_data.as_deref();
         to_py_result(aes.decrypt(&ciphertext, &nonce_array, ad_ref))
     }
+    
+    /// Generate a SPHINCS+ key pair
+    #[pyfunction]
+    fn sphincs_keygen(variant: u32) -> PyResult<(Vec<u8>, Vec<u8>)> {
+        let sphincs_variant = match variant {
+            128 => crate::sphincsplus::SphincsVariant::Sphincs128f,
+            129 => crate::sphincsplus::SphincsVariant::Sphincs128s,
+            192 => crate::sphincsplus::SphincsVariant::Sphincs192f,
+            193 => crate::sphincsplus::SphincsVariant::Sphincs192s,
+            256 => crate::sphincsplus::SphincsVariant::Sphincs256f,
+            257 => crate::sphincsplus::SphincsVariant::Sphincs256s,
+            _ => return Err(PyValueError::new_err(format!("Invalid SPHINCS+ variant: {}", variant))),
+        };
+        
+        let key_pair = to_py_result(crate::sphincsplus::SphincsKeyPair::generate(sphincs_variant))?;
+        Ok((key_pair.public_key, key_pair.secret_key))
+    }
+    
+    /// Sign a message using a SPHINCS+ secret key
+    #[pyfunction]
+    fn sphincs_sign(variant: u32, secret_key: Vec<u8>, message: Vec<u8>) -> PyResult<Vec<u8>> {
+        let sphincs_variant = match variant {
+            128 => crate::sphincsplus::SphincsVariant::Sphincs128f,
+            129 => crate::sphincsplus::SphincsVariant::Sphincs128s,
+            192 => crate::sphincsplus::SphincsVariant::Sphincs192f,
+            193 => crate::sphincsplus::SphincsVariant::Sphincs192s,
+            256 => crate::sphincsplus::SphincsVariant::Sphincs256f,
+            257 => crate::sphincsplus::SphincsVariant::Sphincs256s,
+            _ => return Err(PyValueError::new_err(format!("Invalid SPHINCS+ variant: {}", variant))),
+        };
+        
+        let key_pair = crate::sphincsplus::SphincsKeyPair {
+            public_key: Vec::new(), // Not needed for signing
+            secret_key,
+            algorithm: sphincs_variant,
+        };
+        
+        to_py_result(key_pair.sign(&message))
+    }
+    
+    /// Verify a signature using a SPHINCS+ public key
+    #[pyfunction]
+    fn sphincs_verify(variant: u32, public_key: Vec<u8>, message: Vec<u8>, signature: Vec<u8>) -> PyResult<bool> {
+        let sphincs_variant = match variant {
+            128 => crate::sphincsplus::SphincsVariant::Sphincs128f,
+            129 => crate::sphincsplus::SphincsVariant::Sphincs128s,
+            192 => crate::sphincsplus::SphincsVariant::Sphincs192f,
+            193 => crate::sphincsplus::SphincsVariant::Sphincs192s,
+            256 => crate::sphincsplus::SphincsVariant::Sphincs256f,
+            257 => crate::sphincsplus::SphincsVariant::Sphincs256s,
+            _ => return Err(PyValueError::new_err(format!("Invalid SPHINCS+ variant: {}", variant))),
+        };
+        
+        let public_key_obj = crate::sphincsplus::SphincsPublicKey {
+            public_key,
+            algorithm: sphincs_variant,
+        };
+        
+        to_py_result(public_key_obj.verify(&message, &signature))
+    }
+    
+    /// Sign a message using a SPHINCS+ secret key with compression
+    #[pyfunction]
+    fn sphincs_sign_compressed(variant: u32, secret_key: Vec<u8>, message: Vec<u8>, compression_level: u32) -> PyResult<Vec<u8>> {
+        let sphincs_variant = match variant {
+            128 => crate::sphincsplus::SphincsVariant::Sphincs128f,
+            129 => crate::sphincsplus::SphincsVariant::Sphincs128s,
+            192 => crate::sphincsplus::SphincsVariant::Sphincs192f,
+            193 => crate::sphincsplus::SphincsVariant::Sphincs192s,
+            256 => crate::sphincsplus::SphincsVariant::Sphincs256f,
+            257 => crate::sphincsplus::SphincsVariant::Sphincs256s,
+            _ => return Err(PyValueError::new_err(format!("Invalid SPHINCS+ variant: {}", variant))),
+        };
+        
+        let compression = match compression_level {
+            0 => crate::sphincsplus::CompressionLevel::None,
+            1 => crate::sphincsplus::CompressionLevel::Light,
+            2 => crate::sphincsplus::CompressionLevel::Medium,
+            3 => crate::sphincsplus::CompressionLevel::High,
+            _ => return Err(PyValueError::new_err(format!("Invalid compression level: {}", compression_level))),
+        };
+        
+        let key_pair = crate::sphincsplus::SphincsKeyPair {
+            public_key: Vec::new(), // Not needed for signing
+            secret_key,
+            algorithm: sphincs_variant,
+        };
+        
+        let compressed_sig = to_py_result(key_pair.sign_compressed(&message, compression))?;
+        Ok(compressed_sig.data().to_vec())
+    }
 }
 
 // Helper function to convert an FFI result to a C return code and message
@@ -299,6 +396,25 @@ fn dilithium_variant_from_int(variant: c_int) -> Result<DilithiumVariant, Crypto
         _ => Err(CryptoError::invalid_parameter(
             "variant",
             "2, 3, or 5",
+            &format!("{}", variant),
+        )),
+    }
+}
+
+// SPHINCS+ variant helpers
+fn sphincs_variant_from_int(variant: c_int) -> Result<crate::sphincsplus::SphincsVariant, CryptoError> {
+    use crate::sphincsplus::SphincsVariant;
+    
+    match variant {
+        128 => Ok(SphincsVariant::Sphincs128f), // Fast variant
+        129 => Ok(SphincsVariant::Sphincs128s), // Small variant
+        192 => Ok(SphincsVariant::Sphincs192f),
+        193 => Ok(SphincsVariant::Sphincs192s),
+        256 => Ok(SphincsVariant::Sphincs256f),
+        257 => Ok(SphincsVariant::Sphincs256s),
+        _ => Err(CryptoError::invalid_parameter(
+            "variant",
+            "128, 129, 192, 193, 256, or 257",
             &format!("{}", variant),
         )),
     }
@@ -1030,6 +1146,373 @@ pub extern "C" fn qasa_aes_gcm_decrypt(
                 return -1;
             }
             *plaintext_size = written;
+        }
+    }
+
+    0
+}
+
+// SPHINCS+ Functions
+
+// Generate a SPHINCS+ key pair
+#[no_mangle]
+pub extern "C" fn qasa_sphincs_keygen(
+    variant: c_int,
+    public_key: *mut u8,
+    public_key_size: *mut c_int,
+    private_key: *mut u8,
+    private_key_size: *mut c_int,
+    error_msg: *mut *mut c_char,
+) -> c_int {
+    // Convert the variant
+    let sphincs_variant = match sphincs_variant_from_int(variant) {
+        Ok(v) => v,
+        Err(e) => {
+            handle_result::<()>(Err(e), error_msg);
+            return -1;
+        }
+    };
+
+    // Generate key pair
+    let result = crate::sphincsplus::SphincsKeyPair::generate(sphincs_variant);
+    let (status, key_pair) = handle_result(result, error_msg);
+
+    if status != 0 {
+        return status;
+    }
+
+    let key_pair = key_pair.unwrap();
+
+    // Copy the public key
+    unsafe {
+        if !public_key.is_null() && !public_key_size.is_null() {
+            let max_size = *public_key_size;
+            let written = copy_to_buffer(&key_pair.public_key, public_key, max_size as usize);
+            if written < 0 {
+                handle_result::<()>(
+                    Err(CryptoError::invalid_parameter(
+                        "public_key_buffer",
+                        &format!("{} bytes", key_pair.public_key.len()),
+                        &format!("{} bytes", max_size),
+                    )),
+                    error_msg,
+                );
+                return -1;
+            }
+            *public_key_size = written;
+        }
+
+        // Copy the private key
+        if !private_key.is_null() && !private_key_size.is_null() {
+            let max_size = *private_key_size;
+            let written = copy_to_buffer(&key_pair.secret_key, private_key, max_size as usize);
+            if written < 0 {
+                handle_result::<()>(
+                    Err(CryptoError::invalid_parameter(
+                        "private_key_buffer",
+                        &format!("{} bytes", key_pair.secret_key.len()),
+                        &format!("{} bytes", max_size),
+                    )),
+                    error_msg,
+                );
+                return -1;
+            }
+            *private_key_size = written;
+        }
+    }
+
+    0
+}
+
+// SPHINCS+ sign
+#[no_mangle]
+pub extern "C" fn qasa_sphincs_sign(
+    variant: c_int,
+    private_key: *const u8,
+    private_key_size: c_int,
+    message: *const u8,
+    message_size: c_int,
+    signature: *mut u8,
+    signature_size: *mut c_int,
+    error_msg: *mut *mut c_char,
+) -> c_int {
+    // Convert the variant
+    let sphincs_variant = match sphincs_variant_from_int(variant) {
+        Ok(v) => v,
+        Err(e) => {
+            handle_result::<()>(Err(e), error_msg);
+            return -1;
+        }
+    };
+
+    // Get the private key
+    let private_key_bytes = unsafe {
+        if private_key.is_null() || private_key_size <= 0 {
+            handle_result::<()>(
+                Err(CryptoError::invalid_parameter(
+                    "private key",
+                    "valid non-null pointer",
+                    "null or invalid",
+                )),
+                error_msg,
+            );
+            return -1;
+        }
+        slice::from_raw_parts(private_key, private_key_size as usize)
+    };
+
+    // Get the message
+    let message_bytes = unsafe {
+        if message.is_null() || message_size <= 0 {
+            handle_result::<()>(
+                Err(CryptoError::invalid_parameter(
+                    "message",
+                    "valid non-null pointer",
+                    "null or invalid",
+                )),
+                error_msg,
+            );
+            return -1;
+        }
+        slice::from_raw_parts(message, message_size as usize)
+    };
+
+    let key_pair = crate::sphincsplus::SphincsKeyPair {
+        public_key: Vec::new(), // Not needed for signing
+        secret_key: private_key_bytes.to_vec(),
+        algorithm: sphincs_variant,
+    };
+
+    // Sign
+    let result = key_pair.sign(message_bytes);
+    let (status, signature_result) = handle_result(result, error_msg);
+
+    if status != 0 {
+        return status;
+    }
+
+    let sig = signature_result.unwrap();
+
+    // Copy the signature
+    unsafe {
+        if !signature.is_null() && !signature_size.is_null() {
+            let max_size = *signature_size;
+            let written = copy_to_buffer(&sig, signature, max_size as usize);
+            if written < 0 {
+                handle_result::<()>(
+                    Err(CryptoError::invalid_parameter(
+                        "Signature_buffer",
+                        &format!("{} bytes", sig.len()),
+                        &format!("{} bytes", max_size),
+                    )),
+                    error_msg,
+                );
+                return -1;
+            }
+            *signature_size = written;
+        }
+    }
+
+    0
+}
+
+// SPHINCS+ verify
+#[no_mangle]
+pub extern "C" fn qasa_sphincs_verify(
+    variant: c_int,
+    public_key: *const u8,
+    public_key_size: c_int,
+    message: *const u8,
+    message_size: c_int,
+    signature: *const u8,
+    signature_size: c_int,
+    error_msg: *mut *mut c_char,
+) -> c_int {
+    // Convert the variant
+    let sphincs_variant = match sphincs_variant_from_int(variant) {
+        Ok(v) => v,
+        Err(e) => {
+            handle_result::<()>(Err(e), error_msg);
+            return -1;
+        }
+    };
+
+    // Get the public key
+    let public_key_bytes = unsafe {
+        if public_key.is_null() || public_key_size <= 0 {
+            handle_result::<()>(
+                Err(CryptoError::invalid_parameter(
+                    "public key",
+                    "valid non-null pointer",
+                    "null or invalid",
+                )),
+                error_msg,
+            );
+            return -1;
+        }
+        slice::from_raw_parts(public_key, public_key_size as usize)
+    };
+
+    // Get the message
+    let message_bytes = unsafe {
+        if message.is_null() || message_size <= 0 {
+            handle_result::<()>(
+                Err(CryptoError::invalid_parameter(
+                    "message",
+                    "valid non-null pointer",
+                    "null or invalid",
+                )),
+                error_msg,
+            );
+            return -1;
+        }
+        slice::from_raw_parts(message, message_size as usize)
+    };
+
+    // Get the signature
+    let signature_bytes = unsafe {
+        if signature.is_null() || signature_size <= 0 {
+            handle_result::<()>(
+                Err(CryptoError::invalid_parameter(
+                    "signature",
+                    "valid non-null pointer",
+                    "null or invalid",
+                )),
+                error_msg,
+            );
+            return -1;
+        }
+        slice::from_raw_parts(signature, signature_size as usize)
+    };
+
+    // Create a public key object
+    let public_key_obj = crate::sphincsplus::SphincsPublicKey {
+        public_key: public_key_bytes.to_vec(),
+        algorithm: sphincs_variant,
+    };
+
+    // Verify the signature
+    let result = public_key_obj.verify(message_bytes, signature_bytes);
+    let (status, verify_result) = handle_result(result, error_msg);
+
+    if status != 0 {
+        return status;
+    }
+
+    if verify_result.unwrap() {
+        1 // Valid signature
+    } else {
+        0 // Invalid signature
+    }
+}
+
+// SPHINCS+ sign with compression
+#[no_mangle]
+pub extern "C" fn qasa_sphincs_sign_compressed(
+    variant: c_int,
+    private_key: *const u8,
+    private_key_size: c_int,
+    message: *const u8,
+    message_size: c_int,
+    compression_level: c_int,
+    signature: *mut u8,
+    signature_size: *mut c_int,
+    error_msg: *mut *mut c_char,
+) -> c_int {
+    // Convert the variant
+    let sphincs_variant = match sphincs_variant_from_int(variant) {
+        Ok(v) => v,
+        Err(e) => {
+            handle_result::<()>(Err(e), error_msg);
+            return -1;
+        }
+    };
+
+    // Convert compression level
+    let compression = match compression_level {
+        0 => crate::sphincsplus::CompressionLevel::None,
+        1 => crate::sphincsplus::CompressionLevel::Light,
+        2 => crate::sphincsplus::CompressionLevel::Medium,
+        3 => crate::sphincsplus::CompressionLevel::High,
+        _ => {
+            handle_result::<()>(
+                Err(CryptoError::invalid_parameter(
+                    "compression_level",
+                    "0 (None), 1 (Light), 2 (Medium), or 3 (High)",
+                    &format!("{}", compression_level),
+                )),
+                error_msg,
+            );
+            return -1;
+        }
+    };
+
+    // Get the private key
+    let private_key_bytes = unsafe {
+        if private_key.is_null() || private_key_size <= 0 {
+            handle_result::<()>(
+                Err(CryptoError::invalid_parameter(
+                    "private key",
+                    "valid non-null pointer",
+                    "null or invalid",
+                )),
+                error_msg,
+            );
+            return -1;
+        }
+        slice::from_raw_parts(private_key, private_key_size as usize)
+    };
+
+    // Get the message
+    let message_bytes = unsafe {
+        if message.is_null() || message_size <= 0 {
+            handle_result::<()>(
+                Err(CryptoError::invalid_parameter(
+                    "message",
+                    "valid non-null pointer",
+                    "null or invalid",
+                )),
+                error_msg,
+            );
+            return -1;
+        }
+        slice::from_raw_parts(message, message_size as usize)
+    };
+
+    let key_pair = crate::sphincsplus::SphincsKeyPair {
+        public_key: Vec::new(), // Not needed for signing
+        secret_key: private_key_bytes.to_vec(),
+        algorithm: sphincs_variant,
+    };
+
+    // Sign with compression
+    let result = key_pair.sign_compressed(message_bytes, compression);
+    let (status, compressed_sig) = handle_result(result, error_msg);
+
+    if status != 0 {
+        return status;
+    }
+
+    let compressed_sig = compressed_sig.unwrap();
+    let sig_data = compressed_sig.data();
+
+    // Copy the signature
+    unsafe {
+        if !signature.is_null() && !signature_size.is_null() {
+            let max_size = *signature_size;
+            let written = copy_to_buffer(sig_data, signature, max_size as usize);
+            if written < 0 {
+                handle_result::<()>(
+                    Err(CryptoError::invalid_parameter(
+                        "Signature_buffer",
+                        &format!("{} bytes", sig_data.len()),
+                        &format!("{} bytes", max_size),
+                    )),
+                    error_msg,
+                );
+                return -1;
+            }
+            *signature_size = written;
         }
     }
 
