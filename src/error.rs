@@ -27,6 +27,14 @@ pub enum CryptoError {
         context: HashMap<String, String>,
     },
 
+    #[error("SPHINCS+ operation failed: {operation} - {cause}")]
+    SphincsError {
+        operation: String,
+        cause: String,
+        error_code: u32,
+        context: HashMap<String, String>,
+    },
+
     #[error("AES operation failed: {operation} - {cause}")]
     AesError {
         operation: String,
@@ -190,6 +198,15 @@ pub mod error_codes {
     pub const PROTOCOL_STATE_INVALID: u32 = 8002;
     pub const PROTOCOL_VERSION_MISMATCH: u32 = 8003;
     pub const IO_ERROR: u32 = 8004;
+
+    // SPHINCS+ errors: 9000-9999
+    pub const SPHINCS_KEY_GENERATION_FAILED: u32 = 9001;
+    pub const SPHINCS_SIGNING_FAILED: u32 = 9002;
+    pub const SPHINCS_VERIFICATION_FAILED: u32 = 9003;
+    pub const SPHINCS_INVALID_SIGNATURE: u32 = 9004;
+    pub const SPHINCS_INVALID_KEY_SIZE: u32 = 9005;
+    pub const SPHINCS_COMPRESSION_FAILED: u32 = 9006;
+    pub const SPHINCS_DECOMPRESSION_FAILED: u32 = 9007;
 }
 
 impl CryptoError {
@@ -198,6 +215,7 @@ impl CryptoError {
         match self {
             CryptoError::KyberError { error_code, .. } => *error_code,
             CryptoError::DilithiumError { error_code, .. } => *error_code,
+            CryptoError::SphincsError { error_code, .. } => *error_code,
             CryptoError::AesError { error_code, .. } => *error_code,
             CryptoError::KeyManagementError { error_code, .. } => *error_code,
             CryptoError::SecurityPolicyViolation { error_code, .. } => *error_code,
@@ -483,11 +501,24 @@ impl CryptoError {
     }
 
     pub fn dilithium_error(operation: &str, cause: &str, error_code: u32) -> Self {
-        CryptoError::DilithiumError {
+        let mut context = HashMap::new();
+        context.insert("algorithm".to_string(), "CRYSTALS-Dilithium".to_string());
+        Self::DilithiumError {
             operation: operation.to_string(),
             cause: cause.to_string(),
             error_code,
-            context: HashMap::new(),
+            context,
+        }
+    }
+
+    pub fn sphincs_error(operation: &str, cause: &str, error_code: u32) -> Self {
+        let mut context = HashMap::new();
+        context.insert("algorithm".to_string(), "SPHINCS+".to_string());
+        Self::SphincsError {
+            operation: operation.to_string(),
+            cause: cause.to_string(),
+            error_code,
+            context,
         }
     }
 
