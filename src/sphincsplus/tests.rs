@@ -10,10 +10,7 @@ mod tests {
     };
     use crate::error::CryptoResult;
     use super::*;
-    use crate::sphincsplus::compress_signature_medium;
-    use crate::sphincsplus::decompress_signature_medium;
-    use crate::sphincsplus::compress_signature_high;
-    use crate::sphincsplus::decompress_signature_high;
+    use crate::sphincsplus::sphincsplus::{compress_signature_medium, decompress_signature_medium, compress_signature_high, decompress_signature_high};
     
     #[test]
     fn test_sphincs_key_generation() {

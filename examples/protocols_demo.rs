@@ -19,7 +19,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Demo 1: Quantum-Safe TLS
     demo_quantum_safe_tls()?;
     
-    println!("\n" + "=".repeat(50).as_str() + "\n");
+    println!("\n{}\n", "=".repeat(50));
     
     // Demo 2: Secure Messaging
     demo_secure_messaging()?;

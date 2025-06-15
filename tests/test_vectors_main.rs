@@ -199,6 +199,7 @@ fn test_all_vectors() {
         let decrypted = aes::decrypt(
             &vector.ciphertext,
             &vector.key,
+            &vector.nonce,
             vector.aad.as_deref(),
         ).expect("Failed to decrypt AES-GCM ciphertext");
         

@@ -75,13 +75,13 @@ pub fn standard_test_vectors() -> Vec<BikeTestVector> {
     let message = b"This is a test message for BIKE key encapsulation mechanism";
     
     // Test vector 1: BIKE-1 Level 1
-    vectors.push(generate_test_vector(BikeVariant::Bike1Level1, &seed_1, message));
+    vectors.push(generate_test_vector(BikeVariant::Bike1Level1, seed_1, message));
     
     // Test vector 2: BIKE-1 Level 3
-    vectors.push(generate_test_vector(BikeVariant::Bike1Level3, &seed_2, message));
+    vectors.push(generate_test_vector(BikeVariant::Bike1Level3, seed_2, message));
     
     // Test vector 3: BIKE-1 Level 5
-    vectors.push(generate_test_vector(BikeVariant::Bike1Level5, &seed_3, message));
+    vectors.push(generate_test_vector(BikeVariant::Bike1Level5, seed_3, message));
     
     vectors
 }
@@ -97,15 +97,15 @@ pub fn special_case_test_vectors() -> Vec<BikeTestVector> {
     
     // Empty message
     let empty_message = b"";
-    vectors.push(generate_test_vector(BikeVariant::Bike1Level1, &seed_1, empty_message));
+    vectors.push(generate_test_vector(BikeVariant::Bike1Level1, seed_1, empty_message));
     
     // Long message (not actually used in KEM, but for documentation)
     let long_message = vec![0u8; 1024];
-    vectors.push(generate_test_vector(BikeVariant::Bike1Level3, &seed_2, &long_message));
+    vectors.push(generate_test_vector(BikeVariant::Bike1Level3, seed_2, &long_message));
     
     // Single byte message
     let single_byte_message = b"X";
-    vectors.push(generate_test_vector(BikeVariant::Bike1Level5, &seed_3, single_byte_message));
+    vectors.push(generate_test_vector(BikeVariant::Bike1Level5, seed_3, single_byte_message));
     
     vectors
 }

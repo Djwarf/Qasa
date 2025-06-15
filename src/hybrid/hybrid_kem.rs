@@ -289,6 +289,18 @@ impl HybridKemKeyPair {
                     )
                 })?;
                 
+                // Extract post-quantum public key based on algorithm
+                let post_quantum_public_key = match self.algorithm.post_quantum {
+                    PostQuantumKemAlgorithm::Kyber(kyber_variant) => {
+                        let key_pair = KyberKeyPair::from_bytes(&self.post_quantum_key)?;
+                        key_pair.public_key().to_bytes()?
+                    },
+                    PostQuantumKemAlgorithm::Bike(bike_variant) => {
+                        let key_pair = BikeKeyPair::from_bytes(&self.post_quantum_key)?;
+                        key_pair.public_key().to_bytes()?
+                    },
+                };
+                
                 (spki.as_bytes().to_vec(), post_quantum_public_key)
             },
         };
@@ -347,7 +359,8 @@ impl HybridKemKeyPair {
                 // Parse the private key from PKCS#8
                 let key_pair = ring::signature::EcdsaKeyPair::from_pkcs8(
                     &ring::signature::ECDSA_P256_SHA256_ASN1_SIGNING,
-                    &self.classical_key
+                    &self.classical_key,
+                    &ring::rand::SystemRandom::new()
                 ).map_err(|_| CryptoError::key_management_error(
                     "decapsulation",
                     "Failed to parse P-256 key pair",
@@ -378,10 +391,9 @@ impl HybridKemKeyPair {
                 let shared_secret = ring::agreement::agree_ephemeral(
                     my_private_key,
                     &peer_public_key,
-                    ring::error::Unspecified,
                     |shared_key_material| {
                         // Copy the shared key material to a new Vec
-                        Ok(shared_key_material.to_vec())
+                        shared_key_material.to_vec()
                     }
                 ).map_err(|_| CryptoError::key_management_error(
                     "decapsulation",
@@ -393,7 +405,7 @@ impl HybridKemKeyPair {
             },
             ClassicalKemAlgorithm::Rsa2048 | ClassicalKemAlgorithm::Rsa3072 => {
                 // Decrypt the ciphertext using RSA-OAEP
-                use rsa::{RsaPrivateKey, pkcs8::DecodePrivateKey, Oaep, Hash};
+                use rsa::{RsaPrivateKey, pkcs8::DecodePrivateKey, Oaep};
                 use rand::rngs::OsRng;
                 
                 // Parse the private key from PKCS#8
@@ -410,7 +422,7 @@ impl HybridKemKeyPair {
                 
                 // Decrypt the ciphertext
                 let shared_secret = private_key.decrypt(
-                    &padding, 
+                    padding, 
                     &ciphertext.classical_ciphertext
                 ).map_err(|e| {
                     CryptoError::key_management_error(
@@ -663,10 +675,9 @@ impl HybridKemPublicKey {
                 let shared_secret = ring::agreement::agree_ephemeral(
                     ephemeral_private_key,
                     &peer_public_key,
-                    ring::error::Unspecified,
                     |shared_key_material| {
                         // Copy the shared key material to a new Vec
-                        Ok(shared_key_material.to_vec())
+                        shared_key_material.to_vec()
                     }
                 ).map_err(|_| CryptoError::key_management_error(
                     "encapsulation",
@@ -678,7 +689,7 @@ impl HybridKemPublicKey {
             },
             ClassicalKemAlgorithm::Rsa2048 | ClassicalKemAlgorithm::Rsa3072 => {
                 // Encrypt a random secret using RSA-OAEP
-                use rsa::{RsaPublicKey, pkcs8::DecodePublicKey, Oaep, Hash};
+                use rsa::{RsaPublicKey, pkcs8::DecodePublicKey, Oaep};
                 use rand::{rngs::OsRng, RngCore};
                 
                 // Generate a random shared secret
@@ -698,7 +709,7 @@ impl HybridKemPublicKey {
                 let padding = Oaep::new::<sha2::Sha256>();
                 
                 // Encrypt the shared secret
-                let ciphertext = public_key.encrypt(&mut OsRng, &padding, &shared_secret).map_err(|e| {
+                let ciphertext = public_key.encrypt(&mut OsRng, padding, &shared_secret).map_err(|e| {
                     CryptoError::key_management_error(
                         "RSA-OAEP encryption",
                         &format!("Failed to encrypt shared secret: {}", e),

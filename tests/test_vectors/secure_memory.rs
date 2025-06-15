@@ -68,36 +68,36 @@ pub fn generate_canary_buffer_vector(
     let mut canary_buffer = CanaryBuffer::new(data.len(), canary_pattern);
     
     // Copy data into canary buffer
-    canary_buffer.as_mut_slice().copy_from_slice(data);
+    canary_buffer.as_mut_slice().expect("Failed to get mutable slice").copy_from_slice(data);
     
     // Perform some operations on the canary buffer
     for i in 0..data.len() {
         if i % 3 == 0 {
-            canary_buffer.as_mut_slice()[i] ^= 0x33; // XOR with 0x33 for indices divisible by 3
+            canary_buffer.as_mut_slice().expect("Failed to get mutable slice")[i] ^= 0x33; // XOR with 0x33 for indices divisible by 3
         } else if i % 3 == 1 {
-            canary_buffer.as_mut_slice()[i] ^= 0x66; // XOR with 0x66 for indices with remainder 1
+            canary_buffer.as_mut_slice().expect("Failed to get mutable slice")[i] ^= 0x66; // XOR with 0x66 for indices with remainder 1
         } else {
-            canary_buffer.as_mut_slice()[i] ^= 0x99; // XOR with 0x99 for indices with remainder 2
+            canary_buffer.as_mut_slice().expect("Failed to get mutable slice")[i] ^= 0x99; // XOR with 0x99 for indices with remainder 2
         }
     }
     
     // Verify canaries are intact
-    canary_buffer.verify()
+    canary_buffer.check_canaries()
         .expect("Canary verification failed");
     
     // Calculate hash of the modified data
     let mut hasher = Sha3_256::new();
-    hasher.update(canary_buffer.as_slice());
+    hasher.update(canary_buffer.as_slice().expect("Failed to get slice"));
     let hash = hasher.finalize().to_vec();
     
     // Revert the operations to restore original data
     for i in 0..data.len() {
         if i % 3 == 0 {
-            canary_buffer.as_mut_slice()[i] ^= 0x33;
+            canary_buffer.as_mut_slice().expect("Failed to get mutable slice")[i] ^= 0x33;
         } else if i % 3 == 1 {
-            canary_buffer.as_mut_slice()[i] ^= 0x66;
+            canary_buffer.as_mut_slice().expect("Failed to get mutable slice")[i] ^= 0x66;
         } else {
-            canary_buffer.as_mut_slice()[i] ^= 0x99;
+            canary_buffer.as_mut_slice().expect("Failed to get mutable slice")[i] ^= 0x99;
         }
     }
     
@@ -238,26 +238,25 @@ mod tests {
             let mut canary_buffer = CanaryBuffer::new(vector.data.len(), &vector.canary_value);
             
             // Copy data into canary buffer
-            canary_buffer.as_mut_slice().copy_from_slice(&vector.data);
+            canary_buffer.as_mut_slice().expect("Failed to get mutable slice").copy_from_slice(&vector.data);
             
             // Perform the same operations as in the vector generation
             for i in 0..vector.data.len() {
                 if i % 3 == 0 {
-                    canary_buffer.as_mut_slice()[i] ^= 0x33;
+                    canary_buffer.as_mut_slice().expect("Failed to get mutable slice")[i] ^= 0x33;
                 } else if i % 3 == 1 {
-                    canary_buffer.as_mut_slice()[i] ^= 0x66;
+                    canary_buffer.as_mut_slice().expect("Failed to get mutable slice")[i] ^= 0x66;
                 } else {
-                    canary_buffer.as_mut_slice()[i] ^= 0x99;
+                    canary_buffer.as_mut_slice().expect("Failed to get mutable slice")[i] ^= 0x99;
                 }
             }
             
             // Verify canaries are intact
-            canary_buffer.verify()
-                .expect("Canary verification failed");
+            assert!(canary_buffer.verify_canaries(), "Canary verification failed");
             
             // Calculate hash of the modified data
             let mut hasher = Sha3_256::new();
-            hasher.update(canary_buffer.as_slice());
+            hasher.update(canary_buffer.as_slice().expect("Failed to get slice"));
             let hash = hasher.finalize().to_vec();
             
             // Verify hash matches expected hash
@@ -282,12 +281,12 @@ mod tests {
             }
             
             // Test with canary buffer
-            let canary_buffer = CanaryBuffer::new(data.len(), &canary_value);
+            let mut canary_buffer = CanaryBuffer::new(data.len(), &canary_value);
             if !data.is_empty() {
-                canary_buffer.as_mut_slice().copy_from_slice(&data);
+                canary_buffer.as_mut_slice().expect("Failed to get mutable slice").copy_from_slice(&data);
             }
             // Verify canaries are intact
-            assert!(canary_buffer.verify().is_ok(), "Canary verification failed for special case");
+            assert!(canary_buffer.verify_canaries(), "Canary verification failed for special case");
         }
     }
     
@@ -296,16 +295,12 @@ mod tests {
         let vectors = secure_scope_vectors();
         
         for data in vectors {
+            // Create a copy of the data that will be processed in secure scope
+            let mut secure_data = data.clone();
+            
             // Use secure scope to process sensitive data
-            with_secure_scope(|scope| {
-                // Allocate memory within the secure scope
-                let mut buffer = scope.allocate(data.len())
-                    .expect("Failed to allocate in secure scope");
-                
-                // Copy data into the secure buffer
-                buffer.copy_from_slice(&data);
-                
-                // Perform some operations
+            with_secure_scope(&mut secure_data, |buffer: &mut Vec<u8>| {
+                // Perform some operations on the secure buffer
                 for i in 0..buffer.len() {
                     buffer[i] ^= 0x42;
                 }
@@ -324,9 +319,10 @@ mod tests {
                 for i in 0..buffer.len() {
                     assert_eq!(buffer[i], data[i], "Data not properly restored in secure scope");
                 }
-                
-                Ok(())
-            }).expect("Secure scope operation failed");
+            });
+            
+            // After secure scope ends, the secure_data should be zeroed
+            // Note: the with_secure_scope function automatically zeros the data when the scope ends
         }
     }
 } 

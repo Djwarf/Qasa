@@ -1,12 +1,12 @@
-//! Integration tests for Dilithium signature compression
+//! Integration tests for SPHINCS+ signature compression
 
-use qasa::dilithium::{
-    DilithiumKeyPair,
-    DilithiumVariant,
+use qasa::sphincsplus::{
+    SphincsKeyPair,
+    SphincsVariant,
     CompressionLevel,
     CompressedSignature,
-    compress_signature,
-    decompress_signature,
+    compress_signature_light,
+    decompress_signature_light,
 };
 
 /// Test signature compression and decompression for all variants
@@ -20,12 +20,12 @@ fn test_signature_compression_roundtrip() {
     
     // Test all variants
     for variant in [
-        DilithiumVariant::Dilithium2,
-        DilithiumVariant::Dilithium3,
-        DilithiumVariant::Dilithium5,
+        SphincsVariant::Sphincs128f,
+        SphincsVariant::Sphincs128s,
+        SphincsVariant::Sphincs192f,
     ] {
         // Generate a key pair
-        let key_pair = DilithiumKeyPair::generate(variant)
+        let key_pair = SphincsKeyPair::generate(variant)
             .expect("Failed to generate key pair");
         
         for message in &messages {
@@ -33,19 +33,23 @@ fn test_signature_compression_roundtrip() {
             let signature = key_pair.sign(message)
                 .expect("Failed to sign message");
             
-            // Use light compression
-            let level = CompressionLevel::Light;
-            
-            // Compress the signature
-            let compressed = compress_signature(&signature, level, variant)
+            // Compress the signature using light compression
+            let compressed_data = compress_signature_light(&signature)
                 .expect("Failed to compress signature");
+            
+            // Create compressed signature object
+            let compressed = CompressedSignature::new(
+                compressed_data,
+                CompressionLevel::Light,
+                variant,
+            );
             
             // Print compression stats
             println!("Variant {:?}, original size: {}, compressed size: {}", 
                 variant, signature.len(), compressed.size());
             
             // Decompress the signature
-            let decompressed = decompress_signature(&compressed)
+            let decompressed = decompress_signature_light(compressed.data())
                 .expect("Failed to decompress signature");
             
             // Verify the decompressed signature
@@ -66,11 +70,7 @@ fn test_invalid_signature_compression() {
     let invalid_signature = vec![0; 100];
     
     // Try to compress it
-    let result = compress_signature(
-        &invalid_signature,
-        CompressionLevel::Light,
-        DilithiumVariant::Dilithium3,
-    );
+    let result = compress_signature_light(&invalid_signature);
     
     // It should fail
     assert!(result.is_err(), "Compressing an invalid signature should fail");
@@ -84,11 +84,11 @@ fn test_invalid_decompression() {
     let invalid_compressed = CompressedSignature::new(
         invalid_data,
         CompressionLevel::Light,
-        DilithiumVariant::Dilithium3,
+        SphincsVariant::Sphincs128f,
     );
     
     // Try to decompress it
-    let result = decompress_signature(&invalid_compressed);
+    let result = decompress_signature_light(invalid_compressed.data());
     
     // It should fail
     assert!(result.is_err(), "Decompressing an invalid compressed signature should fail");
@@ -98,7 +98,7 @@ fn test_invalid_decompression() {
 #[test]
 fn test_compression_performance() {
     // Generate a key pair
-    let key_pair = DilithiumKeyPair::generate(DilithiumVariant::Dilithium3)
+    let key_pair = SphincsKeyPair::generate(SphincsVariant::Sphincs128f)
         .expect("Failed to generate key pair");
     
     // Sign a message
@@ -108,13 +108,19 @@ fn test_compression_performance() {
     
     // Measure compression time
     let start = std::time::Instant::now();
-    let compressed = compress_signature(&signature, CompressionLevel::Light, key_pair.algorithm)
+    let compressed_data = compress_signature_light(&signature)
         .expect("Failed to compress signature");
     let compression_time = start.elapsed();
     
+    let compressed = CompressedSignature::new(
+        compressed_data,
+        CompressionLevel::Light,
+        key_pair.algorithm,
+    );
+    
     // Measure decompression time
     let start = std::time::Instant::now();
-    let decompressed = decompress_signature(&compressed)
+    let decompressed = decompress_signature_light(compressed.data())
         .expect("Failed to decompress signature");
     let decompression_time = start.elapsed();
     

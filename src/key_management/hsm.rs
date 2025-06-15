@@ -15,9 +15,11 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 use cryptoki::context::{Pkcs11, CInitializeArgs};
 use cryptoki::session::{Session, UserType};
 use cryptoki::slot::Slot;
-use cryptoki::token::Token;
+// use cryptoki::token::Token; // Not available in this version
 use cryptoki::object::{Attribute, AttributeType, ObjectHandle, KeyType, ObjectClass};
 use cryptoki::mechanism::{Mechanism, MechanismType};
+use cryptoki::mechanism::aead::GcmParams;
+use cryptoki::mechanism::rsa::PkcsPssParams;
 use cryptoki::types::{AuthPin, Ulong};
 use cryptoki::error::{Error as Pkcs11Error, RvError};
 
@@ -193,8 +195,8 @@ pub fn connect_hsm(provider: HsmProvider, config: HsmConfig) -> CryptoResult<Hsm
     // Find the appropriate slot
     let slot = if let Some(slot_id) = config.slot_id {
         // Use the specified slot ID
-        let slot_ulong = Ulong::new(slot_id);
-        slots.into_iter().find(|s| s.id() == slot_ulong).ok_or_else(|| {
+        let slot_ulong = Ulong::from(slot_id);
+        slots.into_iter().find(|s| s.id() == *slot_ulong).ok_or_else(|| {
             CryptoError::key_management_error(
                 "connect_hsm",
                 &format!("Slot {} not found", slot_id),
@@ -282,7 +284,8 @@ impl HsmConnection {
         log::info!("Logging in to HSM");
         
         // Convert PIN to AuthPin
-        let auth_pin = AuthPin::new(pin.to_vec());
+        let pin_string = String::from_utf8_lossy(pin).to_string();
+        let auth_pin = AuthPin::new(pin_string);
         
         // Attempt to authenticate with the provided PIN
         session.login(UserType::User, Some(&auth_pin)).map_err(|e| {
@@ -345,14 +348,6 @@ impl HsmConnection {
         key_type: HsmKeyType,
         attributes: HsmKeyAttributes,
     ) -> CryptoResult<HsmKeyHandle> {
-        if !self.is_logged_in {
-            return Err(CryptoError::key_management_error(
-                "generate_key_pair",
-                "Not logged in",
-                "HSM",
-            ));
-        }
-        
         let session = self.session.as_ref().ok_or_else(|| {
             CryptoError::key_management_error(
                 "generate_key_pair",
@@ -360,145 +355,174 @@ impl HsmConnection {
                 "HSM",
             )
         })?;
-        
-        log::info!("Generating {:?} key pair in HSM", key_type);
-        
-        // Set up the key generation mechanism and templates based on key_type
-        let (mechanism, public_template, private_template) = match key_type {
+
+        match key_type {
             HsmKeyType::Rsa => {
+                // RSA key pair generation
                 let mechanism = Mechanism::RsaPkcsKeyPairGen;
                 
-                let public_template = vec![
-                    Attribute::Class(ObjectClass::PUBLIC_KEY),
-                    Attribute::KeyType(KeyType::RSA),
-                    Attribute::Label(attributes.label.clone().into_bytes()),
-                    Attribute::Id(attributes.id.clone()),
+                let public_key_template = vec![
                     Attribute::Token(true),
+                    Attribute::Private(false),
+                    Attribute::Encrypt(true),
                     Attribute::Verify(true),
-                    Attribute::Encrypt(attributes.allowed_operations.contains(&HsmOperation::Encrypt)),
-                    Attribute::Wrap(attributes.allowed_operations.contains(&HsmOperation::Wrap)),
-                    Attribute::ModulusBits(2048.into()), // Default to 2048-bit RSA
+                    Attribute::Wrap(true),
                     Attribute::PublicExponent(vec![0x01, 0x00, 0x01]), // 65537
-                ];
-                
-                let private_template = vec![
-                    Attribute::Class(ObjectClass::PRIVATE_KEY),
-                    Attribute::KeyType(KeyType::RSA),
+                    Attribute::ModulusBits(2048.into()),
                     Attribute::Label(attributes.label.clone().into_bytes()),
                     Attribute::Id(attributes.id.clone()),
+                ];
+
+                let private_key_template = vec![
                     Attribute::Token(true),
                     Attribute::Private(true),
                     Attribute::Sensitive(attributes.sensitive),
-                    Attribute::Extractable(attributes.extractable),
-                    Attribute::Sign(attributes.allowed_operations.contains(&HsmOperation::Sign)),
-                    Attribute::Decrypt(attributes.allowed_operations.contains(&HsmOperation::Decrypt)),
-                    Attribute::Unwrap(attributes.allowed_operations.contains(&HsmOperation::Unwrap)),
+                    Attribute::Extractable(!attributes.sensitive), // Opposite of sensitive
+                    Attribute::Decrypt(true),
+                    Attribute::Sign(true),
+                    Attribute::Unwrap(true),
+                    Attribute::Label(attributes.label.clone().into_bytes()),
+                    Attribute::Id(attributes.id.clone()),
                 ];
-                
-                (mechanism, public_template, private_template)
+
+                let (public_handle, private_handle) = session
+                    .generate_key_pair(&mechanism, &public_key_template, &private_key_template)
+                    .map_err(|e| {
+                        CryptoError::key_management_error(
+                            "generate_key_pair",
+                            &format!("Failed to generate RSA key pair: {}", e),
+                            "HSM",
+                        )
+                    })?;
+
+                Ok(HsmKeyHandle {
+                    private_key: private_handle.into(),
+                    public_key: public_handle.into(),
+                    key_type,
+                    attributes,
+                })
             },
             HsmKeyType::Ecdsa => {
-                let mechanism = Mechanism::EcKeyPairGen;
+                // ECDSA key pair generation (P-256)
+                let mechanism = Mechanism::EccKeyPairGen;
                 
-                // P-256 curve parameters (secp256r1)
-                let ec_params = vec![
+                // P-256 curve OID: 1.2.840.10045.3.1.7
+                let p256_oid = vec![
                     0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07
                 ];
-                
-                let public_template = vec![
-                    Attribute::Class(ObjectClass::PUBLIC_KEY),
-                    Attribute::KeyType(KeyType::EC),
-                    Attribute::Label(attributes.label.clone().into_bytes()),
-                    Attribute::Id(attributes.id.clone()),
+
+                let public_key_template = vec![
                     Attribute::Token(true),
+                    Attribute::Private(false),
                     Attribute::Verify(true),
-                    Attribute::EcParams(ec_params),
-                ];
-                
-                let private_template = vec![
-                    Attribute::Class(ObjectClass::PRIVATE_KEY),
-                    Attribute::KeyType(KeyType::EC),
+                    Attribute::EcParams(p256_oid),
                     Attribute::Label(attributes.label.clone().into_bytes()),
                     Attribute::Id(attributes.id.clone()),
+                ];
+
+                let private_key_template = vec![
                     Attribute::Token(true),
                     Attribute::Private(true),
                     Attribute::Sensitive(attributes.sensitive),
-                    Attribute::Extractable(attributes.extractable),
-                    Attribute::Sign(attributes.allowed_operations.contains(&HsmOperation::Sign)),
+                    Attribute::Extractable(!attributes.sensitive),
+                    Attribute::Sign(true),
+                    Attribute::Label(attributes.label.clone().into_bytes()),
+                    Attribute::Id(attributes.id.clone()),
                 ];
-                
-                (mechanism, public_template, private_template)
+
+                let (public_handle, private_handle) = session
+                    .generate_key_pair(&mechanism, &public_key_template, &private_key_template)
+                    .map_err(|e| {
+                        CryptoError::key_management_error(
+                            "generate_key_pair",
+                            &format!("Failed to generate ECDSA key pair: {}", e),
+                            "HSM",
+                        )
+                    })?;
+
+                Ok(HsmKeyHandle {
+                    private_key: private_handle.into(),
+                    public_key: public_handle.into(),
+                    key_type,
+                    attributes,
+                })
             },
             HsmKeyType::Aes => {
+                // AES key generation
                 let mechanism = Mechanism::AesKeyGen;
                 
-                let template = vec![
-                    Attribute::Class(ObjectClass::SECRET_KEY),
+                let key_template = vec![
+                    Attribute::Token(true),
+                    Attribute::Private(true),
+                    Attribute::Sensitive(attributes.sensitive),
+                    Attribute::Extractable(!attributes.sensitive),
+                    Attribute::Encrypt(true),
+                    Attribute::Decrypt(true),
+                    Attribute::ValueLen(32.into()), // AES-256
                     Attribute::KeyType(KeyType::AES),
                     Attribute::Label(attributes.label.clone().into_bytes()),
                     Attribute::Id(attributes.id.clone()),
-                    Attribute::Token(true),
-                    Attribute::Private(true),
-                    Attribute::Sensitive(attributes.sensitive),
-                    Attribute::Extractable(attributes.extractable),
-                    Attribute::Encrypt(attributes.allowed_operations.contains(&HsmOperation::Encrypt)),
-                    Attribute::Decrypt(attributes.allowed_operations.contains(&HsmOperation::Decrypt)),
-                    Attribute::Wrap(attributes.allowed_operations.contains(&HsmOperation::Wrap)),
-                    Attribute::Unwrap(attributes.allowed_operations.contains(&HsmOperation::Unwrap)),
-                    Attribute::ValueLen(32.into()), // 256-bit AES key
                 ];
-                
-                // For symmetric keys, we generate a single key
-                let key_handle = session.generate_key(&mechanism, &template).map_err(|e| {
-                    CryptoError::key_management_error(
-                        "generate_key_pair",
-                        &format!("Failed to generate AES key: {}", e),
-                        "HSM",
-                    )
-                })?;
-                
-                log::debug!("Generated AES key with handle: {:?}", key_handle);
-                
-                return Ok(HsmKeyHandle {
+
+                let key_handle = session
+                    .generate_key(&mechanism, &key_template)
+                    .map_err(|e| {
+                        CryptoError::key_management_error(
+                            "generate_key_pair",
+                            &format!("Failed to generate AES key: {}", e),
+                            "HSM",
+                        )
+                    })?;
+
+                Ok(HsmKeyHandle {
                     private_key: key_handle.into(),
                     public_key: key_handle.into(), // Same handle for symmetric keys
                     key_type,
                     attributes,
-                });
+                })
             },
-            HsmKeyType::Dilithium(_) | HsmKeyType::Kyber(_) | HsmKeyType::GenericSecret => {
-                return Err(CryptoError::key_management_error(
+            HsmKeyType::GenericSecret => {
+                // Generic secret key generation
+                let mechanism = Mechanism::GenericSecretKeyGen;
+                
+                let key_template = vec![
+                    Attribute::Token(true),
+                    Attribute::Private(true),
+                    Attribute::Sensitive(attributes.sensitive),
+                    Attribute::Extractable(!attributes.sensitive),
+                    Attribute::ValueLen(32.into()), // 256 bits
+                    Attribute::KeyType(KeyType::GENERIC_SECRET),
+                    Attribute::Label(attributes.label.clone().into_bytes()),
+                    Attribute::Id(attributes.id.clone()),
+                ];
+
+                let key_handle = session
+                    .generate_key(&mechanism, &key_template)
+                    .map_err(|e| {
+                        CryptoError::key_management_error(
+                            "generate_key_pair",
+                            &format!("Failed to generate generic secret key: {}", e),
+                            "HSM",
+                        )
+                    })?;
+
+                Ok(HsmKeyHandle {
+                    private_key: key_handle.into(),
+                    public_key: key_handle.into(),
+                    key_type,
+                    attributes,
+                })
+            },
+            HsmKeyType::Dilithium(_) | HsmKeyType::Kyber(_) => {
+                // Post-quantum algorithms are not supported by standard PKCS#11
+                // Return an error indicating this
+                Err(CryptoError::key_management_error(
                     "generate_key_pair",
-                    &format!("Key type {:?} not supported by PKCS#11", key_type),
+                    "Post-quantum algorithms are not supported by standard PKCS#11",
                     "HSM",
-                ));
-            }
-        };
-        
-        // Generate the key pair
-        let (public_key_handle, private_key_handle) = session
-            .generate_key_pair(&mechanism, &public_template, &private_template)
-            .map_err(|e| {
-                CryptoError::key_management_error(
-                    "generate_key_pair",
-                    &format!("Failed to generate key pair: {}", e),
-                    "HSM",
-                )
-            })?;
-        
-        log::debug!(
-            "Generated key pair: public={:?}, private={:?}, label={}",
-            public_key_handle,
-            private_key_handle,
-            attributes.label
-        );
-        
-        Ok(HsmKeyHandle {
-            private_key: private_key_handle.into(),
-            public_key: public_key_handle.into(),
-            key_type,
-            attributes,
-        })
+                ))
+            },
+        }
     }
     
     /// Sign data using a key in the HSM
@@ -518,14 +542,6 @@ impl HsmConnection {
         data: &[u8],
         mechanism: HsmMechanism,
     ) -> CryptoResult<Vec<u8>> {
-        if !self.is_logged_in {
-            return Err(CryptoError::key_management_error(
-                "sign",
-                "Not logged in",
-                "HSM",
-            ));
-        }
-        
         let session = self.session.as_ref().ok_or_else(|| {
             CryptoError::key_management_error(
                 "sign",
@@ -533,42 +549,39 @@ impl HsmConnection {
                 "HSM",
             )
         })?;
-        
-        log::info!(
-            "Signing data with {:?} key using {:?} mechanism",
-            key_handle.key_type,
-            mechanism
-        );
-        
-        // Convert our mechanism to PKCS#11 mechanism
-        let pkcs11_mechanism = match (&key_handle.key_type, &mechanism) {
-            (HsmKeyType::Rsa, HsmMechanism::RsaPkcs) => Mechanism::RsaPkcs,
-            (HsmKeyType::Rsa, HsmMechanism::RsaPss) => Mechanism::RsaPssSha256,
-            (HsmKeyType::Ecdsa, HsmMechanism::Ecdsa) => Mechanism::Ecdsa,
+
+        let pkcs11_mechanism = match mechanism {
+            HsmMechanism::RsaPkcs => Mechanism::RsaPkcs,
+            HsmMechanism::RsaPss => {
+                // RSA PSS requires parameters
+                let pss_params = PkcsPssParams {
+                    hash_alg: MechanismType::SHA256,
+                    mgf: cryptoki::mechanism::rsa::PkcsMgfType::MGF1_SHA256,
+                    s_len: Ulong::from(32u64), // SHA-256 hash length
+                };
+                Mechanism::RsaPkcsPss(pss_params)
+            },
+            HsmMechanism::Ecdsa => Mechanism::Ecdsa,
+            HsmMechanism::Hmac => Mechanism::Sha256Hmac,
             _ => {
-                return Err(CryptoError::invalid_parameter(
-                    "mechanism",
-                    &format!("compatible with {:?}", key_handle.key_type),
-                    &format!("{:?}", mechanism),
+                return Err(CryptoError::key_management_error(
+                    "sign",
+                    "Unsupported signing mechanism",
+                    "HSM",
                 ));
             }
         };
+
+        let object_handle = ObjectHandle::from(key_handle.private_key);
         
-        // Get the private key handle
-        let private_key_handle = ObjectHandle::new(key_handle.private_key);
-        
-        // Perform the signing operation
-        let signature = session.sign(&pkcs11_mechanism, private_key_handle, data).map_err(|e| {
-            CryptoError::key_management_error(
-                "sign",
-                &format!("Failed to sign data: {}", e),
-                "HSM",
-            )
-        })?;
-        
-        log::debug!("Generated signature of size {} bytes", signature.len());
-        
-        Ok(signature)
+        session.sign(&pkcs11_mechanism, object_handle, data)
+            .map_err(|e| {
+                CryptoError::key_management_error(
+                    "sign",
+                    &format!("HSM signing failed: {}", e),
+                    "HSM",
+                )
+            })
     }
     
     /// Verify a signature using a key in the HSM
@@ -590,14 +603,6 @@ impl HsmConnection {
         signature: &[u8],
         mechanism: HsmMechanism,
     ) -> CryptoResult<bool> {
-        if !self.is_logged_in {
-            return Err(CryptoError::key_management_error(
-                "verify",
-                "Not logged in",
-                "HSM",
-            ));
-        }
-        
         let session = self.session.as_ref().ok_or_else(|| {
             CryptoError::key_management_error(
                 "verify",
@@ -605,50 +610,39 @@ impl HsmConnection {
                 "HSM",
             )
         })?;
-        
-        log::info!(
-            "Verifying signature with {:?} key using {:?} mechanism",
-            key_handle.key_type,
-            mechanism
-        );
-        
-        // Convert our mechanism to PKCS#11 mechanism
-        let pkcs11_mechanism = match (&key_handle.key_type, &mechanism) {
-            (HsmKeyType::Rsa, HsmMechanism::RsaPkcs) => Mechanism::RsaPkcs,
-            (HsmKeyType::Rsa, HsmMechanism::RsaPss) => Mechanism::RsaPssSha256,
-            (HsmKeyType::Ecdsa, HsmMechanism::Ecdsa) => Mechanism::Ecdsa,
+
+        let pkcs11_mechanism = match mechanism {
+            HsmMechanism::RsaPkcs => Mechanism::RsaPkcs,
+            HsmMechanism::RsaPss => {
+                // RSA PSS requires parameters
+                let pss_params = PkcsPssParams {
+                    hash_alg: MechanismType::SHA256,
+                    mgf: cryptoki::mechanism::rsa::PkcsMgfType::MGF1_SHA256,
+                    s_len: Ulong::from(32u64), // SHA-256 hash length
+                };
+                Mechanism::RsaPkcsPss(pss_params)
+            },
+            HsmMechanism::Ecdsa => Mechanism::Ecdsa,
+            HsmMechanism::Hmac => Mechanism::Sha256Hmac,
             _ => {
-                return Err(CryptoError::invalid_parameter(
-                    "mechanism",
-                    &format!("compatible with {:?}", key_handle.key_type),
-                    &format!("{:?}", mechanism),
+                return Err(CryptoError::key_management_error(
+                    "verify",
+                    "Unsupported verification mechanism",
+                    "HSM",
                 ));
             }
         };
+
+        let object_handle = ObjectHandle::from(key_handle.public_key);
         
-        // Get the public key handle
-        let public_key_handle = ObjectHandle::new(key_handle.public_key);
-        
-        // Perform the verification operation
-        let result = session.verify(&pkcs11_mechanism, public_key_handle, data, signature);
-        
-        match result {
-            Ok(()) => {
-                log::debug!("Signature verification succeeded");
-                Ok(true)
-            },
-            Err(Pkcs11Error::Pkcs11(RvError::SignatureInvalid)) => {
-                log::debug!("Signature verification failed: invalid signature");
-                Ok(false)
-            },
-            Err(e) => {
-                log::warn!("Signature verification error: {}", e);
-                Err(CryptoError::key_management_error(
-                    "verify",
-                    &format!("Failed to verify signature: {}", e),
-                    "HSM",
-                ))
-            }
+        match session.verify(&pkcs11_mechanism, object_handle, data, signature) {
+            Ok(()) => Ok(true),
+            Err(cryptoki::error::Error::Pkcs11(cryptoki::error::RvError::SignatureInvalid, _)) => Ok(false),
+            Err(e) => Err(CryptoError::key_management_error(
+                "verify",
+                &format!("HSM verification failed: {}", e),
+                "HSM",
+            )),
         }
     }
     
@@ -669,14 +663,6 @@ impl HsmConnection {
         data: &[u8],
         mechanism: HsmMechanism,
     ) -> CryptoResult<Vec<u8>> {
-        if !self.is_logged_in {
-            return Err(CryptoError::key_management_error(
-                "encrypt",
-                "Not logged in",
-                "HSM",
-            ));
-        }
-        
         let session = self.session.as_ref().ok_or_else(|| {
             CryptoError::key_management_error(
                 "encrypt",
@@ -684,52 +670,43 @@ impl HsmConnection {
                 "HSM",
             )
         })?;
-        
-        log::info!(
-            "Encrypting data with {:?} key using {:?} mechanism",
-            key_handle.key_type,
-            mechanism
-        );
-        
-        // Convert our mechanism to PKCS#11 mechanism
-        let pkcs11_mechanism = match (&key_handle.key_type, &mechanism) {
-            (HsmKeyType::Rsa, HsmMechanism::RsaPkcs) => Mechanism::RsaPkcs,
-            (HsmKeyType::Aes, HsmMechanism::AesGcm) => Mechanism::AesGcm(Default::default()),
-            (HsmKeyType::Aes, HsmMechanism::AesCbc) => Mechanism::AesCbc(Default::default()),
+
+        let pkcs11_mechanism = match mechanism {
+            HsmMechanism::RsaPkcs => Mechanism::RsaPkcs,
+            HsmMechanism::AesGcm => {
+                // For AES-GCM, we need to provide IV and additional parameters
+                // Create a static IV to avoid lifetime issues
+                static IV: [u8; 12] = [0u8; 12]; // 96-bit IV for GCM
+                let tag_bits = Ulong::from(128u64); // 128-bit authentication tag
+                Mechanism::AesGcm(GcmParams::new(&IV, &[], tag_bits))
+            },
+            HsmMechanism::AesCbc => {
+                // For AES-CBC, we need to provide IV as a fixed-size array
+                let iv = [0u8; 16]; // 128-bit IV for CBC
+                Mechanism::AesCbc(iv)
+            },
             _ => {
-                return Err(CryptoError::invalid_parameter(
-                    "mechanism",
-                    &format!("compatible with {:?}", key_handle.key_type),
-                    &format!("{:?}", mechanism),
+                return Err(CryptoError::key_management_error(
+                    "encrypt",
+                    "Unsupported encryption mechanism",
+                    "HSM",
                 ));
             }
         };
-        
-        // Get the appropriate key handle (public for RSA, private for AES)
-        let key_handle_obj = match key_handle.key_type {
-            HsmKeyType::Rsa => ObjectHandle::new(key_handle.public_key),
-            HsmKeyType::Aes => ObjectHandle::new(key_handle.private_key),
-            _ => {
-                return Err(CryptoError::invalid_parameter(
-                    "key_type",
-                    "RSA or AES",
-                    &format!("{:?}", key_handle.key_type),
-                ));
-            }
+
+        let object_handle = match key_handle.key_type {
+            HsmKeyType::Rsa => ObjectHandle::from(key_handle.public_key),
+            _ => ObjectHandle::from(key_handle.private_key),
         };
         
-        // Perform the encryption operation
-        let ciphertext = session.encrypt(&pkcs11_mechanism, key_handle_obj, data).map_err(|e| {
-            CryptoError::key_management_error(
-                "encrypt",
-                &format!("Failed to encrypt data: {}", e),
-                "HSM",
-            )
-        })?;
-        
-        log::debug!("Encrypted data: {} bytes -> {} bytes", data.len(), ciphertext.len());
-        
-        Ok(ciphertext)
+        session.encrypt(&pkcs11_mechanism, object_handle, data)
+            .map_err(|e| {
+                CryptoError::key_management_error(
+                    "encrypt",
+                    &format!("HSM encryption failed: {}", e),
+                    "HSM",
+                )
+            })
     }
     
     /// Decrypt data using a key in the HSM
@@ -749,14 +726,6 @@ impl HsmConnection {
         ciphertext: &[u8],
         mechanism: HsmMechanism,
     ) -> CryptoResult<Vec<u8>> {
-        if !self.is_logged_in {
-            return Err(CryptoError::key_management_error(
-                "decrypt",
-                "Not logged in",
-                "HSM",
-            ));
-        }
-        
         let session = self.session.as_ref().ok_or_else(|| {
             CryptoError::key_management_error(
                 "decrypt",
@@ -764,42 +733,40 @@ impl HsmConnection {
                 "HSM",
             )
         })?;
-        
-        log::info!(
-            "Decrypting data with {:?} key using {:?} mechanism",
-            key_handle.key_type,
-            mechanism
-        );
-        
-        // Convert our mechanism to PKCS#11 mechanism
-        let pkcs11_mechanism = match (&key_handle.key_type, &mechanism) {
-            (HsmKeyType::Rsa, HsmMechanism::RsaPkcs) => Mechanism::RsaPkcs,
-            (HsmKeyType::Aes, HsmMechanism::AesGcm) => Mechanism::AesGcm(Default::default()),
-            (HsmKeyType::Aes, HsmMechanism::AesCbc) => Mechanism::AesCbc(Default::default()),
+
+        let pkcs11_mechanism = match mechanism {
+            HsmMechanism::RsaPkcs => Mechanism::RsaPkcs,
+            HsmMechanism::AesGcm => {
+                // For AES-GCM, we need to provide IV and additional parameters
+                // Create a static IV to avoid lifetime issues
+                static IV: [u8; 12] = [0u8; 12]; // 96-bit IV for GCM
+                let tag_bits = Ulong::from(128u64); // 128-bit authentication tag
+                Mechanism::AesGcm(GcmParams::new(&IV, &[], tag_bits))
+            },
+            HsmMechanism::AesCbc => {
+                // For AES-CBC, we need to provide IV as a fixed-size array
+                let iv = [0u8; 16]; // 128-bit IV for CBC
+                Mechanism::AesCbc(iv)
+            },
             _ => {
-                return Err(CryptoError::invalid_parameter(
-                    "mechanism",
-                    &format!("compatible with {:?}", key_handle.key_type),
-                    &format!("{:?}", mechanism),
+                return Err(CryptoError::key_management_error(
+                    "decrypt",
+                    "Unsupported decryption mechanism",
+                    "HSM",
                 ));
             }
         };
+
+        let object_handle = ObjectHandle::from(key_handle.private_key);
         
-        // Get the private key handle
-        let private_key_handle = ObjectHandle::new(key_handle.private_key);
-        
-        // Perform the decryption operation
-        let plaintext = session.decrypt(&pkcs11_mechanism, private_key_handle, ciphertext).map_err(|e| {
-            CryptoError::key_management_error(
-                "decrypt",
-                &format!("Failed to decrypt data: {}", e),
-                "HSM",
-            )
-        })?;
-        
-        log::debug!("Decrypted data: {} bytes -> {} bytes", ciphertext.len(), plaintext.len());
-        
-        Ok(plaintext)
+        session.decrypt(&pkcs11_mechanism, object_handle, ciphertext)
+            .map_err(|e| {
+                CryptoError::key_management_error(
+                    "decrypt",
+                    &format!("HSM decryption failed: {}", e),
+                    "HSM",
+                )
+            })
     }
     
     /// Close the connection to the HSM
@@ -809,25 +776,13 @@ impl HsmConnection {
         }
         
         if let Some(session) = self.session.take() {
-            // Close the session
-            session.close().map_err(|e| {
-                CryptoError::key_management_error(
-                    "close",
-                    &format!("Failed to close session: {}", e),
-                    "HSM",
-                )
-            })?;
+            // Close the session - session.close() returns () so no error handling needed
+            session.close();
         }
         
-        // Finalize the PKCS#11 library
+        // Finalize the PKCS#11 library - context.finalize() returns () so no error handling needed
         if let Ok(context) = Arc::try_unwrap(self.context) {
-            context.finalize().map_err(|e| {
-                CryptoError::key_management_error(
-                    "close",
-                    &format!("Failed to finalize PKCS#11 library: {}", e),
-                    "HSM",
-                )
-            })?;
+            context.finalize();
         }
         
         log::info!("Closed connection to HSM provider: {:?}", self.provider);
@@ -839,8 +794,8 @@ impl HsmConnection {
 /// Handle to a key stored in an HSM
 #[derive(Debug, Clone)]
 pub struct HsmKeyHandle {
-    private_key: u64,
-    public_key: u64,
+    private_key: ObjectHandle,
+    public_key: ObjectHandle,
     key_type: HsmKeyType,
     attributes: HsmKeyAttributes,
 }

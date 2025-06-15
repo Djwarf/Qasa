@@ -6,6 +6,7 @@ use rand::Rng;
 use sha3::{Digest, Sha3_256};
 use serde::{Serialize, Deserialize};
 use serde_arrays;
+use arrayref::array_ref;
 
 /// Test vector structure for Kyber KEM operations
 #[derive(Debug, Serialize, Deserialize)]
@@ -53,8 +54,8 @@ pub fn generate_test_vector(variant: KyberVariant, seed: &[u8; 64]) -> KyberTest
     KyberTestVector {
         variant,
         seed: *seed,
-        public_key: public_key_bytes,
-        secret_key: secret_key_bytes,
+        public_key: public_key_bytes.expect("Failed to serialize public key"),
+        secret_key: secret_key_bytes.expect("Failed to serialize secret key"),
         ciphertext,
         shared_secret,
     }
@@ -63,7 +64,7 @@ pub fn generate_test_vector(variant: KyberVariant, seed: &[u8; 64]) -> KyberTest
 /// Create a deterministic RNG from a seed (not used in this implementation)
 fn deterministic_rng_from_seed(seed: &[u8; 64]) -> impl rand::RngCore {
     use rand::SeedableRng;
-    rand_chacha::ChaCha20Rng::from_seed(*seed)
+    rand_chacha::ChaCha20Rng::from_seed(*array_ref!(seed, 0, 32))
 }
 
 /// Standard test vectors for Kyber

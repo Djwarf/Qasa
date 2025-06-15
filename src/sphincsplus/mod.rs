@@ -15,7 +15,13 @@ pub use sphincsplus::{
     SphincsPublicKey, 
     SphincsVariant,
     CompressedSignature,
-    CompressionLevel
+    CompressionLevel,
+    compress_signature_light,
+    compress_signature_medium,
+    compress_signature_high,
+    decompress_signature_light,
+    decompress_signature_medium,
+    decompress_signature_high
 };
 
 /// Serializable version of SphincsVariant for storage

@@ -302,7 +302,7 @@ fn medium_compression(signature: &[u8], variant: DilithiumVariant) -> Result<Vec
         } 
         // Check if delta is small (can be encoded in 4 bits)
         else if (byte as i16 - prev_byte as i16).abs() < 8 {
-            let delta = (byte as i8 - prev_byte as i8) & 0x0F;
+            let delta = ((byte as i16 - prev_byte as i16) as i8) & 0x0F;
             
             // If we have a previous delta waiting, combine them
             if compressed.last() == Some(&0xFE) {

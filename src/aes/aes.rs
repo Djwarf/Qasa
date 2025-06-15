@@ -9,6 +9,7 @@ use rand::RngCore;
 use aes::cipher::{KeyIvInit, StreamCipher};
 use aes::Aes256;
 use ctr::Ctr64BE;
+use zeroize::Zeroize;
 
 use crate::error::{error_codes, CryptoError};
 
@@ -110,11 +111,10 @@ impl AesKey {
         // Create a mutable copy of the plaintext
         let mut ciphertext = plaintext.to_vec();
         
-        // Create the CTR cipher
-        let mut cipher = Ctr64BE::new(
-            self.key_data.as_slice().into(),
-            nonce.as_bytes().into()
-        );
+        // Create the CTR cipher using the type alias
+        let key = aes::cipher::generic_array::GenericArray::from_slice(&self.key_data);
+        let nonce = aes::cipher::generic_array::GenericArray::from_slice(nonce.as_bytes());
+        let mut cipher = Aes256Ctr::new(key, nonce);
         
         // Apply keystream to plaintext (encrypt)
         cipher.apply_keystream(&mut ciphertext);
@@ -1001,6 +1001,63 @@ pub fn decrypt_file(
 
 // Define AES-CTR type
 type Aes256Ctr = ctr::Ctr64BE<aes::Aes256>;
+
+/// Streaming decryption state for AES-GCM
+pub struct AesGcmDecryptStream {
+    cipher: AesGcm,
+    nonce: Vec<u8>,
+    associated_data: Option<Vec<u8>>,
+    buffer: Vec<u8>,
+}
+
+/// Initialize streaming decryption for AES-GCM
+pub fn decrypt_stream_init(
+    key: &[u8],
+    associated_data: Option<&[u8]>,
+    nonce: Option<&[u8]>,
+) -> Result<AesGcmDecryptStream, CryptoError> {
+    let cipher = AesGcm::new(key)?;
+    let nonce = nonce.unwrap_or(&AesGcm::generate_nonce()).to_vec();
+    let associated_data = associated_data.map(|ad| ad.to_vec());
+    
+    Ok(AesGcmDecryptStream {
+        cipher,
+        nonce,
+        associated_data,
+        buffer: Vec::new(),
+    })
+}
+
+/// Update streaming decryption with more ciphertext data
+pub fn decrypt_stream_update(
+    stream: &mut AesGcmDecryptStream,
+    chunk: &[u8],
+) -> Result<Vec<u8>, CryptoError> {
+    // For GCM, we need to accumulate all data before decryption due to authentication
+    stream.buffer.extend_from_slice(chunk);
+    Ok(Vec::new()) // Return empty until finalization
+}
+
+/// Finalize streaming decryption and return the final decrypted data
+pub fn decrypt_stream_finalize(
+    stream: &mut AesGcmDecryptStream,
+    final_chunk: &[u8],
+) -> Result<Vec<u8>, CryptoError> {
+    // Add final chunk to buffer
+    stream.buffer.extend_from_slice(final_chunk);
+    
+    // Decrypt the entire accumulated buffer
+    let plaintext = stream.cipher.decrypt(
+        &stream.buffer,
+        &stream.nonce,
+        stream.associated_data.as_deref(),
+    )?;
+    
+    // Clear the buffer for security
+    stream.buffer.zeroize();
+    
+    Ok(plaintext)
+}
 
 #[cfg(test)]
 mod tests {

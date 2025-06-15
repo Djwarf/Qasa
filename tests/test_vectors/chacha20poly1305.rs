@@ -4,6 +4,7 @@ use qasa::chacha20poly1305::{
     encrypt,
     decrypt,
 };
+use serde_arrays;
 
 /// Test vectors for ChaCha20-Poly1305 from RFC 8439
 pub fn get_test_vectors() -> Vec<ChaCha20Poly1305TestVector> {
@@ -120,8 +121,11 @@ pub fn get_test_vectors() -> Vec<ChaCha20Poly1305TestVector> {
 }
 
 /// Test vector for ChaCha20-Poly1305
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ChaCha20Poly1305TestVector {
+    #[serde(with = "serde_arrays")]
     pub key: [u8; 32],
+    #[serde(with = "serde_arrays")]
     pub nonce: [u8; 12],
     pub aad: Option<Vec<u8>>,
     pub plaintext: Vec<u8>,
