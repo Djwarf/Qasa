@@ -126,7 +126,7 @@ fn derive_poly1305_key(key: &ChaCha20Poly1305Key, nonce: &ChaCha20Poly1305Nonce)
     let chacha_nonce = ChaCha20Nonce::new(&nonce.nonce)?;
     
     // Generate keystream block with counter 0
-    let keystream = chacha20_process(&[0u8; 32], &chacha_key, &chacha_nonce, 0);
+    let keystream = super::chacha20::chacha20_keystream_block(&chacha_key, &chacha_nonce, 0);
     
     // Use first 32 bytes as Poly1305 key
     Poly1305Key::new(&keystream[0..32])

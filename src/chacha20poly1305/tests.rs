@@ -229,12 +229,58 @@ mod tests {
             0x7e, 0x90, 0x2e, 0xcb, 0xd0, 0x60, 0x06, 0x91,
         ];
         
+        // Debug: Check ChaCha20 keystream block 0 (for Poly1305 key)
+        let chacha_key = ChaCha20Key::new(&key).unwrap();
+        let chacha_nonce = ChaCha20Nonce::new(&nonce).unwrap();
+        let keystream_block0 = super::super::chacha20::chacha20_keystream_block(&chacha_key, &chacha_nonce, 0);
+        println!("Keystream block 0 (first 32 bytes for Poly1305 key): {:02x?}", &keystream_block0[0..32]);
+        
+        // Debug: Manual Poly1305 computation
+        let poly_key = Poly1305Key::new(&keystream_block0[0..32]).unwrap();
+        
+        // Pad AAD and ciphertext
+        let padded_aad = if aad.len() % 16 == 0 { aad.to_vec() } else {
+            let mut padded = aad.to_vec();
+            padded.resize((aad.len() + 15) / 16 * 16, 0);
+            padded
+        };
+        let padded_ciphertext = if expected_ciphertext.len() % 16 == 0 { expected_ciphertext.to_vec() } else {
+            let mut padded = expected_ciphertext.to_vec();
+            padded.resize((expected_ciphertext.len() + 15) / 16 * 16, 0);
+            padded
+        };
+        
+        println!("AAD: {:02x?}", &aad);
+        println!("Padded AAD: {:02x?}", &padded_aad);
+        println!("Ciphertext: {:02x?}", &expected_ciphertext[..]);
+        println!("Padded ciphertext: {:02x?}", &padded_ciphertext);
+        
+        // Length block
+        let mut length_block = [0u8; 16];
+        length_block[0..8].copy_from_slice(&(aad.len() as u64).to_le_bytes());
+        length_block[8..16].copy_from_slice(&(expected_ciphertext.len() as u64).to_le_bytes());
+        println!("Length block: {:02x?}", &length_block);
+        
+        // Manual Poly1305 computation
+        let mut state = super::super::poly1305::Poly1305State::new(&poly_key);
+        state.update(&padded_aad);
+        state.update(&padded_ciphertext);
+        state.update(&length_block);
+        let manual_tag = state.finalize();
+        println!("Manual Poly1305 tag: {:02x?}", &manual_tag);
+        
         // Convert to our types
         let chacha_key = ChaCha20Poly1305Key::new(&key).unwrap();
         let chacha_nonce = ChaCha20Poly1305Nonce::new(&nonce).unwrap();
         
         // Encrypt
         let ciphertext = encrypt(&plaintext, Some(&aad), &chacha_key, &chacha_nonce).unwrap();
+        
+        // Debug: Print actual vs expected
+        println!("Expected ciphertext: {:02x?}", &expected_ciphertext[..]);
+        println!("Actual ciphertext:   {:02x?}", &ciphertext[..plaintext.len()]);
+        println!("Expected tag: {:02x?}", &expected_tag[..]);
+        println!("Actual tag:   {:02x?}", &ciphertext[plaintext.len()..]);
         
         // Verify ciphertext (without tag)
         assert_eq!(&ciphertext[..plaintext.len()], &expected_ciphertext[..]);

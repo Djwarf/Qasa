@@ -230,4 +230,20 @@ pub fn encrypt(data: &[u8], key: &ChaCha20Key, nonce: &ChaCha20Nonce, counter: u
 /// Decrypt data using ChaCha20 stream cipher
 pub fn decrypt(data: &[u8], key: &ChaCha20Key, nonce: &ChaCha20Nonce, counter: u32) -> Vec<u8> {
     chacha20_process(data, key, nonce, counter)
+}
+
+/// Generate a ChaCha20 keystream block
+///
+/// # Arguments
+///
+/// * `key` - ChaCha20 key
+/// * `nonce` - ChaCha20 nonce
+/// * `counter` - Counter value
+///
+/// # Returns
+///
+/// 64-byte keystream block
+pub fn chacha20_keystream_block(key: &ChaCha20Key, nonce: &ChaCha20Nonce, counter: u32) -> [u8; CHACHA20_BLOCK_SIZE] {
+    let mut state = ChaCha20State::new(key, nonce, counter);
+    state.block()
 } 

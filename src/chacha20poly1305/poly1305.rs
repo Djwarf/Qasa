@@ -102,25 +102,18 @@ impl Poly1305State {
         n[3] = u32::from_le_bytes(block[12..16].try_into().unwrap());
         n[4] = 1; // 2^128
 
-        // h += n
-        self.h[0] += n[0];
-        self.h[1] += n[1];
-        self.h[2] += n[2];
-        self.h[3] += n[3];
-        self.h[4] += n[4];
-
-        // h *= r (mod 2^130 - 5)
-        let mut h0: u64 = self.h[0] as u64;
-        let mut h1: u64 = self.h[1] as u64;
-        let mut h2: u64 = self.h[2] as u64;
-        let mut h3: u64 = self.h[3] as u64;
-        let mut h4: u64 = self.h[4] as u64;
-
+        // h *= r (mod 2^130 - 5) - MULTIPLY FIRST
         let r0: u64 = self.r[0] as u64;
         let r1: u64 = self.r[1] as u64;
         let r2: u64 = self.r[2] as u64;
         let r3: u64 = self.r[3] as u64;
         let r4: u64 = self.r[4] as u64;
+
+        let h0 = self.h[0] as u64;
+        let h1 = self.h[1] as u64;
+        let h2 = self.h[2] as u64;
+        let h3 = self.h[3] as u64;
+        let h4 = self.h[4] as u64;
 
         // h = h * r
         let d0: u64 = h0 * r0 + h1 * (5 * r4) + h2 * (5 * r3) + h3 * (5 * r2) + h4 * (5 * r1);
@@ -131,23 +124,55 @@ impl Poly1305State {
 
         // Partial reduction modulo 2^130 - 5
         let mut c: u64 = d0 >> 26;
-        h0 = d0 & 0x3ffffff;
+        let mut h0 = d0 & 0x3ffffff;
         d1 += c;
 
         c = d1 >> 26;
-        h1 = d1 & 0x3ffffff;
+        let mut h1 = d1 & 0x3ffffff;
         d2 += c;
 
         c = d2 >> 26;
-        h2 = d2 & 0x3ffffff;
+        let mut h2 = d2 & 0x3ffffff;
         d3 += c;
 
         c = d3 >> 26;
-        h3 = d3 & 0x3ffffff;
+        let mut h3 = d3 & 0x3ffffff;
         d4 += c;
 
         c = d4 >> 26;
-        h4 = d4 & 0x3ffffff;
+        let mut h4 = d4 & 0x3ffffff;
+        h0 += c * 5;
+
+        c = h0 >> 26;
+        h0 &= 0x3ffffff;
+        h1 += c;
+
+        // h += n (ADD AFTER MULTIPLY) - using u64 to prevent overflow
+        h0 += n[0] as u64;
+        h1 += n[1] as u64;
+        h2 += n[2] as u64;
+        h3 += n[3] as u64;
+        h4 += n[4] as u64;
+
+        // Final reduction after addition
+        c = h0 >> 26;
+        h0 &= 0x3ffffff;
+        h1 += c;
+
+        c = h1 >> 26;
+        h1 &= 0x3ffffff;
+        h2 += c;
+
+        c = h2 >> 26;
+        h2 &= 0x3ffffff;
+        h3 += c;
+
+        c = h3 >> 26;
+        h3 &= 0x3ffffff;
+        h4 += c;
+
+        c = h4 >> 26;
+        h4 &= 0x3ffffff;
         h0 += c * 5;
 
         c = h0 >> 26;
@@ -219,25 +244,26 @@ impl Poly1305State {
         let mut h3: u32 = self.h[3];
         let mut h4: u32 = self.h[4];
 
-        let mut c: u32 = h1 >> 26;
+        let mut c: u64 = (h1 >> 26) as u64;
         h1 &= 0x3ffffff;
-        h2 += c;
+        let mut h2_64 = h2 as u64 + c;
 
-        c = h2 >> 26;
-        h2 &= 0x3ffffff;
-        h3 += c;
+        c = h2_64 >> 26;
+        h2 = (h2_64 & 0x3ffffff) as u32;
+        let mut h3_64 = h3 as u64 + c;
 
-        c = h3 >> 26;
-        h3 &= 0x3ffffff;
-        h4 += c;
+        c = h3_64 >> 26;
+        h3 = (h3_64 & 0x3ffffff) as u32;
+        let mut h4_64 = h4 as u64 + c;
 
-        c = h4 >> 26;
-        h4 &= 0x3ffffff;
-        h0 += c * 5;
+        c = h4_64 >> 26;
+        h4 = (h4_64 & 0x3ffffff) as u32;
+        let mut h0_64 = h0 as u64 + c * 5;
 
-        c = h0 >> 26;
-        h0 &= 0x3ffffff;
-        h1 += c;
+        c = h0_64 >> 26;
+        h0 = (h0_64 & 0x3ffffff) as u32;
+        let h1_64 = h1 as u64 + c;
+        h1 = h1_64 as u32;
 
         // Compute h - p
         let mut g0: i32 = h0 as i32 - 0x3ffffff - 1;
@@ -261,12 +287,18 @@ impl Poly1305State {
         h3 = (h3 & mask as u32) | (g3 & !mask) as u32;
         h4 = (h4 & mask as u32) | (g4 & !mask) as u32;
 
-        // h = h + s
-        h0 = h0 + (self.s[0] & 0x3ffffff);
-        h1 = h1 + ((self.s[0] >> 26) | (self.s[1] << 6)) & 0x3ffffff;
-        h2 = h2 + ((self.s[1] >> 20) | (self.s[2] << 12)) & 0x3ffffff;
-        h3 = h3 + ((self.s[2] >> 14) | (self.s[3] << 18)) & 0x3ffffff;
-        h4 = h4 + (self.s[3] >> 8);
+        // h = h + s (using u64 to prevent overflow)
+        let s0 = self.s[0] & 0x3ffffff;
+        let s1 = ((self.s[0] >> 26) | (self.s[1] << 6)) & 0x3ffffff;
+        let s2 = ((self.s[1] >> 20) | (self.s[2] << 12)) & 0x3ffffff;
+        let s3 = ((self.s[2] >> 14) | (self.s[3] << 18)) & 0x3ffffff;
+        let s4 = self.s[3] >> 8;
+
+        h0 = ((h0 as u64 + s0 as u64) & 0xffffffff) as u32;
+        h1 = ((h1 as u64 + s1 as u64) & 0xffffffff) as u32;
+        h2 = ((h2 as u64 + s2 as u64) & 0xffffffff) as u32;
+        h3 = ((h3 as u64 + s3 as u64) & 0xffffffff) as u32;
+        h4 = ((h4 as u64 + s4 as u64) & 0xffffffff) as u32;
 
         // Convert to bytes
         let mut tag = [0u8; POLY1305_TAG_SIZE];
