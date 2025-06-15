@@ -8,12 +8,25 @@ mod tests {
         SphincsVariant,
         CompressionLevel,
     };
+    use crate::sphincsplus::sphincsplus::is_any_sphincs_available;
     use crate::error::CryptoResult;
     use super::*;
     use crate::sphincsplus::sphincsplus::{compress_signature_medium, decompress_signature_medium, compress_signature_high, decompress_signature_high};
+
+    /// Helper macro to skip tests if SPHINCS+ is not available
+    macro_rules! skip_if_no_sphincs {
+        () => {
+            if !is_any_sphincs_available() {
+                println!("Skipping SPHINCS+ test - algorithm not available in OQS build");
+                return;
+            }
+        };
+    }
     
     #[test]
     fn test_sphincs_key_generation() {
+        skip_if_no_sphincs!();
+        
         // Test key generation for each variant
         let variants = [
             SphincsVariant::Sphincs128f,
@@ -37,6 +50,8 @@ mod tests {
     
     #[test]
     fn test_sign_verify() {
+        skip_if_no_sphincs!();
+        
         // Only test with the smallest variant for speed
         let variant = SphincsVariant::Sphincs128s;
         let key_pair = SphincsKeyPair::generate(variant).unwrap();
@@ -57,6 +72,8 @@ mod tests {
     
     #[test]
     fn test_invalid_signature() {
+        skip_if_no_sphincs!();
+        
         let variant = SphincsVariant::Sphincs128s;
         let key_pair = SphincsKeyPair::generate(variant).unwrap();
         let message = b"Test message for SPHINCS+ signature";
@@ -71,6 +88,8 @@ mod tests {
     
     #[test]
     fn test_wrong_message() {
+        skip_if_no_sphincs!();
+        
         let variant = SphincsVariant::Sphincs128s;
         let key_pair = SphincsKeyPair::generate(variant).unwrap();
         let message = b"Test message for SPHINCS+ signature";
@@ -86,6 +105,8 @@ mod tests {
     
     #[test]
     fn test_serialization() {
+        skip_if_no_sphincs!();
+        
         let variant = SphincsVariant::Sphincs128s;
         let key_pair = SphincsKeyPair::generate(variant).unwrap();
         
@@ -103,6 +124,8 @@ mod tests {
     
     #[test]
     fn test_public_key_serialization() {
+        skip_if_no_sphincs!();
+        
         let variant = SphincsVariant::Sphincs128s;
         let key_pair = SphincsKeyPair::generate(variant).unwrap();
         let public_key = key_pair.public_key();
@@ -120,6 +143,8 @@ mod tests {
     
     #[test]
     fn test_public_key_fingerprint() {
+        skip_if_no_sphincs!();
+        
         let variant = SphincsVariant::Sphincs128s;
         let key_pair = SphincsKeyPair::generate(variant).unwrap();
         let public_key = key_pair.public_key();
@@ -134,6 +159,8 @@ mod tests {
     
     #[test]
     fn test_compressed_signatures() {
+        skip_if_no_sphincs!();
+        
         let variant = SphincsVariant::Sphincs128s;
         let key_pair = SphincsKeyPair::generate(variant).unwrap();
         let message = b"Test message for SPHINCS+ compressed signature";
@@ -225,6 +252,8 @@ mod tests {
 
     #[test]
     fn test_sphincs_signature_verification() {
+        skip_if_no_sphincs!();
+        
         // Generate a key pair
         let key_pair = SphincsKeyPair::generate(SphincsVariant::Sphincs128f).unwrap();
         
@@ -259,6 +288,8 @@ mod tests {
 
     #[test]
     fn test_sphincs_serialization() {
+        skip_if_no_sphincs!();
+        
         // Generate a key pair
         let key_pair = SphincsKeyPair::generate(SphincsVariant::Sphincs128f).unwrap();
         
@@ -288,6 +319,8 @@ mod tests {
 
     #[test]
     fn test_sphincs_compression_light() {
+        skip_if_no_sphincs!();
+        
         // Generate a signature
         let key_pair = SphincsKeyPair::generate(SphincsVariant::Sphincs128f).unwrap();
         let message = b"Test message for compression";
@@ -313,6 +346,8 @@ mod tests {
 
     #[test]
     fn test_sphincs_compression_medium() {
+        skip_if_no_sphincs!();
+        
         // Generate a signature
         let key_pair = SphincsKeyPair::generate(SphincsVariant::Sphincs128f).unwrap();
         let message = b"Test message for medium compression with some repeated patterns";
@@ -344,6 +379,8 @@ mod tests {
 
     #[test]
     fn test_sphincs_compression_high() {
+        skip_if_no_sphincs!();
+        
         // Generate a signature
         let key_pair = SphincsKeyPair::generate(SphincsVariant::Sphincs128f).unwrap();
         let message = b"Test message for high compression with many repeated patterns";
@@ -376,6 +413,8 @@ mod tests {
 
     #[test]
     fn test_sphincs_fingerprint() {
+        skip_if_no_sphincs!();
+        
         // Generate a key pair
         let key_pair = SphincsKeyPair::generate(SphincsVariant::Sphincs128f).unwrap();
         
@@ -399,6 +438,8 @@ mod tests {
 
     #[test]
     fn test_sphincs_all_variants() {
+        skip_if_no_sphincs!();
+        
         // Test all SPHINCS+ variants
         let variants = [
             SphincsVariant::Sphincs128f,

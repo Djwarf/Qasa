@@ -216,6 +216,7 @@ pub mod error_codes {
     pub const IO_ERROR: u32 = 8004;
 
     // SPHINCS+ errors: 9000-9999
+    pub const SPHINCS_ALGORITHM_DISABLED: u32 = 9000;
     pub const SPHINCS_KEY_GENERATION_FAILED: u32 = 9001;
     pub const SPHINCS_SIGNING_FAILED: u32 = 9002;
     pub const SPHINCS_VERIFICATION_FAILED: u32 = 9003;
