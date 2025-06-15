@@ -102,18 +102,19 @@ impl Poly1305State {
         n[3] = u32::from_le_bytes(block[12..16].try_into().unwrap());
         n[4] = 1; // 2^128
 
-        // h *= r (mod 2^130 - 5) - MULTIPLY FIRST
+        // h += n (ADD FIRST) - using u64 to prevent overflow
+        let mut h0 = self.h[0] as u64 + n[0] as u64;
+        let mut h1 = self.h[1] as u64 + n[1] as u64;
+        let mut h2 = self.h[2] as u64 + n[2] as u64;
+        let mut h3 = self.h[3] as u64 + n[3] as u64;
+        let mut h4 = self.h[4] as u64 + n[4] as u64;
+
+        // h *= r (mod 2^130 - 5) - MULTIPLY SECOND
         let r0: u64 = self.r[0] as u64;
         let r1: u64 = self.r[1] as u64;
         let r2: u64 = self.r[2] as u64;
         let r3: u64 = self.r[3] as u64;
         let r4: u64 = self.r[4] as u64;
-
-        let h0 = self.h[0] as u64;
-        let h1 = self.h[1] as u64;
-        let h2 = self.h[2] as u64;
-        let h3 = self.h[3] as u64;
-        let h4 = self.h[4] as u64;
 
         // h = h * r
         let d0: u64 = h0 * r0 + h1 * (5 * r4) + h2 * (5 * r3) + h3 * (5 * r2) + h4 * (5 * r1);
@@ -124,55 +125,23 @@ impl Poly1305State {
 
         // Partial reduction modulo 2^130 - 5
         let mut c: u64 = d0 >> 26;
-        let mut h0 = d0 & 0x3ffffff;
+        h0 = d0 & 0x3ffffff;
         d1 += c;
 
         c = d1 >> 26;
-        let mut h1 = d1 & 0x3ffffff;
+        h1 = d1 & 0x3ffffff;
         d2 += c;
 
         c = d2 >> 26;
-        let mut h2 = d2 & 0x3ffffff;
+        h2 = d2 & 0x3ffffff;
         d3 += c;
 
         c = d3 >> 26;
-        let mut h3 = d3 & 0x3ffffff;
+        h3 = d3 & 0x3ffffff;
         d4 += c;
 
         c = d4 >> 26;
-        let mut h4 = d4 & 0x3ffffff;
-        h0 += c * 5;
-
-        c = h0 >> 26;
-        h0 &= 0x3ffffff;
-        h1 += c;
-
-        // h += n (ADD AFTER MULTIPLY) - using u64 to prevent overflow
-        h0 += n[0] as u64;
-        h1 += n[1] as u64;
-        h2 += n[2] as u64;
-        h3 += n[3] as u64;
-        h4 += n[4] as u64;
-
-        // Final reduction after addition
-        c = h0 >> 26;
-        h0 &= 0x3ffffff;
-        h1 += c;
-
-        c = h1 >> 26;
-        h1 &= 0x3ffffff;
-        h2 += c;
-
-        c = h2 >> 26;
-        h2 &= 0x3ffffff;
-        h3 += c;
-
-        c = h3 >> 26;
-        h3 &= 0x3ffffff;
-        h4 += c;
-
-        c = h4 >> 26;
-        h4 &= 0x3ffffff;
+        h4 = d4 & 0x3ffffff;
         h0 += c * 5;
 
         c = h0 >> 26;
@@ -265,59 +234,50 @@ impl Poly1305State {
         let h1_64 = h1 as u64 + c;
         h1 = h1_64 as u32;
 
-        // Compute h - p
-        let mut g0: i32 = h0 as i32 - 0x3ffffff - 1;
-        let mut g1: i32 = h1 as i32 - 0x3ffffff - 1;
-        let mut g2: i32 = h2 as i32 - 0x3ffffff - 1;
-        let mut g3: i32 = h3 as i32 - 0x3ffffff - 1;
-        let mut g4: i32 = h4 as i32 - 0x3ffffff - 1;
+        // Compute h - p where p = 2^130 - 5
+        // p in radix 2^26 representation is: [0x3fffffb, 0x3ffffff, 0x3ffffff, 0x3ffffff, 0x3ffffff]
+        let mut g0: u32 = h0.wrapping_add(5);
+        let mut g1: u32 = h1.wrapping_add((g0 >> 26) as u32);
+        g0 &= 0x3ffffff;
+        let mut g2: u32 = h2.wrapping_add((g1 >> 26) as u32);
+        g1 &= 0x3ffffff;
+        let mut g3: u32 = h3.wrapping_add((g2 >> 26) as u32);
+        g2 &= 0x3ffffff;
+        let mut g4: u32 = h4.wrapping_add((g3 >> 26) as u32);
+        g3 &= 0x3ffffff;
+        g4 &= 0x3ffffff;
 
         // Select h if h < p, or h - p if h >= p
-        let mask = ((g0 & g1 & g2 & g3 & g4) >> 31) - 1;
-        g0 &= mask;
-        g1 &= mask;
-        g2 &= mask;
-        g3 &= mask;
-        g4 &= mask;
+        // If g4 >= 4, then h >= p, so use g. Otherwise use h.
+        let mask = ((g4 >> 2) as i32).wrapping_sub(1) as u32;
+        let not_mask = !mask;
         
-        let mask = !mask;
-        h0 = (h0 & mask as u32) | (g0 & !mask) as u32;
-        h1 = (h1 & mask as u32) | (g1 & !mask) as u32;
-        h2 = (h2 & mask as u32) | (g2 & !mask) as u32;
-        h3 = (h3 & mask as u32) | (g3 & !mask) as u32;
-        h4 = (h4 & mask as u32) | (g4 & !mask) as u32;
+        h0 = (h0 & not_mask) | (g0 & mask);
+        h1 = (h1 & not_mask) | (g1 & mask);
+        h2 = (h2 & not_mask) | (g2 & mask);
+        h3 = (h3 & not_mask) | (g3 & mask);
+        h4 = (h4 & not_mask) | (g4 & mask);
 
-        // h = h + s (using u64 to prevent overflow)
-        let s0 = self.s[0] & 0x3ffffff;
-        let s1 = ((self.s[0] >> 26) | (self.s[1] << 6)) & 0x3ffffff;
-        let s2 = ((self.s[1] >> 20) | (self.s[2] << 12)) & 0x3ffffff;
-        let s3 = ((self.s[2] >> 14) | (self.s[3] << 18)) & 0x3ffffff;
-        let s4 = self.s[3] >> 8;
+        // h = h + s
+        // First, convert h from radix 2^26 to a 128-bit integer
+        let h_as_u128 = h0 as u128 + 
+                       ((h1 as u128) << 26) + 
+                       ((h2 as u128) << 52) + 
+                       ((h3 as u128) << 78) + 
+                       ((h4 as u128) << 104);
+        
+        // Convert s to 128-bit integer (little-endian)
+        let s_as_u128 = self.s[0] as u128 + 
+                       ((self.s[1] as u128) << 32) + 
+                       ((self.s[2] as u128) << 64) + 
+                       ((self.s[3] as u128) << 96);
+        
+        // Add s to h
+        let final_h = h_as_u128.wrapping_add(s_as_u128);
 
-        h0 = ((h0 as u64 + s0 as u64) & 0xffffffff) as u32;
-        h1 = ((h1 as u64 + s1 as u64) & 0xffffffff) as u32;
-        h2 = ((h2 as u64 + s2 as u64) & 0xffffffff) as u32;
-        h3 = ((h3 as u64 + s3 as u64) & 0xffffffff) as u32;
-        h4 = ((h4 as u64 + s4 as u64) & 0xffffffff) as u32;
-
-        // Convert to bytes
+        // Serialize final_h as a 128-bit little-endian integer
         let mut tag = [0u8; POLY1305_TAG_SIZE];
-        tag[0] = h0 as u8;
-        tag[1] = (h0 >> 8) as u8;
-        tag[2] = (h0 >> 16) as u8;
-        tag[3] = ((h0 >> 24) | (h1 << 2)) as u8;
-        tag[4] = (h1 >> 6) as u8;
-        tag[5] = (h1 >> 14) as u8;
-        tag[6] = ((h1 >> 22) | (h2 << 4)) as u8;
-        tag[7] = (h2 >> 4) as u8;
-        tag[8] = (h2 >> 12) as u8;
-        tag[9] = ((h2 >> 20) | (h3 << 6)) as u8;
-        tag[10] = (h3 >> 2) as u8;
-        tag[11] = (h3 >> 10) as u8;
-        tag[12] = (h3 >> 18) as u8;
-        tag[13] = (h4) as u8;
-        tag[14] = (h4 >> 8) as u8;
-        tag[15] = (h4 >> 16) as u8;
+        tag[0..16].copy_from_slice(&final_h.to_le_bytes());
 
         tag
     }
