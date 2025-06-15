@@ -70,11 +70,21 @@ impl Zeroize for Poly1305Key {
 impl Poly1305State {
     /// Create a new Poly1305 state with the given key
     pub fn new(key: &Poly1305Key) -> Self {
-        // Clamp r
-        let r0 = u32::from_le_bytes(key.r[0..4].try_into().unwrap()) & 0x0fffffff;
-        let r1 = u32::from_le_bytes(key.r[4..8].try_into().unwrap()) & 0x0ffffffc;
-        let r2 = u32::from_le_bytes(key.r[8..12].try_into().unwrap()) & 0x0ffffffc;
-        let r3 = u32::from_le_bytes(key.r[12..16].try_into().unwrap()) & 0x0ffffffc;
+        // Clamp r according to RFC 8439
+        let mut r_clamped = key.r;
+        r_clamped[3] &= 15;
+        r_clamped[4] &= 252;
+        r_clamped[7] &= 15;
+        r_clamped[8] &= 252;
+        r_clamped[11] &= 15;
+        r_clamped[12] &= 252;
+        r_clamped[15] &= 15;
+
+        // Convert clamped r to little-endian 32-bit words
+        let r0 = u32::from_le_bytes(r_clamped[0..4].try_into().unwrap());
+        let r1 = u32::from_le_bytes(r_clamped[4..8].try_into().unwrap());
+        let r2 = u32::from_le_bytes(r_clamped[8..12].try_into().unwrap());
+        let r3 = u32::from_le_bytes(r_clamped[12..16].try_into().unwrap());
 
         // Convert s to little-endian 32-bit words
         let s0 = u32::from_le_bytes(key.s[0..4].try_into().unwrap());
@@ -94,13 +104,13 @@ impl Poly1305State {
 
     /// Process a block of data
     fn process_block(&mut self, block: [u8; 16]) {
-        // Convert block to little-endian 32-bit words and add 2^128
+        // Convert block to little-endian 32-bit words
         let mut n = [0u32; 5];
         n[0] = u32::from_le_bytes(block[0..4].try_into().unwrap());
         n[1] = u32::from_le_bytes(block[4..8].try_into().unwrap());
         n[2] = u32::from_le_bytes(block[8..12].try_into().unwrap());
         n[3] = u32::from_le_bytes(block[12..16].try_into().unwrap());
-        n[4] = 1; // 2^128
+        n[4] = 1; // Always add 2^128 bit for full blocks
 
         // h += n (ADD FIRST) - using u64 to prevent overflow
         let mut h0 = self.h[0] as u64 + n[0] as u64;

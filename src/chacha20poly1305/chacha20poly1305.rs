@@ -132,19 +132,6 @@ fn derive_poly1305_key(key: &ChaCha20Poly1305Key, nonce: &ChaCha20Poly1305Nonce)
     Poly1305Key::new(&keystream[0..32])
 }
 
-/// Pad a message to a multiple of 16 bytes
-fn pad16(msg: &[u8]) -> Vec<u8> {
-    if msg.len() % 16 == 0 {
-        return msg.to_vec();
-    }
-    
-    let padding_len = 16 - (msg.len() % 16);
-    let mut padded = Vec::with_capacity(msg.len() + padding_len);
-    padded.extend_from_slice(msg);
-    padded.resize(msg.len() + padding_len, 0);
-    padded
-}
-
 /// Compute the Poly1305 tag for ChaCha20-Poly1305
 fn compute_tag(
     aad: Option<&[u8]>,
@@ -160,11 +147,25 @@ fn compute_tag(
     
     // Process AAD if provided
     if let Some(aad_data) = aad {
-        state.update(&pad16(aad_data));
+        state.update(aad_data);
+        
+        // Add padding to 16-byte boundary if needed
+        let aad_padding = 16 - (aad_data.len() % 16);
+        if aad_padding != 16 {
+            let padding = vec![0u8; aad_padding];
+            state.update(&padding);
+        }
     }
     
     // Process ciphertext
-    state.update(&pad16(ciphertext));
+    state.update(ciphertext);
+    
+    // Add padding to 16-byte boundary if needed
+    let ct_padding = 16 - (ciphertext.len() % 16);
+    if ct_padding != 16 {
+        let padding = vec![0u8; ct_padding];
+        state.update(&padding);
+    }
     
     // Process lengths (little-endian 64-bit unsigned integers)
     let mut length_block = [0u8; 16];
