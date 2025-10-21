@@ -475,4 +475,205 @@ cargo install flamegraph
 cargo flamegraph --bench crypto_bench
 ```
 
+## Publishing to Crates.io
+
+### Prerequisites for Publishing
+
+Before publishing to crates.io, ensure you have:
+
+1. **Crates.io Account**: Create an account at https://crates.io
+2. **API Token**: Generate an API token from https://crates.io/settings/tokens
+3. **Git Tag**: Create and push a version tag
+
+### Pre-Publishing Checklist
+
+Complete this checklist before publishing:
+
+- [ ] All tests pass: `cargo test`
+- [ ] Benchmarks run successfully: `cargo bench`
+- [ ] Documentation builds: `cargo doc --no-deps`
+- [ ] No compiler warnings: `cargo clippy -- -D warnings`
+- [ ] No security vulnerabilities: `cargo audit`
+- [ ] Version updated in `Cargo.toml`
+- [ ] CHANGELOG.md updated with release notes
+- [ ] README.md badges and installation instructions updated
+- [ ] Git tag created for the version
+- [ ] All changes committed and pushed
+
+### Publishing Steps
+
+#### 1. Login to Crates.io
+
+First-time setup (one-time only):
+
+```bash
+cargo login <your-api-token>
+```
+
+The token is stored in `~/.cargo/credentials` and will be used for all future publishes.
+
+#### 2. Verify Package Contents
+
+Check what will be published:
+
+```bash
+cargo package --list
+```
+
+Review the list to ensure no sensitive files are included.
+
+#### 3. Dry Run
+
+Test the publishing process without actually uploading:
+
+```bash
+cargo publish --dry-run
+```
+
+This will:
+- Build the package
+- Verify all dependencies
+- Check that documentation builds
+- Report any issues
+
+#### 4. Create Git Tag
+
+Tag the release version:
+
+```bash
+git tag -a v0.1.0 -m "Release version 0.1.0 - RFC 8439 compliant ChaCha20-Poly1305"
+git push origin v0.1.0
+```
+
+#### 5. Publish
+
+Publish to crates.io:
+
+```bash
+cargo publish
+```
+
+Once published, the crate will be available at `https://crates.io/crates/qasa` within a few minutes.
+
+### Post-Publishing Tasks
+
+After successful publication:
+
+1. **Verify Publication**
+   ```bash
+   cargo search qasa
+   ```
+
+2. **Test Installation**
+   ```bash
+   # In a separate directory
+   cargo new test_qasa
+   cd test_qasa
+   cargo add qasa@0.1.0
+   cargo build
+   ```
+
+3. **Update GitHub Release**
+   - Create a GitHub release for the tag
+   - Include CHANGELOG.md content
+   - Attach any pre-built binaries if applicable
+
+4. **Announce the Release**
+   - Update project website/documentation
+   - Announce on relevant forums or mailing lists
+   - Update any external documentation
+
+### Versioning Strategy
+
+QaSa follows [Semantic Versioning](https://semver.org/):
+
+- **Major version (X.0.0)**: Breaking changes
+- **Minor version (0.X.0)**: New features, backward compatible
+- **Patch version (0.0.X)**: Bug fixes, backward compatible
+
+Examples:
+- `0.1.0` → `0.2.0`: New features added
+- `0.1.0` → `0.1.1`: Bug fixes only
+- `0.1.0` → `1.0.0`: Breaking changes or first stable release
+
+### Yanking a Version
+
+If a critical bug is found after publishing:
+
+```bash
+# Yank the problematic version
+cargo yank --version 0.1.0
+
+# To un-yank if needed
+cargo yank --version 0.1.0 --undo
+```
+
+**Note**: Yanking does not delete the version but prevents new users from depending on it.
+
+### Publishing Checklist Script
+
+Create a script `scripts/pre-publish.sh`:
+
+```bash
+#!/bin/bash
+set -e
+
+echo "🔍 Running pre-publish checks..."
+
+echo "✅ Running tests..."
+cargo test --all-features
+
+echo "✅ Running clippy..."
+cargo clippy --all-features -- -D warnings
+
+echo "✅ Checking formatting..."
+cargo fmt -- --check
+
+echo "✅ Running security audit..."
+cargo audit
+
+echo "✅ Building documentation..."
+cargo doc --no-deps --all-features
+
+echo "✅ Packaging..."
+cargo package --list
+
+echo "✅ Dry run..."
+cargo publish --dry-run
+
+echo ""
+echo "✅ All checks passed!"
+echo ""
+echo "To publish, run:"
+echo "  git tag -a v$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version') -m 'Release version $(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')'"
+echo "  git push origin --tags"
+echo "  cargo publish"
+```
+
+Make it executable:
+
+```bash
+chmod +x scripts/pre-publish.sh
+```
+
+### Troubleshooting Publishing Issues
+
+**Issue**: `error: failed to verify package`
+```bash
+# Solution: Check that all dependencies are available on crates.io
+cargo package --list
+```
+
+**Issue**: `error: documentation failed to build`
+```bash
+# Solution: Fix documentation warnings
+cargo doc --no-deps 2>&1 | grep warning
+```
+
+**Issue**: `error: some crates are not published`
+```bash
+# Solution: All dependencies must be published to crates.io
+# Check Cargo.toml for path dependencies
+```
+
 This deployment guide ensures secure, reliable deployment of the QaSa cryptography module across various environments and use cases. 

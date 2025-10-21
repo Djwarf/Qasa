@@ -1,6 +1,13 @@
 # QaSa - Quantum-Safe Cryptography Module
 
+[![Crates.io](https://img.shields.io/crates/v/qasa.svg)](https://crates.io/crates/qasa)
+[![Documentation](https://docs.rs/qasa/badge.svg)](https://docs.rs/qasa)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Rust Version](https://img.shields.io/badge/rust-1.60%2B-blue.svg)](https://www.rust-lang.org)
+
 QaSa (Quantum-Safe) is a robust post-quantum cryptography implementation, featuring NIST-selected algorithms CRYSTALS-Kyber and CRYSTALS-Dilithium for quantum-safe communications.
+
+> ⚠️ **Important:** Version 0.1.0 includes breaking changes from v0.0.3. The ChaCha20-Poly1305 implementation has been fixed to comply with RFC 8439. Data encrypted with v0.0.3 cannot be decrypted with v0.1.0. See [CHANGELOG.md](CHANGELOG.md) for migration details.
 
 ## Features
 
