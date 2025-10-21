@@ -1,26 +1,29 @@
 //! BIKE implementation
 //!
-//! This module provides the core implementation of the BIKE post-quantum
-//! key encapsulation mechanism.
+//! This module provides a complete implementation of the BIKE post-quantum
+//! key encapsulation mechanism using polynomial arithmetic over GF(2).
 
 use std::fmt;
 use std::fmt::Display;
 use zeroize::{Zeroize, ZeroizeOnDrop};
-use oqs::kem::{Algorithm, Kem};
 
 use crate::error::{CryptoError, CryptoResult};
-use crate::security::constant_time::{ConstantTimeConfig, ConstantTimeResult};
-use crate::secure_memory::SecureBytes;
 use crate::utils;
 use crate::bike::parameters::BikeParameters;
+use super::polynomial::BinaryPolynomial;
+use super::decoder::{BgfDecoder, BgfDecoderParams};
 
 /// BIKE key pair for key encapsulation
 #[derive(Debug)]
 pub struct BikeKeyPair {
-    /// Public key for encapsulation
-    pub public_key: Vec<u8>,
-    /// Secret key for decapsulation
-    pub secret_key: Vec<u8>,
+    /// Public key polynomial h = h0 + h1
+    h: BinaryPolynomial,
+    /// Secret key polynomial h0
+    h0: BinaryPolynomial,
+    /// Secret key polynomial h1 (sparse)
+    h1: BinaryPolynomial,
+    /// Inverse of h0 mod (x^r - 1)
+    h0_inv: Option<BinaryPolynomial>,
     /// The algorithm variant
     pub algorithm: BikeVariant,
 }
@@ -92,16 +95,31 @@ impl Display for BikeVariant {
 }
 
 impl BikeVariant {
-    /// Convert to OQS algorithm
-    fn oqs_algorithm(&self) -> Algorithm {
+    /// Get BIKE parameters (r, w, t)
+    pub fn params(&self) -> (usize, usize, usize) {
         match self {
-            BikeVariant::Bike1Level1 => Algorithm::BikeL1,
-            BikeVariant::Bike1Level3 => Algorithm::BikeL3,
-            BikeVariant::Bike1Level5 => Algorithm::BikeL5,
+            BikeVariant::Bike1Level1 => (12323, 142, 134),  // BIKE-1 Level 1
+            BikeVariant::Bike1Level3 => (24659, 206, 199),  // BIKE-1 Level 3
+            BikeVariant::Bike1Level5 => (40973, 274, 264),  // BIKE-1 Level 5
         }
     }
-    
-    /// Get the security level in bits
+
+    /// Get the r parameter (block size)
+    pub fn r(&self) -> usize {
+        self.params().0
+    }
+
+    /// Get the w parameter (error weight)
+    pub fn w(&self) -> usize {
+        self.params().1
+    }
+
+    /// Get the t parameter (error correction capability)
+    pub fn t(&self) -> usize {
+        self.params().2
+    }
+
+    /// Get the security level
     pub fn security_level(&self) -> u8 {
         match self {
             BikeVariant::Bike1Level1 => 1,  // NIST Level 1
@@ -109,39 +127,30 @@ impl BikeVariant {
             BikeVariant::Bike1Level5 => 5,  // NIST Level 5
         }
     }
-    
+
     /// Get the public key size in bytes
     pub fn public_key_size(&self) -> usize {
-        match self {
-            BikeVariant::Bike1Level1 => 1541,
-            BikeVariant::Bike1Level3 => 3083,
-            BikeVariant::Bike1Level5 => 5122,
-        }
+        let r = self.r();
+        (r + 7) / 8  // r bits for h polynomial
     }
-    
+
     /// Get the secret key size in bytes
     pub fn secret_key_size(&self) -> usize {
-        match self {
-            BikeVariant::Bike1Level1 => 3082,
-            BikeVariant::Bike1Level3 => 6166,
-            BikeVariant::Bike1Level5 => 10244,
-        }
+        let r = self.r();
+        2 * ((r + 7) / 8)  // r bits each for h0 and h1
     }
-    
+
     /// Get the ciphertext size in bytes
     pub fn ciphertext_size(&self) -> usize {
-        match self {
-            BikeVariant::Bike1Level1 => 1573,
-            BikeVariant::Bike1Level3 => 3115,
-            BikeVariant::Bike1Level5 => 5154,
-        }
+        let r = self.r();
+        2 * ((r + 7) / 8)  // Syndrome (2*r bits total)
     }
-    
+
     /// Get the shared secret size in bytes
     pub fn shared_secret_size(&self) -> usize {
         32 // All BIKE variants use 256-bit shared secrets
     }
-    
+
     /// Get the memory requirement in KB
     pub fn memory_requirement_kb(&self) -> usize {
         // Approximate memory needed for decapsulation operation
@@ -149,6 +158,15 @@ impl BikeVariant {
             BikeVariant::Bike1Level1 => 24,
             BikeVariant::Bike1Level3 => 48,
             BikeVariant::Bike1Level5 => 80,
+        }
+    }
+
+    /// Get BGF decoder parameters
+    pub fn decoder_params(&self) -> BgfDecoderParams {
+        match self {
+            BikeVariant::Bike1Level1 => BgfDecoderParams::level1(),
+            BikeVariant::Bike1Level3 => BgfDecoderParams::level3(),
+            BikeVariant::Bike1Level5 => BgfDecoderParams::level5(),
         }
     }
 }
