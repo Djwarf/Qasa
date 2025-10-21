@@ -19,14 +19,14 @@ The cryptography module provides quantum-resistant cryptographic primitives for:
 
 ```toml
 [dependencies]
-qasa = "0.0.5"
+qasa = "0.1.0"
 ```
 
 With optional features:
 
 ```toml
 [dependencies]
-qasa = { version = "0.0.5", features = ["simd", "python", "wasm", "formal-verification"] }
+qasa = { version = "0.1.0", features = ["simd", "python", "wasm", "formal-verification"] }
 ```
 
 ## Core Types
@@ -313,7 +313,7 @@ QaSa provides WebAssembly (WASM) support for browser and Node.js environments.
 
 ```rust
 // Enable WASM support in Cargo.toml
-// qasa = { version = "0.0.5", features = ["wasm"] }
+// qasa = { version = "0.1.0", features = ["wasm"] }
 
 // Configure WASM-specific options
 let wasm_config = WasmConfig {

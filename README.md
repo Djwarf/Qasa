@@ -22,7 +22,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-qasa = "0.0.5"
+qasa = "0.1.0"
 ```
 
 ### Optional Features
@@ -31,7 +31,7 @@ QaSa supports several optional features that can be enabled based on your needs:
 
 ```toml
 [dependencies]
-qasa = { version = "0.0.5", features = ["simd", "python", "wasm"] }
+qasa = { version = "0.1.0", features = ["simd", "python", "wasm"] }
 ```
 
 Available features:
@@ -164,7 +164,7 @@ let signature = sign_with_hsm(
 ```rust
 // In your Cargo.toml
 // [dependencies]
-// qasa = { version = "0.0.5", features = ["wasm"] }
+// qasa = { version = "0.1.0", features = ["wasm"] }
 
 // In your wasm module
 use qasa::prelude::*;
