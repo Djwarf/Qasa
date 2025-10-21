@@ -72,7 +72,7 @@ QaSa supports several optional features that can be enabled based on your needs:
 
 ```toml
 [dependencies]
-qasa = { version = "0.0.5", features = ["simd", "python", "wasm"] }
+qasa = { version = "0.1.0", features = ["simd", "python", "wasm"] }
 ```
 
 Available features:
