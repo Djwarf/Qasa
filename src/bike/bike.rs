@@ -191,6 +191,22 @@ impl BikeKeyPair {
     }
     
     /// Decapsulate a ciphertext to recover the shared secret
+    ///
+    /// # WARNING: PLACEHOLDER IMPLEMENTATION
+    ///
+    /// The BIKE decapsulation implementation contains stub/placeholder code
+    /// and is NOT suitable for production cryptographic use. Specifically:
+    /// - The BGF decoder is a simplified stub
+    /// - The consistency verification is incomplete
+    /// - Error correction is not fully implemented
+    ///
+    /// This implementation is provided for:
+    /// - Testing and development
+    /// - API demonstration
+    /// - Integration testing
+    ///
+    /// For production use, integrate with a complete BIKE implementation
+    /// from a trusted cryptographic library.
     pub fn decapsulate(&self, ciphertext: &[u8]) -> CryptoResult<Vec<u8>> {
         // Validate ciphertext size
         let expected_ct_size = self.algorithm.ciphertext_size();
@@ -594,139 +610,161 @@ fn bytes_to_polynomial(bytes: &[u8], r: usize) -> CryptoResult<Vec<u8>> {
 }
 
 /// BIKE BGF (Bit Flipping) decoder implementation
+///
+/// # WARNING: PLACEHOLDER IMPLEMENTATION
+///
+/// This is a SIMPLIFIED stub implementation and does NOT provide the full security
+/// guarantees of BIKE. This implementation is intended for:
+/// - Testing and development purposes
+/// - API compatibility
+/// - Structure demonstration
+///
+/// For production use, this MUST be replaced with a complete BGF decoder that:
+/// - Implements proper syndrome decoding
+/// - Uses the correct error threshold calculation
+/// - Performs iterative bit flipping as per BIKE specification
+/// - Handles edge cases and error conditions properly
+///
+/// DO NOT USE THIS IN PRODUCTION CRYPTOGRAPHIC SYSTEMS.
 fn bike_bgf_decode(
-    syndrome0: &[u8], 
-    syndrome1: &[u8], 
-    secret_key: &[u8], 
-    r: usize, 
-    w: usize, 
+    syndrome0: &[u8],
+    syndrome1: &[u8],
+    secret_key: &[u8],
+    r: usize,
+    w: usize,
     t: usize
 ) -> CryptoResult<Vec<u8>> {
-    // This is a simplified BGF decoder implementation
-    // In a real implementation, this would perform the full BGF algorithm
-    
+    // STUB: This is a simplified placeholder implementation
+    // A real BGF decoder would perform proper syndrome decoding with iterative bit flipping
+
     let mut decoded = vec![0u8; r / 8];
-    
-    // Simulate BGF decoding by XORing syndromes with secret key
+
+    // STUB: Simple XOR operation (NOT cryptographically secure)
     for i in 0..decoded.len() {
         let s0 = if i < syndrome0.len() { syndrome0[i] } else { 0 };
         let s1 = if i < syndrome1.len() { syndrome1[i] } else { 0 };
         let sk = if i < secret_key.len() { secret_key[i] } else { 0 };
-        
-        // Simple XOR operation as a placeholder for BGF decoding
+
+        // STUB: This is NOT proper BGF decoding
         decoded[i] = s0 ^ s1 ^ sk;
     }
-    
-    // Apply error correction based on weight parameters
-    let error_threshold = (w * t) / 8; // Simplified threshold calculation
+
+    // STUB: Simplified error correction (NOT cryptographically secure)
+    let error_threshold = (w * t) / 8;
     let mut error_count = 0;
-    
+
     for &byte in &decoded {
         error_count += byte.count_ones() as usize;
     }
-    
+
     if error_count > error_threshold {
-        // Apply error correction by flipping bits
+        // STUB: This is NOT proper error correction
         for byte in &mut decoded {
             if byte.count_ones() > 4 {
-                *byte = !*byte; // Flip all bits if too many errors
+                *byte = !*byte;
             }
         }
     }
-    
+
     Ok(decoded)
 }
 
-/// Extract shared secret from decoded message
+/// Extract shared secret from decoded message using SHA-256
 fn extract_shared_secret(decoded_message: &[u8], algorithm: BikeVariant) -> CryptoResult<Vec<u8>> {
     let secret_size = algorithm.shared_secret_size();
-    
-    // Use a hash function to extract the shared secret from the decoded message
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-    
-    let mut hasher = DefaultHasher::new();
-    decoded_message.hash(&mut hasher);
-    let hash = hasher.finish();
-    
-    let mut shared_secret = Vec::with_capacity(secret_size);
-    
-    // Generate the required number of bytes from the hash
-    for i in 0..secret_size {
-        let mut hasher = DefaultHasher::new();
-        hash.hash(&mut hasher);
-        i.hash(&mut hasher);
-        shared_secret.push((hasher.finish() % 256) as u8);
+
+    // Use SHA-256 to extract the shared secret from the decoded message
+    // In a real BIKE implementation, this would follow the BIKE specification for key derivation
+    let hash = utils::sha256(decoded_message);
+
+    // If we need more bytes than SHA-256 provides, use HKDF
+    if secret_size <= hash.len() {
+        Ok(hash[..secret_size].to_vec())
+    } else {
+        // Use HKDF to derive the required number of bytes
+        utils::hkdf_sha256(
+            &hash,
+            Some(b"BIKE-shared-secret"),
+            Some(b"key-derivation"),
+            secret_size
+        )
     }
-    
-    Ok(shared_secret)
 }
 
 /// Verify decapsulation consistency
+///
+/// # WARNING: PLACEHOLDER IMPLEMENTATION
+///
+/// This is a STUB implementation. A real BIKE implementation would:
+/// - Re-encapsulate the shared secret with the public key
+/// - Verify that the re-encapsulation produces the same ciphertext
+/// - Use constant-time comparison
+///
+/// DO NOT USE THIS IN PRODUCTION CRYPTOGRAPHIC SYSTEMS.
 fn verify_decapsulation_consistency(
-    shared_secret: &[u8], 
-    ciphertext: &[u8], 
-    public_key: &[u8], 
+    shared_secret: &[u8],
+    ciphertext: &[u8],
+    public_key: &[u8],
     algorithm: BikeVariant
 ) -> CryptoResult<bool> {
-    // In a real implementation, this would re-encapsulate the shared secret
+    // STUB: In a real implementation, this would re-encapsulate the shared secret
     // and verify that it produces the same ciphertext
-    
-    // For now, we'll do a simple consistency check based on sizes
+
+    // Basic size validation
     let expected_secret_size = algorithm.shared_secret_size();
     let expected_ciphertext_size = algorithm.ciphertext_size();
     let expected_pk_size = algorithm.public_key_size();
-    
+
     if shared_secret.len() != expected_secret_size {
         return Ok(false);
     }
-    
+
     if ciphertext.len() != expected_ciphertext_size {
         return Ok(false);
     }
-    
+
     if public_key.len() != expected_pk_size {
         return Ok(false);
     }
-    
-    // Additional consistency check: hash-based verification
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-    
-    let mut hasher = DefaultHasher::new();
-    shared_secret.hash(&mut hasher);
-    public_key.hash(&mut hasher);
-    let expected_hash = hasher.finish();
-    
-    let mut hasher = DefaultHasher::new();
-    ciphertext.hash(&mut hasher);
-    let actual_hash = hasher.finish();
-    
-    // Simple consistency check - in practice this would be more sophisticated
-    Ok((expected_hash % 1000) == (actual_hash % 1000))
+
+    // STUB: Additional consistency check using SHA-256
+    // In production, this should be proper re-encapsulation verification
+    let mut combined = Vec::new();
+    combined.extend_from_slice(shared_secret);
+    combined.extend_from_slice(public_key);
+    let expected_hash = utils::sha256(&combined);
+
+    let actual_hash = utils::sha256(ciphertext);
+
+    // STUB: Simple hash comparison (NOT cryptographically sound)
+    // Real implementation should re-encapsulate and compare ciphertexts
+    Ok(&expected_hash[..4] == &actual_hash[..4])
 }
 
-/// Generate a deterministic shared secret based on ciphertext for placeholder implementation
+/// Generate a deterministic shared secret based on ciphertext
+///
+/// # WARNING: FOR TESTING ONLY
+///
+/// This function is intended for testing and placeholder purposes only.
+/// It uses SHA-256 to derive a deterministic shared secret from the ciphertext.
+///
+/// DO NOT USE THIS IN PRODUCTION CRYPTOGRAPHIC SYSTEMS.
 fn generate_deterministic_shared_secret(ciphertext: &[u8], secret_size: usize) -> Vec<u8> {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-    
-    let mut shared_secret = Vec::with_capacity(secret_size);
-    let mut hasher = DefaultHasher::new();
-    
-    // Hash the ciphertext to create a deterministic but unpredictable shared secret
-    ciphertext.hash(&mut hasher);
-    let base_hash = hasher.finish();
-    
-    // Generate the required number of bytes
-    for i in 0..secret_size {
-        let mut hasher = DefaultHasher::new();
-        base_hash.hash(&mut hasher);
-        i.hash(&mut hasher);
-        shared_secret.push((hasher.finish() % 256) as u8);
+    // Use SHA-256 to hash the ciphertext
+    let hash = utils::sha256(ciphertext);
+
+    // If we need more bytes than SHA-256 provides, use HKDF
+    if secret_size <= hash.len() {
+        hash[..secret_size].to_vec()
+    } else {
+        // Use HKDF to derive the required number of bytes
+        utils::hkdf_sha256(
+            &hash,
+            Some(b"BIKE-test-secret"),
+            Some(b"deterministic-derivation"),
+            secret_size
+        ).unwrap_or_else(|_| hash[..secret_size.min(hash.len())].to_vec())
     }
-    
-    shared_secret
 }
 
 fn compress_ciphertext(ciphertext: &[u8], level: CompressionLevel, variant: BikeVariant) -> CryptoResult<CompressedCiphertext> {
