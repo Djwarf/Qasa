@@ -924,9 +924,19 @@ fn verify_signature(algorithm: Algorithm, message: &[u8], signature: &[u8], publ
         Algorithm::SphincsShake256sSimple => 29792,
         _ => signature.len(), // For other algorithms, accept any size
     };
-    
+
     if signature.len() != expected_sig_size {
-        return Ok(false); // Invalid signature size
+        // Return an error for malformed signature instead of Ok(false)
+        // This helps distinguish between "invalid signature" and "malformed input"
+        return Err(CryptoError::sphincs_error(
+            "signature_validation",
+            &format!(
+                "Invalid SPHINCS+ signature size: expected {} bytes, got {} bytes",
+                expected_sig_size,
+                signature.len()
+            ),
+            crate::error::error_codes::SPHINCS_VERIFICATION_FAILED,
+        ));
     }
     
     // Create PublicKey and Signature objects from raw bytes using the Sig instance
@@ -1289,7 +1299,9 @@ mod tests {
                 // Check that it's a signature error
                 match result {
                     Err(CryptoError::SphincsError { operation, .. }) => {
-                        assert_eq!(operation, "verification");
+                        // Operation should be "signature_validation" for size mismatches
+                        assert_eq!(operation, "signature_validation",
+                            "Expected signature_validation error for size {} with {:?}", size, variant);
                     },
                     _ => panic!("Expected SPHINCS error for size {} with {:?}", size, variant),
                 }

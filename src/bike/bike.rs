@@ -1,26 +1,26 @@
 //! BIKE implementation
 //!
-//! This module provides the core implementation of the BIKE post-quantum
-//! key encapsulation mechanism.
+//! Complete implementation of the BIKE post-quantum key encapsulation mechanism
+//! using polynomial arithmetic over GF(2).
 
 use std::fmt;
 use std::fmt::Display;
 use zeroize::{Zeroize, ZeroizeOnDrop};
-use oqs::kem::{Algorithm, Kem};
 
 use crate::error::{CryptoError, CryptoResult};
-use crate::security::constant_time::{ConstantTimeConfig, ConstantTimeResult};
-use crate::secure_memory::SecureBytes;
 use crate::utils;
-use crate::bike::parameters::BikeParameters;
+use super::polynomial::BinaryPolynomial;
+use super::decoder::{BgfDecoder, BgfDecoderParams};
+use super::inversion::compute_inverse;
 
 /// BIKE key pair for key encapsulation
-#[derive(Debug)]
 pub struct BikeKeyPair {
-    /// Public key for encapsulation
-    pub public_key: Vec<u8>,
-    /// Secret key for decapsulation
-    pub secret_key: Vec<u8>,
+    /// Public key polynomial h
+    h: BinaryPolynomial,
+    /// Secret key polynomial h0 (dense)
+    h0: BinaryPolynomial,
+    /// Secret key polynomial h1 (sparse, weight w/2)
+    h1: BinaryPolynomial,
     /// The algorithm variant
     pub algorithm: BikeVariant,
 }
@@ -41,17 +41,11 @@ pub enum BikeVariant {
 pub enum CompressionLevel {
     /// No compression (original ciphertext size)
     None,
-    
     /// Light compression (approximately 5-10% size reduction)
-    /// Preserves all security properties with minimal computational overhead
     Light,
-    
     /// Medium compression (approximately 10-15% size reduction)
-    /// Good balance between size reduction and computational overhead
     Medium,
-    
     /// High compression (approximately 15-20% size reduction)
-    /// Maximum compression with higher computational overhead
     High,
 }
 
@@ -60,18 +54,17 @@ pub enum CompressionLevel {
 pub struct CompressedCiphertext {
     /// The compressed ciphertext data
     data: Vec<u8>,
-    
     /// The compression level used
     level: CompressionLevel,
-    
     /// The BIKE variant used for the ciphertext
     variant: BikeVariant,
 }
 
 impl Zeroize for BikeKeyPair {
     fn zeroize(&mut self) {
-        self.secret_key.zeroize();
-        // No need to zeroize public key
+        // Zeroize secret key polynomials
+        self.h0 = BinaryPolynomial::new(self.algorithm.r());
+        self.h1 = BinaryPolynomial::new(self.algorithm.r());
     }
 }
 
@@ -92,105 +85,130 @@ impl Display for BikeVariant {
 }
 
 impl BikeVariant {
-    /// Convert to OQS algorithm
-    fn oqs_algorithm(&self) -> Algorithm {
+    /// Get BIKE parameters (r, w, t)
+    pub fn params(&self) -> (usize, usize, usize) {
         match self {
-            BikeVariant::Bike1Level1 => Algorithm::BikeL1,
-            BikeVariant::Bike1Level3 => Algorithm::BikeL3,
-            BikeVariant::Bike1Level5 => Algorithm::BikeL5,
+            BikeVariant::Bike1Level1 => (12323, 142, 134),
+            BikeVariant::Bike1Level3 => (24659, 206, 199),
+            BikeVariant::Bike1Level5 => (40973, 274, 264),
         }
     }
-    
-    /// Get the security level in bits
+
+    /// Get the r parameter (block size)
+    pub fn r(&self) -> usize {
+        self.params().0
+    }
+
+    /// Get the w parameter (error weight)
+    pub fn w(&self) -> usize {
+        self.params().1
+    }
+
+    /// Get the t parameter (error correction capability)
+    pub fn t(&self) -> usize {
+        self.params().2
+    }
+
+    /// Get the security level
     pub fn security_level(&self) -> u8 {
         match self {
-            BikeVariant::Bike1Level1 => 1,  // NIST Level 1
-            BikeVariant::Bike1Level3 => 3,  // NIST Level 3
-            BikeVariant::Bike1Level5 => 5,  // NIST Level 5
+            BikeVariant::Bike1Level1 => 1,
+            BikeVariant::Bike1Level3 => 3,
+            BikeVariant::Bike1Level5 => 5,
         }
     }
-    
+
     /// Get the public key size in bytes
     pub fn public_key_size(&self) -> usize {
-        match self {
-            BikeVariant::Bike1Level1 => 1541,
-            BikeVariant::Bike1Level3 => 3083,
-            BikeVariant::Bike1Level5 => 5122,
-        }
+        let r = self.r();
+        (r + 7) / 8
     }
-    
+
     /// Get the secret key size in bytes
     pub fn secret_key_size(&self) -> usize {
-        match self {
-            BikeVariant::Bike1Level1 => 3082,
-            BikeVariant::Bike1Level3 => 6166,
-            BikeVariant::Bike1Level5 => 10244,
-        }
+        let r = self.r();
+        2 * ((r + 7) / 8)
     }
-    
+
     /// Get the ciphertext size in bytes
     pub fn ciphertext_size(&self) -> usize {
-        match self {
-            BikeVariant::Bike1Level1 => 1573,
-            BikeVariant::Bike1Level3 => 3115,
-            BikeVariant::Bike1Level5 => 5154,
-        }
+        let r = self.r();
+        2 * ((r + 7) / 8)
     }
-    
+
     /// Get the shared secret size in bytes
     pub fn shared_secret_size(&self) -> usize {
         32 // All BIKE variants use 256-bit shared secrets
     }
-    
+
     /// Get the memory requirement in KB
     pub fn memory_requirement_kb(&self) -> usize {
-        // Approximate memory needed for decapsulation operation
         match self {
             BikeVariant::Bike1Level1 => 24,
             BikeVariant::Bike1Level3 => 48,
             BikeVariant::Bike1Level5 => 80,
         }
     }
+
+    /// Get BGF decoder parameters
+    pub fn decoder_params(&self) -> BgfDecoderParams {
+        match self {
+            BikeVariant::Bike1Level1 => BgfDecoderParams::level1(),
+            BikeVariant::Bike1Level3 => BgfDecoderParams::level3(),
+            BikeVariant::Bike1Level5 => BgfDecoderParams::level5(),
+        }
+    }
 }
 
 /// BIKE public key for encapsulation
 pub struct BikePublicKey {
-    /// Public key for encapsulation
-    pub public_key: Vec<u8>,
+    /// Public key polynomial h
+    h: BinaryPolynomial,
     /// The algorithm variant
     pub algorithm: BikeVariant,
 }
 
 impl BikeKeyPair {
     /// Generate a new BIKE key pair
+    ///
+    /// Key generation:
+    /// 1. Generate h0 with weight w/2 (sparse polynomial)
+    /// 2. Generate h1 with weight w/2 (sparse polynomial)
+    /// 3. Compute h = h0^(-1) * h1 mod (x^r - 1)
+    ///
+    /// Public key: h
+    /// Secret key: (h0, h1)
     pub fn generate(variant: BikeVariant) -> CryptoResult<Self> {
-        // Create a new BIKE KEM instance
-        let algorithm = variant.oqs_algorithm();
-        let kem = Kem::new(algorithm).map_err(|e| {
-            CryptoError::bike_error(
-                "initialization",
-                &format!("Failed to initialize BIKE: {}", e),
-                crate::error::error_codes::BIKE_KEY_GENERATION_FAILED,
-            )
-        })?;
-        
-        // Generate key pair
-        let (public_key, secret_key) = kem.keypair().map_err(|e| {
-            CryptoError::bike_error(
-                "key_generation",
-                &format!("Failed to generate BIKE keypair: {}", e),
-                crate::error::error_codes::BIKE_KEY_GENERATION_FAILED,
-            )
-        })?;
-        
+        let r = variant.r();
+        let w = variant.w();
+
+        // Generate h0 and h1 with weight w/2 each
+        let weight = w / 2;
+        let h0 = BinaryPolynomial::random_with_weight(r, weight)?;
+        let h1 = BinaryPolynomial::random_with_weight(r, weight)?;
+
+        // Compute h = h0^(-1) * h1 mod (x^r - 1)
+        // For simplicity in GF(2), we use h = h1 / h0
+        // In practice, compute h0_inv first, then h = h0_inv * h1
+        let h0_inv = compute_inverse(&h0)?;
+        let h = h0_inv.mul(&h1)?;
+
         Ok(Self {
-            public_key: public_key.into_vec(),
-            secret_key: secret_key.into_vec(),
+            h,
+            h0,
+            h1,
             algorithm: variant,
         })
     }
-    
+
     /// Decapsulate a ciphertext to recover the shared secret
+    ///
+    /// Decapsulation:
+    /// 1. Parse ciphertext as syndrome s
+    /// 2. Compute s0 = s * h0, s1 = s * h1
+    /// 3. Use BGF decoder to recover error vectors (e0, e1) from (s0, s1)
+    /// 4. Compute m = hash of error vectors
+    /// 5. Derive shared secret K = hash(m || c)
     pub fn decapsulate(&self, ciphertext: &[u8]) -> CryptoResult<Vec<u8>> {
         // Validate ciphertext size
         let expected_ct_size = self.algorithm.ciphertext_size();
@@ -201,96 +219,87 @@ impl BikeKeyPair {
                 crate::error::error_codes::BIKE_DECAPSULATION_FAILED,
             ));
         }
-        
-        // Implement proper BIKE decapsulation algorithm
-        // BIKE decapsulation involves:
-        // 1. Parse the ciphertext into syndrome components
-        // 2. Perform error correction using the private key
-        // 3. Recover the shared secret from the corrected message
-        
-        // Extract BIKE parameters based on variant
-        let (r, w, t) = match self.algorithm {
-            BikeVariant::Bike1Level1 => (12323, 142, 134),  // BIKE-1 Level 1 parameters
-            BikeVariant::Bike1Level3 => (24659, 206, 199),  // BIKE-1 Level 3 parameters
-            BikeVariant::Bike1Level5 => (40973, 274, 264),  // BIKE-1 Level 5 parameters
-        };
-        
-        // Parse ciphertext components
-        let syndrome_bytes = ciphertext.len() / 2;
-        let syndrome0 = &ciphertext[0..syndrome_bytes];
-        let syndrome1 = &ciphertext[syndrome_bytes..];
-        
-        // Convert ciphertext to polynomial representation
-        let syndrome_poly0 = bytes_to_polynomial(syndrome0, r)?;
-        let syndrome_poly1 = bytes_to_polynomial(syndrome1, r)?;
-        
-        // Perform BIKE decoding using the secret key
-        let secret_key_poly = bytes_to_polynomial(&self.secret_key, r)?;
-        
-        // Implement BGF (Bit Flipping) decoder for BIKE
-        let decoded_message = bike_bgf_decode(&syndrome_poly0, &syndrome_poly1, &secret_key_poly, r, w, t)?;
-        
-        // Extract shared secret from decoded message
-        let shared_secret = extract_shared_secret(&decoded_message, self.algorithm)?;
-        
-        // Verify decapsulation consistency
-        if !verify_decapsulation_consistency(&shared_secret, ciphertext, &self.public_key, self.algorithm)? {
-            return Err(CryptoError::bike_error(
-                "decapsulation",
-                "Decapsulation consistency check failed",
-                crate::error::error_codes::BIKE_DECAPSULATION_FAILED,
-            ));
-        }
-        
+
+        let r = self.algorithm.r();
+        let half_size = (r + 7) / 8;
+
+        // Parse syndrome from ciphertext: c = (c0, c1)
+        let c0_bytes = &ciphertext[0..half_size];
+        let c1_bytes = &ciphertext[half_size..];
+
+        let c0 = BinaryPolynomial::from_bytes(c0_bytes, r)?;
+        let c1 = BinaryPolynomial::from_bytes(c1_bytes, r)?;
+
+        // Compute syndrome s = c0 + c1
+        let syndrome = c0.add(&c1)?;
+
+        // Use BGF decoder to recover error vectors
+        let decoder = BgfDecoder::new(self.algorithm.decoder_params());
+        let (e0, e1) = decoder.decode(&syndrome, &self.h0, &self.h1)?;
+
+        // Compute message m from error vectors
+        // m = e0 || e1
+        let mut m = Vec::new();
+        m.extend_from_slice(&e0.to_bytes());
+        m.extend_from_slice(&e1.to_bytes());
+
+        // Hash m to get seed
+        let seed = utils::sha256(&m);
+
+        // Derive shared secret K = HKDF(seed, ciphertext)
+        let mut derivation_input = Vec::new();
+        derivation_input.extend_from_slice(&seed);
+        derivation_input.extend_from_slice(ciphertext);
+
+        let shared_secret = utils::hkdf_sha256(
+            &derivation_input,
+            Some(b"BIKE-KEM"),
+            Some(b"shared-secret"),
+            self.algorithm.shared_secret_size()
+        )?;
+
         Ok(shared_secret)
     }
-    
+
     /// Get the public key
     pub fn public_key(&self) -> BikePublicKey {
         BikePublicKey {
-            public_key: self.public_key.clone(),
+            h: self.h.clone(),
             algorithm: self.algorithm,
         }
     }
-    
+
     /// Serialize the key pair to bytes
     pub fn to_bytes(&self) -> CryptoResult<Vec<u8>> {
-        let mut result = Vec::with_capacity(
-            4 + self.public_key.len() + self.secret_key.len()
-        );
-        
+        let mut result = Vec::new();
+
         // Variant identifier (1 byte)
         match self.algorithm {
             BikeVariant::Bike1Level1 => result.push(1),
             BikeVariant::Bike1Level3 => result.push(3),
             BikeVariant::Bike1Level5 => result.push(5),
         }
-        
-        // Public key length (2 bytes)
-        result.push((self.public_key.len() >> 8) as u8);
-        result.push((self.public_key.len() & 0xFF) as u8);
-        
-        // Secret key length (2 bytes)
-        result.push((self.secret_key.len() >> 8) as u8);
-        result.push((self.secret_key.len() & 0xFF) as u8);
-        
-        // Key data
-        result.extend_from_slice(&self.public_key);
-        result.extend_from_slice(&self.secret_key);
-        
+
+        // Public key (h)
+        result.extend_from_slice(&self.h.to_bytes());
+
+        // Secret key (h0, h1)
+        result.extend_from_slice(&self.h0.to_bytes());
+        result.extend_from_slice(&self.h1.to_bytes());
+
         Ok(result)
     }
-    
+
     /// Deserialize a key pair from bytes
     pub fn from_bytes(data: &[u8]) -> CryptoResult<Self> {
-        if data.len() < 5 {
+        if data.is_empty() {
             return Err(CryptoError::bike_error(
                 "deserialization",
                 "Data too short for BIKE key pair",
                 crate::error::error_codes::BIKE_INVALID_KEY_SIZE,
             ));
         }
-        
+
         // Parse variant
         let variant = match data[0] {
             1 => BikeVariant::Bike1Level1,
@@ -304,61 +313,45 @@ impl BikeKeyPair {
                 ));
             }
         };
-        
-        // Parse key lengths
-        let pk_len = ((data[1] as usize) << 8) | (data[2] as usize);
-        let sk_len = ((data[3] as usize) << 8) | (data[4] as usize);
-        
-        // Verify total length
-        if data.len() != 5 + pk_len + sk_len {
+
+        let r = variant.r();
+        let poly_size = (r + 7) / 8;
+        let expected_size = 1 + 3 * poly_size; // variant + h + h0 + h1
+
+        if data.len() != expected_size {
             return Err(CryptoError::bike_error(
                 "deserialization",
-                "Invalid data length for BIKE key pair",
+                &format!("Invalid data length: expected {}, got {}", expected_size, data.len()),
                 crate::error::error_codes::BIKE_INVALID_KEY_SIZE,
             ));
         }
-        
-        // Extract keys
-        let public_key = data[5..(5 + pk_len)].to_vec();
-        let secret_key = data[(5 + pk_len)..(5 + pk_len + sk_len)].to_vec();
-        
-        // Verify key sizes
-        if public_key.len() != variant.public_key_size() {
-            return Err(CryptoError::bike_error(
-                "deserialization",
-                &format!(
-                    "Invalid public key size: expected {}, got {}",
-                    variant.public_key_size(),
-                    public_key.len()
-                ),
-                crate::error::error_codes::BIKE_INVALID_KEY_SIZE,
-            ));
-        }
-        
-        if secret_key.len() != variant.secret_key_size() {
-            return Err(CryptoError::bike_error(
-                "deserialization",
-                &format!(
-                    "Invalid secret key size: expected {}, got {}",
-                    variant.secret_key_size(),
-                    secret_key.len()
-                ),
-                crate::error::error_codes::BIKE_INVALID_KEY_SIZE,
-            ));
-        }
-        
+
+        let mut offset = 1;
+
+        // Parse h
+        let h = BinaryPolynomial::from_bytes(&data[offset..offset + poly_size], r)?;
+        offset += poly_size;
+
+        // Parse h0
+        let h0 = BinaryPolynomial::from_bytes(&data[offset..offset + poly_size], r)?;
+        offset += poly_size;
+
+        // Parse h1
+        let h1 = BinaryPolynomial::from_bytes(&data[offset..offset + poly_size], r)?;
+
         Ok(Self {
-            public_key,
-            secret_key,
+            h,
+            h0,
+            h1,
             algorithm: variant,
         })
     }
-    
+
     /// Decapsulate a compressed ciphertext
     pub fn decapsulate_compressed(&self, compressed_ciphertext: &CompressedCiphertext) -> CryptoResult<Vec<u8>> {
         // First decompress the ciphertext
         let decompressed = decompress_ciphertext(compressed_ciphertext)?;
-        
+
         // Then decapsulate normally
         self.decapsulate(&decompressed)
     }
@@ -366,84 +359,82 @@ impl BikeKeyPair {
 
 impl BikePublicKey {
     /// Encapsulate to generate a shared secret and ciphertext
+    ///
+    /// Encapsulation:
+    /// 1. Generate random error vectors e0, e1 with weight t
+    /// 2. Compute syndrome c = (c0, c1) where c0 = e0, c1 = e1 + e0*h
+    /// 3. Compute m = e0 || e1
+    /// 4. Derive shared secret K = hash(m || c)
     pub fn encapsulate(&self) -> CryptoResult<(Vec<u8>, Vec<u8>)> {
-        // Create a new BIKE KEM instance
-        let algorithm = self.algorithm.oqs_algorithm();
-        let kem = Kem::new(algorithm).map_err(|e| {
-            CryptoError::bike_error(
-                "initialization",
-                &format!("Failed to initialize BIKE for encapsulation: {}", e),
-                crate::error::error_codes::BIKE_ENCAPSULATION_FAILED,
-            )
-        })?;
-        
-        // Verify public key size
-        let expected_pk_size = self.algorithm.public_key_size();
-        if self.public_key.len() != expected_pk_size {
-            return Err(CryptoError::bike_error(
-                "encapsulation",
-                &format!(
-                    "Invalid public key size: expected {}, got {}",
-                    expected_pk_size,
-                    self.public_key.len()
-                ),
-                crate::error::error_codes::BIKE_INVALID_KEY_SIZE,
-            ));
-        }
-        
-        // Generate a new key pair for encapsulation since OQS doesn't support importing raw keys
-        let (public_key_obj, _secret_key) = kem.keypair().map_err(|e| {
-            CryptoError::bike_error(
-                "key_generation",
-                &format!("Failed to generate BIKE key pair for encapsulation: {}", e),
-                crate::error::error_codes::BIKE_ENCAPSULATION_FAILED,
-            )
-        })?;
-        
-        // Encapsulate using the generated public key
-        // Note: This is a placeholder implementation since we can't import arbitrary keys
-        let (ciphertext, shared_secret) = kem.encapsulate(&public_key_obj).map_err(|e| {
-            CryptoError::bike_error(
-                "encapsulation",
-                &format!("Failed to encapsulate BIKE shared secret: {}", e),
-                crate::error::error_codes::BIKE_ENCAPSULATION_FAILED,
-            )
-        })?;
-        
-        Ok((ciphertext.into_vec(), shared_secret.into_vec()))
+        let r = self.algorithm.r();
+        let t = self.algorithm.t();
+
+        // Generate random error vectors e0 and e1 with weight t/2 each
+        let weight = t / 2;
+        let e0 = BinaryPolynomial::random_with_weight(r, weight)?;
+        let e1 = BinaryPolynomial::random_with_weight(r, weight)?;
+
+        // Compute syndrome components
+        // c0 = e0
+        // c1 = e1 + e0 * h
+        let e0_h = e0.mul(&self.h)?;
+        let c1 = e1.add(&e0_h)?;
+
+        // Build ciphertext
+        let mut ciphertext = Vec::new();
+        ciphertext.extend_from_slice(&e0.to_bytes());
+        ciphertext.extend_from_slice(&c1.to_bytes());
+
+        // Compute message m from error vectors
+        let mut m = Vec::new();
+        m.extend_from_slice(&e0.to_bytes());
+        m.extend_from_slice(&e1.to_bytes());
+
+        // Hash m to get seed
+        let seed = utils::sha256(&m);
+
+        // Derive shared secret K = HKDF(seed, ciphertext)
+        let mut derivation_input = Vec::new();
+        derivation_input.extend_from_slice(&seed);
+        derivation_input.extend_from_slice(&ciphertext);
+
+        let shared_secret = utils::hkdf_sha256(
+            &derivation_input,
+            Some(b"BIKE-KEM"),
+            Some(b"shared-secret"),
+            self.algorithm.shared_secret_size()
+        )?;
+
+        Ok((ciphertext, shared_secret))
     }
-    
+
     /// Serialize the public key to bytes
     pub fn to_bytes(&self) -> CryptoResult<Vec<u8>> {
-        let mut result = Vec::with_capacity(3 + self.public_key.len());
-        
+        let mut result = Vec::new();
+
         // Variant identifier (1 byte)
         match self.algorithm {
             BikeVariant::Bike1Level1 => result.push(1),
             BikeVariant::Bike1Level3 => result.push(3),
             BikeVariant::Bike1Level5 => result.push(5),
         }
-        
-        // Public key length (2 bytes)
-        result.push((self.public_key.len() >> 8) as u8);
-        result.push((self.public_key.len() & 0xFF) as u8);
-        
+
         // Public key data
-        result.extend_from_slice(&self.public_key);
-        
+        result.extend_from_slice(&self.h.to_bytes());
+
         Ok(result)
     }
-    
+
     /// Deserialize a public key from bytes
     pub fn from_bytes(data: &[u8]) -> CryptoResult<Self> {
-        if data.len() < 3 {
+        if data.is_empty() {
             return Err(CryptoError::bike_error(
                 "deserialization",
                 "Data too short for BIKE public key",
                 crate::error::error_codes::BIKE_INVALID_KEY_SIZE,
             ));
         }
-        
+
         // Parse variant
         let variant = match data[0] {
             1 => BikeVariant::Bike1Level1,
@@ -457,66 +448,55 @@ impl BikePublicKey {
                 ));
             }
         };
-        
-        // Parse public key length
-        let pk_len = ((data[1] as usize) << 8) | (data[2] as usize);
-        
-        // Verify total length
-        if data.len() != 3 + pk_len {
+
+        let r = variant.r();
+        let poly_size = (r + 7) / 8;
+        let expected_size = 1 + poly_size;
+
+        if data.len() != expected_size {
             return Err(CryptoError::bike_error(
                 "deserialization",
-                "Invalid data length for BIKE public key",
+                &format!("Invalid data length: expected {}, got {}", expected_size, data.len()),
                 crate::error::error_codes::BIKE_INVALID_KEY_SIZE,
             ));
         }
-        
-        // Extract public key
-        let public_key = data[3..(3 + pk_len)].to_vec();
-        
-        // Verify key size
-        if public_key.len() != variant.public_key_size() {
-            return Err(CryptoError::bike_error(
-                "deserialization",
-                &format!(
-                    "Invalid public key size: expected {}, got {}",
-                    variant.public_key_size(),
-                    public_key.len()
-                ),
-                crate::error::error_codes::BIKE_INVALID_KEY_SIZE,
-            ));
-        }
-        
+
+        // Parse h
+        let h = BinaryPolynomial::from_bytes(&data[1..], r)?;
+
         Ok(Self {
-            public_key,
+            h,
             algorithm: variant,
         })
     }
-    
+
     /// Calculate a fingerprint of the public key
     pub fn fingerprint(&self) -> String {
         // Calculate SHA-256 hash of the public key
-        let hash = utils::sha256(&self.public_key);
-        
+        let hash = utils::sha256(&self.h.to_bytes());
+
         // Take first 8 bytes and convert to hex
         let mut fingerprint = String::new();
         for &byte in hash.iter().take(8) {
             fingerprint.push_str(&format!("{:02x}", byte));
         }
-        
+
         fingerprint
     }
-    
+
     /// Encapsulate with compression
     pub fn encapsulate_compressed(&self, level: CompressionLevel) -> CryptoResult<(CompressedCiphertext, Vec<u8>)> {
         // First encapsulate normally
         let (ciphertext, shared_secret) = self.encapsulate()?;
-        
+
         // Then compress the ciphertext
         let compressed = compress_ciphertext(&ciphertext, level, self.algorithm)?;
-        
+
         Ok((compressed, shared_secret))
     }
 }
+
+// Compression functions
 
 impl Zeroize for CompressedCiphertext {
     fn zeroize(&mut self) {
@@ -539,194 +519,46 @@ impl CompressedCiphertext {
             variant,
         }
     }
-    
+
     /// Get the compressed data
     pub fn data(&self) -> &[u8] {
         &self.data
     }
-    
+
     /// Get the compression level
     pub fn level(&self) -> CompressionLevel {
         self.level
     }
-    
+
     /// Get the BIKE variant
     pub fn variant(&self) -> BikeVariant {
         self.variant
     }
-    
+
     /// Get the compressed size in bytes
     pub fn size(&self) -> usize {
         self.data.len()
     }
-    
+
     /// Calculate the compression ratio
     pub fn compression_ratio(&self) -> f64 {
         let original_size = self.variant.ciphertext_size() as f64;
         let compressed_size = self.data.len() as f64;
-        
+
         compressed_size / original_size
     }
-    
+
     /// Calculate the space savings in bytes
     pub fn space_savings(&self) -> usize {
         let original_size = self.variant.ciphertext_size();
         let compressed_size = self.data.len();
-        
+
         if original_size > compressed_size {
             original_size - compressed_size
         } else {
             0
         }
     }
-}
-
-/// Convert bytes to polynomial representation for BIKE operations
-fn bytes_to_polynomial(bytes: &[u8], r: usize) -> CryptoResult<Vec<u8>> {
-    // In a real BIKE implementation, this would convert bytes to polynomial coefficients
-    // For now, we'll create a polynomial representation by padding/truncating to the required size
-    let mut poly = vec![0u8; r / 8]; // r bits = r/8 bytes
-    
-    let copy_len = std::cmp::min(bytes.len(), poly.len());
-    poly[..copy_len].copy_from_slice(&bytes[..copy_len]);
-    
-    Ok(poly)
-}
-
-/// BIKE BGF (Bit Flipping) decoder implementation
-fn bike_bgf_decode(
-    syndrome0: &[u8], 
-    syndrome1: &[u8], 
-    secret_key: &[u8], 
-    r: usize, 
-    w: usize, 
-    t: usize
-) -> CryptoResult<Vec<u8>> {
-    // This is a simplified BGF decoder implementation
-    // In a real implementation, this would perform the full BGF algorithm
-    
-    let mut decoded = vec![0u8; r / 8];
-    
-    // Simulate BGF decoding by XORing syndromes with secret key
-    for i in 0..decoded.len() {
-        let s0 = if i < syndrome0.len() { syndrome0[i] } else { 0 };
-        let s1 = if i < syndrome1.len() { syndrome1[i] } else { 0 };
-        let sk = if i < secret_key.len() { secret_key[i] } else { 0 };
-        
-        // Simple XOR operation as a placeholder for BGF decoding
-        decoded[i] = s0 ^ s1 ^ sk;
-    }
-    
-    // Apply error correction based on weight parameters
-    let error_threshold = (w * t) / 8; // Simplified threshold calculation
-    let mut error_count = 0;
-    
-    for &byte in &decoded {
-        error_count += byte.count_ones() as usize;
-    }
-    
-    if error_count > error_threshold {
-        // Apply error correction by flipping bits
-        for byte in &mut decoded {
-            if byte.count_ones() > 4 {
-                *byte = !*byte; // Flip all bits if too many errors
-            }
-        }
-    }
-    
-    Ok(decoded)
-}
-
-/// Extract shared secret from decoded message
-fn extract_shared_secret(decoded_message: &[u8], algorithm: BikeVariant) -> CryptoResult<Vec<u8>> {
-    let secret_size = algorithm.shared_secret_size();
-    
-    // Use a hash function to extract the shared secret from the decoded message
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-    
-    let mut hasher = DefaultHasher::new();
-    decoded_message.hash(&mut hasher);
-    let hash = hasher.finish();
-    
-    let mut shared_secret = Vec::with_capacity(secret_size);
-    
-    // Generate the required number of bytes from the hash
-    for i in 0..secret_size {
-        let mut hasher = DefaultHasher::new();
-        hash.hash(&mut hasher);
-        i.hash(&mut hasher);
-        shared_secret.push((hasher.finish() % 256) as u8);
-    }
-    
-    Ok(shared_secret)
-}
-
-/// Verify decapsulation consistency
-fn verify_decapsulation_consistency(
-    shared_secret: &[u8], 
-    ciphertext: &[u8], 
-    public_key: &[u8], 
-    algorithm: BikeVariant
-) -> CryptoResult<bool> {
-    // In a real implementation, this would re-encapsulate the shared secret
-    // and verify that it produces the same ciphertext
-    
-    // For now, we'll do a simple consistency check based on sizes
-    let expected_secret_size = algorithm.shared_secret_size();
-    let expected_ciphertext_size = algorithm.ciphertext_size();
-    let expected_pk_size = algorithm.public_key_size();
-    
-    if shared_secret.len() != expected_secret_size {
-        return Ok(false);
-    }
-    
-    if ciphertext.len() != expected_ciphertext_size {
-        return Ok(false);
-    }
-    
-    if public_key.len() != expected_pk_size {
-        return Ok(false);
-    }
-    
-    // Additional consistency check: hash-based verification
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-    
-    let mut hasher = DefaultHasher::new();
-    shared_secret.hash(&mut hasher);
-    public_key.hash(&mut hasher);
-    let expected_hash = hasher.finish();
-    
-    let mut hasher = DefaultHasher::new();
-    ciphertext.hash(&mut hasher);
-    let actual_hash = hasher.finish();
-    
-    // Simple consistency check - in practice this would be more sophisticated
-    Ok((expected_hash % 1000) == (actual_hash % 1000))
-}
-
-/// Generate a deterministic shared secret based on ciphertext for placeholder implementation
-fn generate_deterministic_shared_secret(ciphertext: &[u8], secret_size: usize) -> Vec<u8> {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-    
-    let mut shared_secret = Vec::with_capacity(secret_size);
-    let mut hasher = DefaultHasher::new();
-    
-    // Hash the ciphertext to create a deterministic but unpredictable shared secret
-    ciphertext.hash(&mut hasher);
-    let base_hash = hasher.finish();
-    
-    // Generate the required number of bytes
-    for i in 0..secret_size {
-        let mut hasher = DefaultHasher::new();
-        base_hash.hash(&mut hasher);
-        i.hash(&mut hasher);
-        shared_secret.push((hasher.finish() % 256) as u8);
-    }
-    
-    shared_secret
 }
 
 fn compress_ciphertext(ciphertext: &[u8], level: CompressionLevel, variant: BikeVariant) -> CryptoResult<CompressedCiphertext> {
@@ -736,196 +568,96 @@ fn compress_ciphertext(ciphertext: &[u8], level: CompressionLevel, variant: Bike
         CompressionLevel::Medium => compress_ciphertext_medium(ciphertext)?,
         CompressionLevel::High => compress_ciphertext_high(ciphertext)?,
     };
-    
+
     Ok(CompressedCiphertext::new(compressed_data, level, variant))
 }
 
 /// Light compression for BIKE ciphertexts (5-10% reduction)
 fn compress_ciphertext_light(ciphertext: &[u8]) -> CryptoResult<Vec<u8>> {
-    // In a real implementation, this would use a lightweight compression algorithm
-    // For this example, we'll just simulate compression by returning a slightly smaller vector
-    
     // Simple run-length encoding for sequences of repeated bytes
     let mut compressed = Vec::with_capacity(ciphertext.len());
     let mut i = 0;
-    
+
     while i < ciphertext.len() {
         let byte = ciphertext[i];
         let mut count = 1;
-        
+
         // Count consecutive identical bytes
         while i + count < ciphertext.len() && count < 255 && ciphertext[i + count] == byte {
             count += 1;
         }
-        
+
         if count >= 4 {
-            // If we have 4 or more identical bytes, use run-length encoding
+            // Use run-length encoding
             compressed.push(0); // Marker for RLE
             compressed.push(byte);
             compressed.push(count as u8);
             i += count;
         } else {
-            // Otherwise, just copy the byte
+            // Just copy the byte
             compressed.push(byte);
             i += 1;
         }
     }
-    
+
     Ok(compressed)
 }
 
 /// Medium compression for BIKE ciphertexts (10-15% reduction)
 fn compress_ciphertext_medium(ciphertext: &[u8]) -> CryptoResult<Vec<u8>> {
-    // Use a dictionary-based compression for medium level
-    // This approach uses a sliding window to find repeated patterns
-    
+    // Use dictionary-based compression
     let mut compressed = Vec::with_capacity(ciphertext.len());
+
+    // Add marker
+    compressed.push(0xB1);
+    compressed.push(0x4B);
+
     let mut i = 0;
-    
-    // Dictionary size of 2048 bytes (11-bit window)
     const DICT_SIZE: usize = 2048;
     const MIN_MATCH: usize = 3;
     const MAX_MATCH: usize = 258;
-    
-    // Add a marker to identify this as medium compression
-    compressed.push(0xB1); // BIKE medium compression marker
-    compressed.push(0x4B); // 'K' in hex
-    
+
     while i < ciphertext.len() {
-        // Look for matches in the previous DICT_SIZE bytes
+        let start = if i > DICT_SIZE { i - DICT_SIZE } else { 0 };
         let mut best_match_len = 0;
         let mut best_match_dist = 0;
-        
-        // Don't look beyond the start of the buffer
-        let start = if i > DICT_SIZE { i - DICT_SIZE } else { 0 };
-        
-        // Find the longest match in the window
+
         for j in start..i {
             let mut match_len = 0;
-            while i + match_len < ciphertext.len() && 
-                  j + match_len < i && 
-                  ciphertext[i + match_len] == ciphertext[j + match_len] && 
+            while i + match_len < ciphertext.len() &&
+                  j + match_len < i &&
+                  ciphertext[i + match_len] == ciphertext[j + match_len] &&
                   match_len < MAX_MATCH {
                 match_len += 1;
             }
-            
+
             if match_len > best_match_len {
                 best_match_len = match_len;
                 best_match_dist = i - j;
             }
         }
-        
+
         if best_match_len >= MIN_MATCH {
-            // Encode as a length-distance pair
-            compressed.push(0); // Marker for LZ77 encoding
-            
-            // Encode distance (11 bits = 2 bytes)
+            compressed.push(0);
             compressed.push((best_match_dist >> 3) as u8);
             compressed.push(((best_match_dist & 0x07) << 5 | (best_match_len - MIN_MATCH)) as u8);
-            
             i += best_match_len;
         } else {
-            // Literal byte
             compressed.push(ciphertext[i]);
             i += 1;
         }
     }
-    
+
     Ok(compressed)
 }
 
 /// High compression for BIKE ciphertexts (15-20% reduction)
 fn compress_ciphertext_high(ciphertext: &[u8]) -> CryptoResult<Vec<u8>> {
-    // Use a hybrid approach for high compression:
-    // 1. First apply run-length encoding
-    // 2. Then apply dictionary-based compression
-    
-    // Step 1: Run-length encoding
-    let mut rle_compressed = Vec::with_capacity(ciphertext.len());
-    
-    // Add a marker to identify this as high compression
-    rle_compressed.push(0xB1); // BIKE high compression marker
-    rle_compressed.push(0x48); // 'H' in hex
-    
-    let mut i = 0;
-    
-    while i < ciphertext.len() {
-        let byte = ciphertext[i];
-        let mut count = 1;
-        
-        // Count repeated bytes
-        while i + count < ciphertext.len() && ciphertext[i + count] == byte && count < 255 {
-            count += 1;
-        }
-        
-        if count >= 4 {
-            // If we have 4 or more repeated bytes, use run-length encoding
-            rle_compressed.push(0); // Marker for RLE
-            rle_compressed.push(byte);
-            rle_compressed.push(count as u8);
-            i += count;
-        } else {
-            // Otherwise, just copy the byte
-            rle_compressed.push(byte);
-            i += 1;
-        }
-    }
-    
-    // Step 2: Apply a Huffman-like encoding with static tables
-    // For simplicity, we'll use a static Huffman table based on typical BIKE ciphertext patterns
-    
-    let mut huffman_compressed = Vec::with_capacity(rle_compressed.len());
-    
-    // Bit buffer for Huffman encoding
-    let mut bit_buffer: u32 = 0;
-    let mut bits_in_buffer: u8 = 0;
-    
-    for &byte in &rle_compressed[2..] { // Skip the marker bytes
-        // Simple encoding: common bytes get shorter codes
-        let (code, code_len) = match byte {
-            0 => (0b0, 2),           // RLE marker gets a very short code
-            0..=31 => (0b10, 3),     // Small values
-            32..=63 => (0b110, 4),   // Medium values
-            64..=127 => (0b1110, 5), // Larger values
-            _ => (0b1111, 5),        // Highest values
-        };
-        
-        // Add the code to the bit buffer
-        bit_buffer |= (code as u32) << bits_in_buffer;
-        bits_in_buffer += code_len;
-        
-        // Add the raw value after the prefix
-        if byte >= 64 {
-            bit_buffer |= ((byte as u32) & 0xFF) << bits_in_buffer;
-            bits_in_buffer += 8;
-        } else if byte >= 32 {
-            bit_buffer |= ((byte as u32 - 32) & 0x3F) << bits_in_buffer;
-            bits_in_buffer += 6;
-        } else if byte > 0 {
-            bit_buffer |= ((byte as u32) & 0x1F) << bits_in_buffer;
-            bits_in_buffer += 5;
-        }
-        
-        // Output full bytes from the bit buffer
-        while bits_in_buffer >= 8 {
-            huffman_compressed.push((bit_buffer & 0xFF) as u8);
-            bit_buffer >>= 8;
-            bits_in_buffer -= 8;
-        }
-    }
-    
-    // Output any remaining bits
-    if bits_in_buffer > 0 {
-        huffman_compressed.push(bit_buffer as u8);
-    }
-    
-    // Add the marker bytes at the beginning
-    let mut final_compressed = Vec::with_capacity(huffman_compressed.len() + 2);
-    final_compressed.push(0xB1);
-    final_compressed.push(0x48);
-    final_compressed.extend_from_slice(&huffman_compressed);
-    
-    Ok(final_compressed)
+    // First apply RLE
+    let rle = compress_ciphertext_light(ciphertext)?;
+
+    // Then apply dictionary compression
+    compress_ciphertext_medium(&rle)
 }
 
 /// Decompress a BIKE ciphertext
@@ -940,31 +672,26 @@ fn decompress_ciphertext(compressed: &CompressedCiphertext) -> CryptoResult<Vec<
 
 /// Decompress a lightly compressed BIKE ciphertext
 fn decompress_ciphertext_light(compressed: &[u8]) -> CryptoResult<Vec<u8>> {
-    // Reverse the run-length encoding from compress_ciphertext_light
     let mut decompressed = Vec::new();
     let mut i = 0;
-    
+
     while i < compressed.len() {
         if compressed[i] == 0 && i + 2 < compressed.len() {
-            // This is a run-length encoded sequence
             let byte = compressed[i + 1];
             let count = compressed[i + 2] as usize;
-            
             decompressed.extend(std::iter::repeat(byte).take(count));
             i += 3;
         } else {
-            // This is a regular byte
             decompressed.push(compressed[i]);
             i += 1;
         }
     }
-    
+
     Ok(decompressed)
 }
 
 /// Decompress a medium compressed BIKE ciphertext
 fn decompress_ciphertext_medium(compressed: &[u8]) -> CryptoResult<Vec<u8>> {
-    // Check for the medium compression marker
     if compressed.len() < 2 || compressed[0] != 0xB1 || compressed[1] != 0x4B {
         return Err(CryptoError::bike_error(
             "decompression",
@@ -972,211 +699,94 @@ fn decompress_ciphertext_medium(compressed: &[u8]) -> CryptoResult<Vec<u8>> {
             crate::error::error_codes::BIKE_DECOMPRESSION_FAILED,
         ));
     }
-    
+
     let mut decompressed = Vec::new();
-    let mut i = 2; // Skip the marker
-    
+    let mut i = 2;
+
     while i < compressed.len() {
         if compressed[i] == 0 && i + 2 < compressed.len() {
-            // This is an LZ77 marker
             let dist_high = compressed[i + 1] as usize;
             let dist_low_and_len = compressed[i + 2] as usize;
-            
+
             let distance = (dist_high << 3) | (dist_low_and_len >> 5);
-            let length = (dist_low_and_len & 0x1F) + 3; // MIN_MATCH = 3
-            
+            let length = (dist_low_and_len & 0x1F) + 3;
+
             if distance == 0 || distance > decompressed.len() {
                 return Err(CryptoError::bike_error(
                     "decompression",
-                    "Invalid LZ77 distance in medium compression",
+                    "Invalid LZ77 distance",
                     crate::error::error_codes::BIKE_DECOMPRESSION_FAILED,
                 ));
             }
-            
+
             let pos = decompressed.len() - distance;
-            
-            // Copy the matched sequence
             for j in 0..length {
                 if pos + j < decompressed.len() {
                     decompressed.push(decompressed[pos + j]);
                 } else {
-                    // We're copying from what we just copied
                     decompressed.push(decompressed[decompressed.len() - distance]);
                 }
             }
-            
             i += 3;
         } else {
-            // Regular byte
             decompressed.push(compressed[i]);
             i += 1;
         }
     }
-    
+
     Ok(decompressed)
 }
 
 /// Decompress a highly compressed BIKE ciphertext
 fn decompress_ciphertext_high(compressed: &[u8]) -> CryptoResult<Vec<u8>> {
-    // Check for the high compression marker
-    if compressed.len() < 2 || compressed[0] != 0xB1 || compressed[1] != 0x48 {
-        return Err(CryptoError::bike_error(
-            "decompression",
-            "Invalid high compression format",
-            crate::error::error_codes::BIKE_DECOMPRESSION_FAILED,
-        ));
-    }
-    
-    // First decompress the Huffman-like encoding
-    let mut huffman_decompressed = Vec::new();
-    huffman_decompressed.push(0xB1); // Add back the marker for RLE decompression
-    huffman_decompressed.push(0x48);
-    
-    let mut i = 2; // Skip the header
-    
-    let mut bit_buffer: u32 = 0;
-    let mut bits_in_buffer: u8 = 0;
-    
-    while i < compressed.len() || bits_in_buffer > 0 {
-        // Refill the bit buffer if needed
-        while bits_in_buffer < 24 && i < compressed.len() {
-            bit_buffer |= (compressed[i] as u32) << bits_in_buffer;
-            bits_in_buffer += 8;
-            i += 1;
-        }
-        
-        if bits_in_buffer < 2 {
-            // Not enough bits left
-            break;
-        }
-        
-        // Decode based on the prefix
-        if (bit_buffer & 0b1) == 0 {
-            // 0: RLE marker
-            huffman_decompressed.push(0);
-            bit_buffer >>= 2;
-            bits_in_buffer -= 2;
-        } else if (bit_buffer & 0b11) == 0b01 {
-            // 10: Small value
-            if bits_in_buffer < 8 {
-                break;
-            }
-            let value = ((bit_buffer >> 3) & 0x1F) as u8;
-            huffman_decompressed.push(value);
-            bit_buffer >>= 8;
-            bits_in_buffer -= 8;
-        } else if (bit_buffer & 0b111) == 0b011 {
-            // 110: Medium value
-            if bits_in_buffer < 10 {
-                break;
-            }
-            let value = ((bit_buffer >> 4) & 0x3F) as u8 + 32;
-            huffman_decompressed.push(value);
-            bit_buffer >>= 10;
-            bits_in_buffer -= 10;
-        } else if (bit_buffer & 0b1111) == 0b0111 {
-            // 1110: Larger value
-            if bits_in_buffer < 13 {
-                break;
-            }
-            let value = ((bit_buffer >> 5) & 0x7F) as u8 + 64;
-            huffman_decompressed.push(value);
-            bit_buffer >>= 13;
-            bits_in_buffer -= 13;
-        } else {
-            // 1111: Highest value
-            if bits_in_buffer < 13 {
-                break;
-            }
-            let value = ((bit_buffer >> 5) & 0xFF) as u8;
-            huffman_decompressed.push(value);
-            bit_buffer >>= 13;
-            bits_in_buffer -= 13;
-        }
-    }
-    
-    // Now decompress the RLE encoding
-    let mut decompressed = Vec::new();
-    let mut i = 2; // Skip the marker bytes
-    
-    while i < huffman_decompressed.len() {
-        if huffman_decompressed[i] == 0 && i + 2 < huffman_decompressed.len() {
-            // This is an RLE marker
-            let byte = huffman_decompressed[i + 1];
-            let count = huffman_decompressed[i + 2] as usize;
-            decompressed.extend(std::iter::repeat(byte).take(count));
-            i += 3;
-        } else {
-            // Regular byte
-            decompressed.push(huffman_decompressed[i]);
-            i += 1;
-        }
-    }
-    
-    Ok(decompressed)
+    // First decompress dictionary compression
+    let dict_decompressed = decompress_ciphertext_medium(compressed)?;
+
+    // Then decompress RLE
+    decompress_ciphertext_light(&dict_decompressed)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
-    fn create_test_ciphertext(variant: BikeVariant) -> Vec<u8> {
-        // Create a realistic test ciphertext with patterns that compress well
-        let size = variant.ciphertext_size();
-        let mut ciphertext = Vec::with_capacity(size);
-        
-        // Create a pattern that mimics real BIKE ciphertext structure:
-        // - Some sections with sparse data (like error vectors)
-        // - Some sections with structured data (like syndrome)
-        // - Some sections with pseudo-random data (like encrypted data)
-        
-        let section_size = size / 3;
-        
-        // Section 1: Sparse error-like data (compresses very well)
-        for i in 0..section_size {
-            if i % 64 == 0 {
-                ciphertext.push(0x01); // Sparse errors
-            } else {
-                ciphertext.push(0x00); // Mostly zeros
-            }
-        }
-        
-        // Section 2: Structured syndrome-like data (compresses moderately)
-        for i in 0..section_size {
-            ciphertext.push(((i / 4) % 256) as u8);
-        }
-        
-        // Section 3: Fill remaining with mixed pattern
-        let remaining = size - ciphertext.len();
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-        for i in 0..remaining {
-            let mut hasher = DefaultHasher::new();
-            (variant as u8).hash(&mut hasher);
-            (i / 16).hash(&mut hasher); // Create some structure
-            ciphertext.push((hasher.finish() % 256) as u8);
-        }
-        
-        ciphertext
-    }
-    
+
     #[test]
     fn test_bike_key_generation() {
-        // Test key generation for each variant
         let variants = [
             BikeVariant::Bike1Level1,
             BikeVariant::Bike1Level3,
             BikeVariant::Bike1Level5,
         ];
-        
+
         for variant in variants.iter() {
             let result = BikeKeyPair::generate(*variant);
             assert!(result.is_ok(), "Failed to generate key pair for {:?}", variant);
-            
+
             let key_pair = result.unwrap();
             assert_eq!(key_pair.algorithm, *variant);
-            assert_eq!(key_pair.public_key.len(), variant.public_key_size());
-            assert_eq!(key_pair.secret_key.len(), variant.secret_key_size());
         }
     }
-} 
+
+    #[test]
+    fn test_bike_encapsulation_decapsulation() {
+        let variant = BikeVariant::Bike1Level1;
+        let key_pair = BikeKeyPair::generate(variant).unwrap();
+        let public_key = key_pair.public_key();
+
+        let (ciphertext, shared_secret1) = public_key.encapsulate().unwrap();
+        let shared_secret2 = key_pair.decapsulate(&ciphertext).unwrap();
+
+        assert_eq!(shared_secret1, shared_secret2);
+    }
+
+    #[test]
+    fn test_bike_serialization() {
+        let variant = BikeVariant::Bike1Level1;
+        let key_pair = BikeKeyPair::generate(variant).unwrap();
+
+        let serialized = key_pair.to_bytes().unwrap();
+        let deserialized = BikeKeyPair::from_bytes(&serialized).unwrap();
+
+        assert_eq!(deserialized.algorithm, key_pair.algorithm);
+    }
+}
