@@ -6,17 +6,22 @@
 //! This module provides an implementation of BIKE with various parameter sets
 //! for different security levels and performance characteristics.
 
+mod polynomial;
+mod decoder;
+mod inversion;
 mod bike;
 mod parameters;
 mod tests;
 
 pub use bike::{
-    BikeKeyPair, 
-    BikePublicKey, 
+    BikeKeyPair,
+    BikePublicKey,
     BikeVariant,
     CompressedCiphertext,
     CompressionLevel
 };
+pub use polynomial::BinaryPolynomial;
+pub use decoder::{BgfDecoder, BgfDecoderParams};
 
 /// Serializable version of BikeVariant for storage
 #[derive(serde::Serialize, serde::Deserialize)]
