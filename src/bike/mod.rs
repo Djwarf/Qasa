@@ -8,6 +8,7 @@
 
 mod polynomial;
 mod decoder;
+mod inversion;
 mod bike;
 mod parameters;
 mod tests;
